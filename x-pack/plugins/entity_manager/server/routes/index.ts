@@ -7,10 +7,12 @@
 
 import { enablementRoutes } from './enablement';
 import { entitiesRoutes } from './entities';
+import { entityRoutes } from './entity';
 
 export const entityManagerRouteRepository = {
   ...enablementRoutes,
   ...entitiesRoutes,
+  ...entityRoutes,
 };
 
 export type EntityManagerRouteRepository = typeof entityManagerRouteRepository;

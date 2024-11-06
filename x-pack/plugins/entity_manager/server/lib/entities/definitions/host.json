@@ -1,0 +1,11 @@
+{
+    "type": "host",
+    "description": "Hosts are physical or virtual machines that provide compute resources or services to other devices on a network",
+    "sources": [
+        {
+            "name": "logs and metrics",
+            "index_patterns": ["logs-*", "metrics-*", "remote_cluster:logs-*", "remote_cluster:metrics-*"],
+            "identity_fields": ["host.name"]
+        }
+    ]
+}

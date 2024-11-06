@@ -36,3 +36,5 @@ export const ENTITY_LATEST_PREFIX_V1 =
 export const ENTITY_DEFAULT_LATEST_FREQUENCY = '1m';
 export const ENTITY_DEFAULT_LATEST_SYNC_DELAY = '60s';
 export const ENTITY_DEFAULT_METADATA_LIMIT = 10;
+
+export const ENTITY_DEFINITIONS_INDEX = '.entity_definitions'
