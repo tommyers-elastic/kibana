@@ -9,17 +9,21 @@ import { ElasticsearchClient } from '@kbn/core-elasticsearch-server';
 import { Entity } from '@kbn/entities-schema';
 import { ESQLSearchResponse } from '@kbn/es-types';
 import { uniq } from 'lodash';
+import { entitylastSeenTimestampField, entityIdField } from './constants';
 
 function mergeEntities(entity1: Entity, entity2: Entity): Entity {
   const merged: Entity = {
-    ...entity1,
-    'entity.last_seen_timestamp': new Date(
-      Math.max(
-        Date.parse(entity1['entity.last_seen_timestamp']),
-        Date.parse(entity2['entity.last_seen_timestamp'])
-      )
-    ).toISOString(),
+    ...entity1
   };
+
+  if (entity1[entitylastSeenTimestampField] || entity2[entitylastSeenTimestampField]) {
+    merged[entitylastSeenTimestampField] = new Date(
+      Math.max(
+        Date.parse(entity1[entitylastSeenTimestampField] ?? new Date(0)),
+        Date.parse(entity2[entitylastSeenTimestampField] ?? new Date(0)),
+      )
+    ).toISOString();
+  }
 
   for (const [key, value] of Object.entries(entity2).filter(([_key]) =>
     _key.startsWith('metadata.')
@@ -40,7 +44,7 @@ export function mergeEntitiesList(entities: Entity[]): Entity[] {
 
   for (let i = 0; i < entities.length; i++) {
     const entity = entities[i];
-    const id = entity['entity.id'];
+    const id = entity[entityIdField];
 
     if (instances[id]) {
       instances[id] = mergeEntities(instances[id], entity);

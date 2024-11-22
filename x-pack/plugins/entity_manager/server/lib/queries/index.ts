@@ -5,11 +5,14 @@
  * 2.0.
  */
 
-import { z } from '@kbn/zod';
+import * as z from '@kbn/zod';
+import { entitylastSeenTimestampField } from './constants';
+
+export * from './constants';
 
 export const entitySourceSchema = z.object({
   type: z.string(),
-  timestamp_field: z.optional(z.string()).default('@timestamp'),
+  timestamp_field: z.optional(z.string().nullable()).default('@timestamp'),
   index_patterns: z.array(z.string()),
   identity_fields: z.array(z.string()),
   metadata_fields: z.array(z.string()),
@@ -47,12 +50,14 @@ const filterCommands = (source: EntitySource) => {
 
 const statsCommand = (source: EntitySource) => {
   const aggs = [
-    // default 'last_seen' attribute
-    `entity.last_seen_timestamp=MAX(${source.timestamp_field})`,
     ...source.metadata_fields
       .filter((field) => !source.identity_fields.some((idField) => idField === field))
       .map((field) => `metadata.${field}=VALUES(${field})`),
   ];
+
+  if (source.timestamp_field !== null) {
+    aggs.push(`${entitylastSeenTimestampField}=MAX(${source.timestamp_field})`);
+  }
 
   return `STATS ${aggs.join(', ')} BY ${source.identity_fields.join(',')}`;
 };
@@ -62,9 +67,13 @@ export function getEntityInstancesQuery(source: EntitySource, limit: number): st
     sourceCommand(source),
     ...filterCommands(source),
     statsCommand(source),
-    `SORT entity.last_seen_timestamp DESC`,
-    `LIMIT ${limit}`,
   ];
+
+  if (source.timestamp_field !== null) {
+    commands.push(`SORT ${entitylastSeenTimestampField} DESC`);
+  }
+
+  commands.push(`LIMIT ${limit}`);
 
   return commands.join('|');
 }

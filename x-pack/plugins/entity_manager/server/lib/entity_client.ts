@@ -24,7 +24,7 @@ import { stopTransforms } from './entities/stop_transforms';
 import { deleteIndices } from './entities/delete_index';
 import { EntityDefinitionWithState } from './entities/types';
 import { EntityDefinitionUpdateConflict } from './entities/errors/entity_definition_update_conflict';
-import { EntitySource, getEntityInstancesQuery } from './queries';
+import { EntitySource, getEntityInstancesQuery, entityIdField, entityTypeField } from './queries';
 import { mergeEntitiesList, runESQLQuery } from './queries/utils';
 
 export class EntityClient {
@@ -196,7 +196,12 @@ export class EntityClient {
           plugin: `@kbn/entityManager-plugin`,
         });
 
-        const mandatoryFields = [source.timestamp_field, ...source.identity_fields];
+
+        const mandatoryFields = [...source.identity_fields];
+        if (source.timestamp_field !== null) {
+          mandatoryFields.push(source.timestamp_field);
+        }
+
         const { fields } = await esClient.client.fieldCaps({
           index: source.index_patterns,
           fields: [...mandatoryFields, ...source.metadata_fields],
@@ -221,8 +226,8 @@ export class EntityClient {
         const rawEntities = await runESQLQuery<Entity>({ query, esClient: this.options.esClient });
 
         return rawEntities.map((entity) => {
-          entity['entity.id'] = source.identity_fields.map((field) => entity[field]).join(':');
-          entity['entity.type'] = source.type;
+          entity[entityIdField] = source.identity_fields.map((field) => entity[field]).join(':');
+          entity[entityTypeField] = source.type;
           return entity;
         });
       })
