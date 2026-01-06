@@ -1,0 +1,23 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0; you may not use this file except in compliance with the Elastic License
+ * 2.0.
+ */
+
+{
+  "type": "plugin",
+  "id": "@kbn/groups-plugin",
+  "owner": "@elastic/kibana-platform",
+  "description": "A manager for Groups - associating Kibana and Elasticsearch assets together",
+  "group": "platform",
+  "visibility": "shared",
+  "plugin": {
+    "id": "groups",
+    "server": true,
+    "browser": true,
+    "requiredPlugins": ["features", "security", "spaces"],
+    "optionalPlugins": ["embeddable"],
+    "requiredBundles": ["kibanaReact", "savedObjects"]
+  }
+}
