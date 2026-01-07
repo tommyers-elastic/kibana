@@ -645,6 +645,7 @@
     "@kbn/grok-ui": "link:src/platform/packages/shared/kbn-grok-ui",
     "@kbn/grokdebugger-plugin": "link:x-pack/platform/plugins/private/grokdebugger",
     "@kbn/grouping": "link:src/platform/packages/shared/kbn-grouping",
+    "@kbn/groups-plugin": "link:x-pack/platform/plugins/shared/groups",
     "@kbn/handlebars": "link:src/platform/packages/private/kbn-handlebars",
     "@kbn/hapi-mocks": "link:src/platform/packages/private/kbn-hapi-mocks",
     "@kbn/hardening-plugin": "link:src/platform/test/plugin_functional/plugins/hardening",

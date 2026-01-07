@@ -1214,6 +1214,8 @@
       "@kbn/grokdebugger-plugin/*": ["x-pack/platform/plugins/private/grokdebugger/*"],
       "@kbn/grouping": ["src/platform/packages/shared/kbn-grouping"],
       "@kbn/grouping/*": ["src/platform/packages/shared/kbn-grouping/*"],
+      "@kbn/groups-plugin": ["x-pack/platform/plugins/shared/groups"],
+      "@kbn/groups-plugin/*": ["x-pack/platform/plugins/shared/groups/*"],
       "@kbn/handlebars": ["src/platform/packages/private/kbn-handlebars"],
       "@kbn/handlebars/*": ["src/platform/packages/private/kbn-handlebars/*"],
       "@kbn/hapi-mocks": ["src/platform/packages/private/kbn-hapi-mocks"],
