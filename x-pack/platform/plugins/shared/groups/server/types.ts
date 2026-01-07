@@ -8,6 +8,7 @@
 import type { FeaturesPluginSetup } from '@kbn/features-plugin/server';
 import type { SecurityPluginSetup } from '@kbn/security-plugin-types-server';
 import type { SpacesPluginSetup } from '@kbn/spaces-plugin/server';
+import type { GroupsStorageClient, MembersStorageClient } from './lib/storage';
 
 export interface GroupsPluginSetupDeps {
   features: FeaturesPluginSetup;
@@ -18,5 +19,7 @@ export interface GroupsPluginSetupDeps {
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface GroupsPluginSetup {}
 
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-export interface GroupsPluginStart {}
+export interface GroupsPluginStart {
+  getGroupsStorageClient: () => GroupsStorageClient;
+  getMembersStorageClient: () => MembersStorageClient;
+}

@@ -7,3 +7,18 @@
 
 export const PLUGIN_ID = 'groups';
 export const PLUGIN_NAME = 'Groups';
+
+export type {
+  ACLAccessLevel,
+  GroupACL,
+  Group,
+  CreateGroupParams,
+  UpdateGroupParams,
+  Member,
+  AddMemberParams,
+  ListGroupsParams,
+  ListMembersParams,
+  PaginatedResponse,
+} from './types';
+
+export { ACL_ACCESS_LEVELS } from './types';
