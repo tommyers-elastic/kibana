@@ -129,36 +129,36 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 2.1 Define Group and Member Types
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/common/types.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/common/types.ts`:
   - Define `Group` interface (id, name, description, owner, permissions, metadata, timestamps)
   - Define `GroupMember` interface (groupId, assetType, assetId, addedBy, addedAt)
   - Define `AssetType` union type (dashboard, rule, slo, stream, data_view, etc.)
   - Define `Permission` interface (principal, principalType, level)
   - Define `PermissionLevel` union type (read, write, admin)
-- [ ] Export all types from `common/index.ts`
+- [x] Export all types from `common/index.ts`
 
 ### 2.2 Create Index Definitions
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/index_definitions.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/index_definitions.ts`:
   - Define `.kibana_groups` index mappings
   - Define `.kibana_groups_members` index mappings
   - Include all fields with proper Elasticsearch types
 
 ### 2.3 Create Storage Client
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/groups_storage_client.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/groups_storage_client.ts`:
   - Use `StorageIndexAdapter` from `@kbn/storage-adapter`
   - Implement `createGroup()`, `getGroup()`, `updateGroup()`, `deleteGroup()`
   - Implement `listGroups()` with pagination
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/members_storage_client.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/members_storage_client.ts`:
   - Use `StorageIndexAdapter` from `@kbn/storage-adapter`
   - Implement `addMember()`, `removeMember()`, `getMembers()`, `getMemberGroups()`
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/index.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/storage/index.ts`:
   - Export both clients
 
 ### 2.4 Initialize Storage in Plugin
 
-- [ ] Update `server/plugin.ts`:
+- [x] Update `server/plugin.ts`:
   - Add `coreSetup.getStartServices()` call
   - Create storage clients in `start()`
   - Store clients on plugin instance
@@ -171,9 +171,9 @@ node scripts/eslint --fix x-pack/platform/plugins/shared/groups/
 node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig.json
 ```
 
-- [ ] Linting passes with 0 errors
-- [ ] Type checking passes with 0 errors
-- [ ] Commit changes: "feat(groups): add storage layer"
+- [x] Linting passes with 0 errors
+- [x] Type checking passes with 0 errors
+- [x] Commit changes: "feat(groups): add storage layer"
 
 ---
 
