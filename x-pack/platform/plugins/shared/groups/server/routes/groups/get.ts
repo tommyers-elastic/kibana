@@ -10,7 +10,7 @@ import { createServerRoute } from '../create_server_route';
 import { GROUPS_API_PRIVILEGES } from '../../../common/constants';
 
 export const getGroupRoute = createServerRoute({
-  endpoint: 'GET /internal/groups/{id} 2023-10-31',
+  endpoint: 'GET /internal/groups/{id}',
   options: {
     access: 'internal',
     summary: 'Get a group by ID',

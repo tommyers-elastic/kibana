@@ -246,30 +246,22 @@ yarn start
 
 # Test APIs with curl (in another terminal)
 # Create a group
-curl -X POST "http://localhost:5601/api/groups" \
+curl -X POST "http://localhost:5601/internal/groups" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2023-10-31" \
-  -u elastic:changeme \
   -d '{"name": "Payment Service Health", "description": "All assets for payment service monitoring"}'
 
 # List groups
-curl -X GET "http://localhost:5601/api/groups" \
-  -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2023-10-31" \
-  -u elastic:changeme
+curl -X GET "http://localhost:5601/internal/groups" \
+  -H "kbn-xsrf: true"
 
 # Get specific group (use ID from create response)
-curl -X GET "http://localhost:5601/api/groups/{id}" \
-  -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2023-10-31" \
-  -u elastic:changeme
+curl -X GET "http://localhost:5601/internal/groups/{id}" \
+  -H "kbn-xsrf: true"
 
 # Delete group
-curl -X DELETE "http://localhost:5601/api/groups/{id}" \
-  -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2023-10-31" \
-  -u elastic:changeme
+curl -X DELETE "http://localhost:5601/internal/groups/{id}" \
+  -H "kbn-xsrf: true"
 ```
 
 - [ ] Create group returns 200 with group object
