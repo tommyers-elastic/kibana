@@ -10,7 +10,7 @@ import { createServerRoute } from '../create_server_route';
 import { GROUPS_API_PRIVILEGES } from '../../../common/constants';
 
 export const createGroupRoute = createServerRoute({
-  endpoint: 'POST /api/groups 2024-01-01',
+  endpoint: 'POST /api/groups 2023-10-31',
   options: {
     access: 'public',
     summary: 'Create a new group',
