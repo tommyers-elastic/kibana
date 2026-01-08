@@ -14,10 +14,10 @@ import { GroupForm } from './pages/group_form';
 export const RoutesComponent: React.FC = () => {
   return (
     <Routes>
-      <Route path="/" component={GroupsList} />
-      <Route path="/create" component={GroupForm} />
-      <Route path="/:groupId" component={GroupDetail} />
-      <Route path="/:groupId/edit" component={GroupForm} />
+      <Route exact path="/" component={GroupsList} />
+      <Route exact path="/create" component={GroupForm} />
+      <Route exact path="/:groupId/edit" component={GroupForm} />
+      <Route exact path="/:groupId" component={GroupDetail} />
     </Routes>
   );
 };
