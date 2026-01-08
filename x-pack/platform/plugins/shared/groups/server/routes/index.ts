@@ -6,9 +6,21 @@
  */
 
 import { groupsRoutes } from './groups';
+import {
+  addMemberRoute,
+  removeMemberRoute,
+  listMembersRoute,
+  assetGroupsRoute,
+  bulkAddMembersRoute,
+} from './members';
 
 export const groupsRouteRepository = {
   ...groupsRoutes,
+  ...addMemberRoute,
+  ...removeMemberRoute,
+  ...listMembersRoute,
+  ...assetGroupsRoute,
+  ...bulkAddMembersRoute,
 };
 
 export type GroupsRouteRepository = typeof groupsRouteRepository;

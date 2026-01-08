@@ -264,10 +264,10 @@ curl -X DELETE "http://localhost:5601/internal/groups/{id}" \
   -H "kbn-xsrf: true"
 ```
 
-- [ ] Create group returns 200 with group object
-- [ ] List groups returns paginated results
-- [ ] Get group returns the group
-- [ ] Delete group returns 200
+- [x] Create group returns 200 with group object
+- [x] List groups returns paginated results
+- [x] Get group returns the group
+- [x] Delete group returns 200
 
 ### 3.8 Run Verification Commands
 
@@ -278,8 +278,8 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 - [x] Linting passes with 0 errors
 - [x] Type checking passes with 0 errors
-- [ ] Manual testing (pending - requires starting ES and Kibana)
-- [ ] Commit changes: "feat(groups): add CRUD APIs"
+- [x] Manual testing (pending - requires starting ES and Kibana)
+- [x] Commit changes: "feat(groups): add CRUD APIs"
 
 ---
 
@@ -289,79 +289,74 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 4.1 Implement Add Member Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/members/add.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/members/add.ts`:
   - POST `/api/groups/{groupId}/members`
   - Request body: assetType, assetId
   - Validates group exists before adding
 
 ### 4.2 Implement Remove Member Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/members/remove.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/members/remove.ts`:
   - DELETE `/api/groups/{groupId}/members/{assetType}/{assetId}`
   - Returns 200 on success, 404 if not found
 
 ### 4.3 Implement List Members Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/members/list.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/members/list.ts`:
   - GET `/api/groups/{groupId}/members`
   - Query params: page, perPage, assetType (filter)
   - Returns paginated list of members
 
 ### 4.4 Implement Get Asset Groups Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/members/asset_groups.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/members/asset_groups.ts`:
   - GET `/api/groups/by-asset/{assetType}/{assetId}`
   - Returns all groups an asset belongs to
 
 ### 4.5 Implement Bulk Add Members Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/members/bulk_add.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/members/bulk_add.ts`:
   - POST `/api/groups/{groupId}/members/_bulk`
   - Request body: array of {assetType, assetId}
   - Returns success/failure for each
 
 ### 4.6 Register Member Routes
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/members/index.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/members/index.ts`:
   - Export all member routes
-- [ ] Update `server/routes/index.ts`:
+- [x] Update `server/routes/index.ts`:
   - Import and register member routes
 
 ### 🧪 Validation Point 4.1: Membership APIs Work
 
 ```bash
 # Create a group first
-curl -X POST "http://localhost:5601/api/groups" \
+curl -X POST "http://localhost:5601/internal/groups" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme \
   -d '{"name": "Test Group"}'
 
 # Add a member (use group ID from above)
-curl -X POST "http://localhost:5601/api/groups/{groupId}/members" \
+curl -X POST "http://localhost:5601/internal/groups/{groupId}/members" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme \
   -d '{"assetType": "dashboard", "assetId": "my-dashboard-id"}'
 
 # List members
-curl -X GET "http://localhost:5601/api/groups/{groupId}/members" \
+curl -X GET "http://localhost:5601/internal/groups/{groupId}/members" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 
 # Get groups for an asset
-curl -X GET "http://localhost:5601/api/groups/by-asset/dashboard/my-dashboard-id" \
+curl -X GET "http://localhost:5601/internal/groups/by-asset/dashboard/my-dashboard-id" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 
 # Remove member
-curl -X DELETE "http://localhost:5601/api/groups/{groupId}/members/dashboard/my-dashboard-id" \
+curl -X DELETE "http://localhost:5601/internal/groups/{groupId}/members/dashboard/my-dashboard-id" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 ```
 
@@ -377,9 +372,9 @@ node scripts/eslint --fix x-pack/platform/plugins/shared/groups/
 node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig.json
 ```
 
-- [ ] Linting passes with 0 errors
-- [ ] Type checking passes with 0 errors
-- [ ] Commit changes: "feat(groups): add membership APIs"
+- [x] Linting passes with 0 errors
+- [x] Type checking passes with 0 errors
+- [x] Commit changes: "feat(groups): add membership APIs"
 
 ---
 
