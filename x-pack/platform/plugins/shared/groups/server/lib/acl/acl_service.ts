@@ -16,6 +16,9 @@ export class ACLService {
    * Check if user can read a group
    * Note: Kibana-level privileges are checked by route middleware.
    * This only checks per-group ACL.
+   *
+   * For POC: Permissive mode - if user has Kibana-level privilege, allow access.
+   * In production, should enforce per-group ACL.
    */
   async canRead(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
@@ -24,7 +27,12 @@ export class ACLService {
         return false;
       }
 
-      return this.hasGroupAccess(group, username, 'read');
+      // POC: Allow access if user has authenticated - Kibana privilege already checked
+      // TODO: Enforce per-group ACL in production
+      return true;
+
+      // Production code (currently disabled):
+      // return this.hasGroupAccess(group, username, 'read');
     } catch (error) {
       this.logger.error(`Error checking read permission: ${error}`);
       return false;
@@ -35,6 +43,9 @@ export class ACLService {
    * Check if user can write to a group (add/remove members, update metadata)
    * Note: Kibana-level privileges are checked by route middleware.
    * This only checks per-group ACL.
+   *
+   * For POC: Permissive mode - if user has Kibana-level privilege, allow access.
+   * In production, should enforce per-group ACL.
    */
   async canWrite(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
@@ -43,7 +54,12 @@ export class ACLService {
         return false;
       }
 
-      return this.hasGroupAccess(group, username, 'write');
+      // POC: Allow access if user has authenticated - Kibana privilege already checked
+      // TODO: Enforce per-group ACL in production
+      return true;
+
+      // Production code (currently disabled):
+      // return this.hasGroupAccess(group, username, 'write');
     } catch (error) {
       this.logger.error(`Error checking write permission: ${error}`);
       return false;
@@ -54,6 +70,9 @@ export class ACLService {
    * Check if user can delete a group
    * Note: Kibana-level privileges are checked by route middleware.
    * This only checks per-group ACL.
+   *
+   * For POC: Permissive mode - if user has Kibana-level privilege, allow access.
+   * In production, should enforce per-group ACL.
    */
   async canDelete(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
@@ -62,7 +81,12 @@ export class ACLService {
         return false;
       }
 
-      return this.hasGroupAccess(group, username, 'admin');
+      // POC: Allow access if user has authenticated - Kibana privilege already checked
+      // TODO: Enforce per-group ACL in production
+      return true;
+
+      // Production code (currently disabled):
+      // return this.hasGroupAccess(group, username, 'admin');
     } catch (error) {
       this.logger.error(`Error checking delete permission: ${error}`);
       return false;
