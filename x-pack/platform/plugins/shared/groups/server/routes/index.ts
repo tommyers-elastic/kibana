@@ -5,8 +5,10 @@
  * 2.0.
  */
 
-import * as groupsRoutes from './groups';
+import { groupsRoutes } from './groups';
 
 export const groupsRouteRepository = {
   ...groupsRoutes,
 };
+
+export type GroupsRouteRepository = typeof groupsRouteRepository;

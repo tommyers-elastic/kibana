@@ -5,8 +5,16 @@
  * 2.0.
  */
 
-export { createGroupRoute } from './create';
-export { getGroupRoute } from './get';
-export { listGroupsRoute } from './list';
-export { updateGroupRoute } from './update';
-export { deleteGroupRoute } from './delete';
+import { createGroupRoute } from './create';
+import { getGroupRoute } from './get';
+import { listGroupsRoute } from './list';
+import { updateGroupRoute } from './update';
+import { deleteGroupRoute } from './delete';
+
+export const groupsRoutes = {
+  ...createGroupRoute,
+  ...getGroupRoute,
+  ...listGroupsRoute,
+  ...updateGroupRoute,
+  ...deleteGroupRoute,
+};

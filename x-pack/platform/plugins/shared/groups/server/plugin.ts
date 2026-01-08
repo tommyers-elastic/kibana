@@ -18,7 +18,6 @@ import { registerRoutes } from '@kbn/server-route-repository';
 import type { GroupsPluginSetup, GroupsPluginStart, GroupsPluginSetupDeps } from './types';
 import { GroupsStorageClient, MembersStorageClient } from './lib/storage';
 import { groupsRouteRepository } from './routes';
-import type { GroupsRouteHandlerResources } from './routes/types';
 
 export class GroupsPlugin
   implements Plugin<GroupsPluginSetup, GroupsPluginStart, GroupsPluginSetupDeps>
@@ -47,14 +46,6 @@ export class GroupsPlugin
         this.logger.get('storage.members')
       );
 
-      // Initialize the indices
-      this.groupsStorageClient.initialize().catch((error) => {
-        this.logger.error(`Failed to initialize groups index: ${error.message}`);
-      });
-      this.membersStorageClient.initialize().catch((error) => {
-        this.logger.error(`Failed to initialize members index: ${error.message}`);
-      });
-
       this.logger.info('Groups storage clients initialized');
     });
 
@@ -72,7 +63,7 @@ export class GroupsPlugin
 
     // Register routes using the @kbn/server-route-repository utility
     // The dependencies object is spread into the handler context
-    registerRoutes<GroupsRouteHandlerResources>({
+    registerRoutes({
       core,
       repository: groupsRouteRepository,
       logger: this.logger,
