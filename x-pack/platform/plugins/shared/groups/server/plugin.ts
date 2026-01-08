@@ -33,26 +33,23 @@ export class GroupsPlugin
   public setup(core: CoreSetup, plugins: GroupsPluginSetupDeps): GroupsPluginSetup {
     this.logger.info('Groups plugin setup');
 
-    // Initialize storage clients when core services are available
-    core.getStartServices().then(([coreStart]) => {
-      const esClient = coreStart.elasticsearch.client.asInternalUser;
-
-      this.groupsStorageClient = new GroupsStorageClient(
-        esClient,
-        this.logger.get('storage.groups')
-      );
-      this.membersStorageClient = new MembersStorageClient(
-        esClient,
-        this.logger.get('storage.members')
-      );
-
-      this.logger.info('Groups storage clients initialized');
-    });
-
-    // Create a function to get scoped clients (similar to Streams plugin)
+    // Create a function to get scoped clients (initializes on first use)
     const getScopedClients = async ({ request }: { request: KibanaRequest }) => {
+      // Lazy initialization: wait for storage clients to be ready
       if (!this.groupsStorageClient || !this.membersStorageClient) {
-        throw new Error('Storage clients not initialized yet');
+        const [coreStart] = await core.getStartServices();
+        const esClient = coreStart.elasticsearch.client.asInternalUser;
+
+        this.groupsStorageClient = new GroupsStorageClient(
+          esClient,
+          this.logger.get('storage.groups')
+        );
+        this.membersStorageClient = new MembersStorageClient(
+          esClient,
+          this.logger.get('storage.members')
+        );
+
+        this.logger.info('Groups storage clients initialized');
       }
 
       return {
