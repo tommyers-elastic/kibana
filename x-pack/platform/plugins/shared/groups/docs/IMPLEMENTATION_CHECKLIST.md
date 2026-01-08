@@ -185,7 +185,7 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 - [x] Create `x-pack/platform/plugins/shared/groups/server/routes/index.ts`:
   - Set up route repository using `@kbn/server-route-repository`
-  - Define API version: `2024-01-01`
+  - Define API version: `2023-10-31` (required for public routes)
 - [x] Create `x-pack/platform/plugins/shared/groups/server/routes/types.ts`:
   - Define route handler context types
 - [x] Create `x-pack/platform/plugins/shared/groups/server/routes/create_server_route.ts`:
@@ -249,26 +249,26 @@ yarn start
 curl -X POST "http://localhost:5601/api/groups" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme \
   -d '{"name": "Payment Service Health", "description": "All assets for payment service monitoring"}'
 
 # List groups
 curl -X GET "http://localhost:5601/api/groups" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 
 # Get specific group (use ID from create response)
 curl -X GET "http://localhost:5601/api/groups/{id}" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 
 # Delete group
 curl -X DELETE "http://localhost:5601/api/groups/{id}" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 ```
 
@@ -342,7 +342,7 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 curl -X POST "http://localhost:5601/api/groups" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme \
   -d '{"name": "Test Group"}'
 
@@ -350,26 +350,26 @@ curl -X POST "http://localhost:5601/api/groups" \
 curl -X POST "http://localhost:5601/api/groups/{groupId}/members" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme \
   -d '{"assetType": "dashboard", "assetId": "my-dashboard-id"}'
 
 # List members
 curl -X GET "http://localhost:5601/api/groups/{groupId}/members" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 
 # Get groups for an asset
 curl -X GET "http://localhost:5601/api/groups/by-asset/dashboard/my-dashboard-id" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 
 # Remove member
 curl -X DELETE "http://localhost:5601/api/groups/{groupId}/members/dashboard/my-dashboard-id" \
   -H "kbn-xsrf: true" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme
 ```
 
@@ -429,7 +429,7 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 curl -X POST "http://localhost:5601/api/groups" \
   -H "kbn-xsrf: true" \
   -H "Content-Type: application/json" \
-  -H "elastic-api-version: 2024-01-01" \
+  -H "elastic-api-version: 2023-10-31" \
   -u elastic:changeme \
   -d '{"name": "Test ACL"}'
 
