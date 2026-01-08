@@ -19,12 +19,17 @@ export class ACLService {
    */
   async canRead(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
-      const username = this.security.authc.getCurrentUser(request)?.username;
-      if (!username) {
+      const user = this.security.authc.getCurrentUser(request);
+      if (!user?.username) {
         return false;
       }
 
-      return this.hasGroupAccess(group, username, 'read');
+      // Superuser bypass for testing/cleanup
+      if (user.roles.includes('superuser')) {
+        return true;
+      }
+
+      return this.hasGroupAccess(group, user.username, 'read');
     } catch (error) {
       this.logger.error(`Error checking read permission: ${error}`);
       return false;
@@ -38,12 +43,17 @@ export class ACLService {
    */
   async canWrite(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
-      const username = this.security.authc.getCurrentUser(request)?.username;
-      if (!username) {
+      const user = this.security.authc.getCurrentUser(request);
+      if (!user?.username) {
         return false;
       }
 
-      return this.hasGroupAccess(group, username, 'write');
+      // Superuser bypass for testing/cleanup
+      if (user.roles.includes('superuser')) {
+        return true;
+      }
+
+      return this.hasGroupAccess(group, user.username, 'write');
     } catch (error) {
       this.logger.error(`Error checking write permission: ${error}`);
       return false;
@@ -57,12 +67,17 @@ export class ACLService {
    */
   async canDelete(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
-      const username = this.security.authc.getCurrentUser(request)?.username;
-      if (!username) {
+      const user = this.security.authc.getCurrentUser(request);
+      if (!user?.username) {
         return false;
       }
 
-      return this.hasGroupAccess(group, username, 'admin');
+      // Superuser bypass for testing/cleanup
+      if (user.roles.includes('superuser')) {
+        return true;
+      }
+
+      return this.hasGroupAccess(group, user.username, 'admin');
     } catch (error) {
       this.logger.error(`Error checking delete permission: ${error}`);
       return false;
@@ -76,17 +91,22 @@ export class ACLService {
    */
   async canManageACL(request: KibanaRequest, group: Group): Promise<boolean> {
     try {
-      const username = this.security.authc.getCurrentUser(request)?.username;
-      if (!username) {
+      const user = this.security.authc.getCurrentUser(request);
+      if (!user?.username) {
         return false;
       }
 
-      // Owner always has ACL management rights
-      if (group.owner === username) {
+      // Superuser bypass for testing/cleanup
+      if (user.roles.includes('superuser')) {
         return true;
       }
 
-      return this.hasGroupAccess(group, username, 'admin');
+      // Owner always has ACL management rights
+      if (group.owner === user.username) {
+        return true;
+      }
+
+      return this.hasGroupAccess(group, user.username, 'admin');
     } catch (error) {
       this.logger.error(`Error checking ACL management permission: ${error}`);
       return false;
