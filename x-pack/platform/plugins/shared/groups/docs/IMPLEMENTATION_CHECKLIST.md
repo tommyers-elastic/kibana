@@ -384,26 +384,26 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 5.1 Register Kibana Feature
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/features.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/features.ts`:
   - Register feature with `features` plugin
   - Define `read_group` and `manage_group` privileges
   - Configure sub-feature privileges
-- [ ] Update `server/plugin.ts`:
+- [x] Update `server/plugin.ts`:
   - Call feature registration in `setup()`
 
 ### 5.2 Create ACL Service
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/acl/acl_service.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/acl/acl_service.ts`:
   - Implement `canRead(group, user)` method
   - Implement `canWrite(group, user)` method
   - Implement `canAdmin(group, user)` method
   - Check both Kibana privileges and per-group permissions
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/lib/acl/index.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/lib/acl/index.ts`:
   - Export ACL service
 
 ### 5.3 Integrate ACL into Routes
 
-- [ ] Update all group routes to check permissions:
+- [x] Update all group routes to check permissions:
   - GET routes check `canRead`
   - POST/PUT routes check `canWrite`
   - DELETE routes check `canAdmin`
@@ -424,8 +424,8 @@ curl -X POST "http://localhost:5601/api/groups" \
 # (Manual testing in Kibana UI: Stack Management > Users)
 ```
 
-- [ ] Admin can create groups
-- [ ] ACL checks are enforced on routes
+- [ ] Admin can create groups (manual testing pending)
+- [ ] ACL checks are enforced on routes (manual testing pending)
 
 ### 5.4 Run Verification Commands
 
@@ -434,9 +434,9 @@ node scripts/eslint --fix x-pack/platform/plugins/shared/groups/
 node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig.json
 ```
 
-- [ ] Linting passes with 0 errors
-- [ ] Type checking passes with 0 errors
-- [ ] Commit changes: "feat(groups): add feature registration and ACL"
+- [x] Linting passes with 0 errors
+- [x] Type checking passes with 0 errors
+- [x] Commit changes: "feat(groups): add feature registration and ACL"
 
 ---
 

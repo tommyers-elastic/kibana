@@ -17,6 +17,7 @@
     "server": true,
     "browser": true,
     "requiredPlugins": ["features", "security", "spaces"],
-    "optionalPlugins": ["embeddable"]
+    "optionalPlugins": ["embeddable"],
+    "requiredBundles": ["kibanaReact"]
   }
 }

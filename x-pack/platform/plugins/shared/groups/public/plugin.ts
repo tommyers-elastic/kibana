@@ -7,6 +7,7 @@
 
 import type { CoreSetup, CoreStart, Plugin, PluginInitializerContext } from '@kbn/core/public';
 import type { GroupsPluginSetup, GroupsPluginStart, GroupsPluginSetupDeps } from './types';
+import { PLUGIN_ID, PLUGIN_NAME } from '../common';
 
 export class GroupsPlugin
   implements Plugin<GroupsPluginSetup, GroupsPluginStart, GroupsPluginSetupDeps>
@@ -14,6 +15,24 @@ export class GroupsPlugin
   constructor(initializerContext: PluginInitializerContext) {}
 
   public setup(core: CoreSetup, plugins: GroupsPluginSetupDeps): GroupsPluginSetup {
+    // Register the Groups application
+    core.application.register({
+      id: PLUGIN_ID,
+      title: PLUGIN_NAME,
+      euiIconType: 'folderOpen',
+      order: 8000,
+      category: {
+        id: 'management',
+        label: 'Management',
+        order: 5000,
+      },
+      mount: async (params) => {
+        const [coreStart] = await core.getStartServices();
+        const { renderApp } = await import('./application');
+        return renderApp(coreStart, params);
+      },
+    });
+
     return {};
   }
 
