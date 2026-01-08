@@ -18,6 +18,7 @@ export const updateGroupRoute = createServerRoute({
   security: {
     authz: {
       enabled: false,
+      reason: 'This route is opted out from authorization',
     },
   },
   params: z.object({
