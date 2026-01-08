@@ -22,7 +22,7 @@
 ## Pre-Implementation Setup
 
 - [x] **Verify branch**: Confirm working on correct branch (`git branch --show-current`)
-- [x] **Bootstrap**: Run `yarn kbn bootstrap` to ensure environment is ready
+- [x] **Bootstrap**: Run `nvm use` and `yarn kbn bootstrap` to ensure environment is ready
 - [x] **Read instructions**: Review `/Users/tommyers/elastic/kibana/.github/instructions/security.instructions.md`
 
 ---
@@ -183,51 +183,57 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 3.1 Create Route Repository Setup
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/index.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/index.ts`:
   - Set up route repository using `@kbn/server-route-repository`
   - Define API version: `2024-01-01`
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/types.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/types.ts`:
   - Define route handler context types
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/create_server_route.ts`:
+  - Route factory for type-safe route creation
 
 ### 3.2 Implement Create Group Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/create.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/create.ts`:
   - POST `/api/groups`
-  - Request body: name, description (optional), permissions (optional)
+  - Request body: name, description (optional), metadata (optional)
   - Returns created group with generated ID
   - Include Zod schema validation
+  - Note: Owner set to 'system' for now (TODO: integrate with security plugin)
 
 ### 3.3 Implement Get Group Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/get.ts`:
-  - GET `/api/groups/{groupId}`
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/get.ts`:
+  - GET `/api/groups/{id}`
   - Returns group or 404
 
 ### 3.4 Implement List Groups Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/list.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/list.ts`:
   - GET `/api/groups`
-  - Query params: page, perPage, search
-  - Returns paginated list
+  - Query params: name (search), from, size
+  - Returns paginated list with groups array and total
 
 ### 3.5 Implement Update Group Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/update.ts`:
-  - PUT `/api/groups/{groupId}`
-  - Partial update of name, description, permissions
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/update.ts`:
+  - PUT `/api/groups/{id}`
+  - Partial update of name, description, metadata
 
 ### 3.6 Implement Delete Group Route
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/delete.ts`:
-  - DELETE `/api/groups/{groupId}`
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/delete.ts`:
+  - DELETE `/api/groups/{id}`
   - Also deletes all memberships for the group
 
 ### 3.7 Register Routes
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/index.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/server/routes/groups/index.ts`:
   - Export all group routes
-- [ ] Update `server/routes/index.ts`:
-  - Import and register group routes
+- [x] Update `server/routes/index.ts`:
+  - Export groupsRouteRepository
+- [x] Update `server/plugin.ts`:
+  - Implement getScopedClients pattern for lazy client initialization
+  - Register routes using registerRoutes from @kbn/server-route-repository
 - [ ] Update `server/plugin.ts`:
   - Call route registration in `setup()`
 
@@ -278,8 +284,9 @@ node scripts/eslint --fix x-pack/platform/plugins/shared/groups/
 node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig.json
 ```
 
-- [ ] Linting passes with 0 errors
-- [ ] Type checking passes with 0 errors
+- [x] Linting passes with 0 errors
+- [x] Type checking passes with 0 errors
+- [ ] Manual testing (pending - requires starting ES and Kibana)
 - [ ] Commit changes: "feat(groups): add CRUD APIs"
 
 ---

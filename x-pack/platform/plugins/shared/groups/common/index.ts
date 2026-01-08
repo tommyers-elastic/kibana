@@ -8,6 +8,14 @@
 export const PLUGIN_ID = 'groups';
 export const PLUGIN_NAME = 'Groups';
 
+export {
+  GROUPS_FEATURE_ID,
+  GROUPS_API_PRIVILEGES,
+  GROUPS_UI_PRIVILEGES,
+  ACL_ACCESS_LEVELS,
+} from './constants';
+export type { ACLAccessLevel } from './constants';
+
 export type {
   ACLAccessLevel,
   GroupACL,
