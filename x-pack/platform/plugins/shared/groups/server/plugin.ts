@@ -60,6 +60,10 @@ export class GroupsPlugin
 
     // Register routes using the @kbn/server-route-repository utility
     // The dependencies object is spread into the handler context
+    this.logger.info(
+      `Registering routes: ${Object.keys(groupsRouteRepository).join(', ')}`
+    );
+    
     registerRoutes({
       core,
       repository: groupsRouteRepository,
@@ -69,6 +73,8 @@ export class GroupsPlugin
       },
       runDevModeChecks: false,
     });
+    
+    this.logger.info('Routes registered successfully');
 
     return {};
   }
