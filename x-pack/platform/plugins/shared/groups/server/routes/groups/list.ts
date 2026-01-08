@@ -14,8 +14,11 @@ export const listGroupsRoute = createServerRoute({
   options: {
     access: 'internal',
     summary: 'List or search groups',
-  },
-  params: z.object({
+  },  security: {
+    authz: {
+      enabled: false,
+    },
+  },  params: z.object({
     query: z.object({
       name: z.string().optional(),
       from: z.coerce.number().optional(),

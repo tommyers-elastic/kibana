@@ -15,6 +15,11 @@ export const updateGroupRoute = createServerRoute({
     access: 'internal',
     summary: 'Update a group',
   },
+  security: {
+    authz: {
+      enabled: false,
+    },
+  },
   params: z.object({
     path: z.object({
       id: z.string(),

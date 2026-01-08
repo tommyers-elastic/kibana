@@ -15,6 +15,11 @@ export const getGroupRoute = createServerRoute({
     access: 'internal',
     summary: 'Get a group by ID',
   },
+  security: {
+    authz: {
+      enabled: false,
+    },
+  },
   params: z.object({
     path: z.object({
       id: z.string(),

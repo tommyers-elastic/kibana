@@ -15,6 +15,11 @@ export const deleteGroupRoute = createServerRoute({
     access: 'internal',
     summary: 'Delete a group',
   },
+  security: {
+    authz: {
+      enabled: false,
+    },
+  },
   params: z.object({
     path: z.object({
       id: z.string(),

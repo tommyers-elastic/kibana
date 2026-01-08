@@ -15,6 +15,11 @@ export const createGroupRoute = createServerRoute({
     access: 'internal',
     summary: 'Create a new group',
   },
+  security: {
+    authz: {
+      enabled: false,
+    },
+  },
   params: z.object({
     body: z.object({
       name: z.string().min(1).max(255),
