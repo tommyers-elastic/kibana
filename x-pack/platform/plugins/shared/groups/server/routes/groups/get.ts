@@ -10,15 +10,10 @@ import { createServerRoute } from '../create_server_route';
 import { GROUPS_API_PRIVILEGES } from '../../../common/constants';
 
 export const getGroupRoute = createServerRoute({
-  endpoint: 'GET /api/groups/{id} 2023-10-31',
+  endpoint: 'GET /internal/groups/{id} 2023-10-31',
   options: {
-    access: 'public',
+    access: 'internal',
     summary: 'Get a group by ID',
-  },
-  security: {
-    authz: {
-      requiredPrivileges: [GROUPS_API_PRIVILEGES.read],
-    },
   },
   params: z.object({
     path: z.object({
