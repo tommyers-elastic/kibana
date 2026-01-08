@@ -20,18 +20,22 @@ export const listGroupsRoute = createServerRoute({
       reason: 'This route is opted out from authorization',
     },
   },  params: z.object({
-    query: z.object({
-      name: z.string().optional(),
-      from: z.coerce.number().optional(),
-      size: z.coerce.number().optional(),
-    }),
+    query: z
+      .object({
+        name: z.string().optional(),
+        from: z.coerce.number().optional(),
+        size: z.coerce.number().optional(),
+      })
+      .optional()
+      .default({}),
   }),
   handler: async ({ params, getScopedClients, request }) => {
     const { groupsClient } = await getScopedClients({ request });
+    const query = params.query || {};
     const result = await groupsClient.listGroups({
-      search: params.query.name,
-      page: params.query.from !== undefined ? Math.floor(params.query.from / (params.query.size || 20)) + 1 : 1,
-      perPage: params.query.size,
+      search: query.name,
+      page: query.from !== undefined ? Math.floor(query.from / (query.size || 20)) + 1 : 1,
+      perPage: query.size,
     });
 
     return {
