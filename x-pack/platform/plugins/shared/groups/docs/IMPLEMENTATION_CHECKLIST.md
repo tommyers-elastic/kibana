@@ -446,30 +446,30 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 6.1 Register Application
 
-- [ ] Update `public/plugin.ts`:
+- [x] Update `public/plugin.ts`:
   - Register application with `core.application.register()`
   - Set up routing to `/app/groups`
   - Configure navigation category (Observability or Management)
 
 ### 6.2 Create App Mount
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/public/application.tsx`:
+- [x] Create `x-pack/platform/plugins/shared/groups/public/application.tsx`:
   - Create React app wrapper
   - Set up React Router
   - Provide Kibana services context
-- [ ] Create `x-pack/platform/plugins/shared/groups/public/routes.tsx`:
+- [x] Create `x-pack/platform/plugins/shared/groups/public/routes.tsx`:
   - Define routes: `/`, `/:groupId`, `/create`
 
 ### 6.3 Create API Client
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/public/services/api_client.ts`:
+- [x] Create `x-pack/platform/plugins/shared/groups/public/services/api_client.ts`:
   - Implement `createGroup()`, `getGroup()`, `listGroups()`, etc.
   - Use `core.http` for requests
   - Handle errors consistently
 
 ### 6.4 Create Groups List Page
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/public/pages/groups_list/`:
+- [x] Create `x-pack/platform/plugins/shared/groups/public/pages/groups_list/`:
   - `index.tsx` - Main list page component
   - `groups_table.tsx` - EUI table with pagination
   - `create_group_button.tsx` - Button to navigate to create
@@ -477,7 +477,7 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 6.5 Create Group Detail Page
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/public/pages/group_detail/`:
+- [x] Create `x-pack/platform/plugins/shared/groups/public/pages/group_detail/`:
   - `index.tsx` - Main detail page
   - `group_header.tsx` - Name, description, edit button
   - `members_list.tsx` - Table of group members
@@ -485,7 +485,7 @@ node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig
 
 ### 6.6 Create Group Form
 
-- [ ] Create `x-pack/platform/plugins/shared/groups/public/pages/group_form/`:
+- [x] Create `x-pack/platform/plugins/shared/groups/public/pages/group_form/`:
   - `index.tsx` - Create/edit form
   - Form fields: name, description
   - Validation and submission
@@ -499,10 +499,10 @@ yarn start
 # Navigate to http://localhost:5601/app/groups
 ```
 
-- [ ] Groups app loads at `/app/groups`
-- [ ] Can navigate between list and detail pages
-- [ ] Can create a new group via UI
-- [ ] Can view group details
+- [ ] Groups app loads at `/app/groups` (manual testing pending - requires starting ES and Kibana)
+- [ ] Can navigate between list and detail pages (manual testing pending)
+- [ ] Can create a new group via UI (manual testing pending)
+- [ ] Can view group details (manual testing pending)
 
 ### 6.7 Run Verification Commands
 
@@ -511,9 +511,9 @@ node scripts/eslint --fix x-pack/platform/plugins/shared/groups/
 node scripts/type_check --project x-pack/platform/plugins/shared/groups/tsconfig.json
 ```
 
-- [ ] Linting passes with 0 errors
-- [ ] Type checking passes with 0 errors
-- [ ] Commit changes: "feat(groups): add public app and basic UI"
+- [x] Linting passes with 0 errors
+- [x] Type checking passes with 0 errors
+- [x] Commit changes: "feat(groups): add public app and basic UI"
 
 ---
 
