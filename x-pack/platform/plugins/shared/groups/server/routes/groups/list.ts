@@ -7,19 +7,20 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
-import { GROUPS_API_PRIVILEGES } from '../../../common/constants';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const listGroupsRoute = createServerRoute({
   endpoint: 'GET /internal/groups',
   options: {
     access: 'internal',
     summary: 'List or search groups',
-  },  security: {
+  },
+  security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.READ_GROUP],
     },
-  },  params: z.object({
+  },
+  params: z.object({
     query: z
       .object({
         name: z.string().optional(),

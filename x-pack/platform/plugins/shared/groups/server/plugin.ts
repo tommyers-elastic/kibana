@@ -18,6 +18,8 @@ import { registerRoutes } from '@kbn/server-route-repository';
 import type { GroupsPluginSetup, GroupsPluginStart, GroupsPluginSetupDeps } from './types';
 import { GroupsStorageClient, MembersStorageClient } from './lib/storage';
 import { groupsRouteRepository } from './routes';
+import { registerGroupsFeature } from './lib/features';
+import { ACLService } from './lib/acl';
 
 export class GroupsPlugin
   implements Plugin<GroupsPluginSetup, GroupsPluginStart, GroupsPluginSetupDeps>
@@ -25,6 +27,7 @@ export class GroupsPlugin
   private readonly logger: Logger;
   private groupsStorageClient?: GroupsStorageClient;
   private membersStorageClient?: MembersStorageClient;
+  private aclService?: ACLService;
 
   constructor(initializerContext: PluginInitializerContext) {
     this.logger = initializerContext.logger.get();
@@ -33,10 +36,13 @@ export class GroupsPlugin
   public setup(core: CoreSetup, plugins: GroupsPluginSetupDeps): GroupsPluginSetup {
     this.logger.info('Groups plugin setup');
 
+    // Register Kibana feature for access control
+    registerGroupsFeature(plugins.features);
+
     // Create a function to get scoped clients (initializes on first use)
     const getScopedClients = async ({ request }: { request: KibanaRequest }) => {
       // Lazy initialization: wait for storage clients to be ready
-      if (!this.groupsStorageClient || !this.membersStorageClient) {
+      if (!this.groupsStorageClient || !this.membersStorageClient || !this.aclService) {
         const [coreStart] = await core.getStartServices();
         const esClient = coreStart.elasticsearch.client.asInternalUser;
 
@@ -48,13 +54,15 @@ export class GroupsPlugin
           esClient,
           this.logger.get('storage.members')
         );
+        this.aclService = new ACLService(coreStart.security, this.logger.get('acl'));
 
-        this.logger.info('Groups storage clients initialized');
+        this.logger.info('Groups storage clients and ACL service initialized');
       }
 
       return {
         groupsClient: this.groupsStorageClient,
         membersClient: this.membersStorageClient,
+        aclService: this.aclService,
       };
     };
 

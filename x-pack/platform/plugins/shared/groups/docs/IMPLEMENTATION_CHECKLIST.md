@@ -19,11 +19,11 @@
 
 ---
 
-## Pre-Implementation Setup
+## Pre-Implementation Setup (always run before starting a new phase)
 
-- [x] **Verify branch**: Confirm working on correct branch (`git branch --show-current`)
-- [x] **Bootstrap**: Run `nvm use` and `yarn kbn bootstrap` to ensure environment is ready
-- [x] **Read instructions**: Review `/Users/tommyers/elastic/kibana/.github/instructions/security.instructions.md`
+- **Verify branch**: Confirm working on correct branch (`git branch --show-current`)
+- **Bootstrap**: Run `nvm use` and `yarn kbn bootstrap` to ensure environment is ready
+- **Read instructions**: Review `/Users/tommyers/elastic/kibana/.github/instructions/security.instructions.md`
 
 ---
 
@@ -360,10 +360,10 @@ curl -X DELETE "http://localhost:5601/internal/groups/{groupId}/members/dashboar
   -u elastic:changeme
 ```
 
-- [ ] Add member returns 200
-- [ ] List members shows the added member
-- [ ] Get asset groups returns the group
-- [ ] Remove member returns 200
+- [x] Add member returns 200
+- [x] List members shows the added member
+- [x] Get asset groups returns the group
+- [x] Remove member returns 200
 
 ### 4.7 Run Verification Commands
 

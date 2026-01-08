@@ -12,13 +12,15 @@ export const ACL_ACCESS_LEVELS = ['read', 'write', 'admin'] as const;
 export type ACLAccessLevel = (typeof ACL_ACCESS_LEVELS)[number];
 
 /**
- * Access control list for a group
+ * Permission entry for a principal (user or role)
  */
-export interface GroupACL {
-  /** User ID of the group owner */
-  owner: string;
-  /** Map of user IDs to their permission levels */
-  permissions: Record<string, ACLAccessLevel>;
+export interface PermissionEntry {
+  /** Principal identifier (username or role name) */
+  principal: string;
+  /** Type of principal */
+  principalType: 'user' | 'role';
+  /** Access level granted */
+  accessLevel: ACLAccessLevel;
 }
 
 /**
@@ -34,7 +36,7 @@ export interface Group {
   /** User ID who created the group */
   owner: string;
   /** Access control list for the group */
-  permissions: Record<string, ACLAccessLevel>;
+  permissions?: PermissionEntry[];
   /** Additional metadata (flexible key-value pairs) */
   metadata?: Record<string, unknown>;
   /** Timestamp when the group was created */
@@ -68,7 +70,7 @@ export interface UpdateGroupParams {
   /** Updated metadata (replaces existing) */
   metadata?: Record<string, unknown>;
   /** Updated permissions (replaces existing) */
-  permissions?: Record<string, ACLAccessLevel>;
+  permissions?: PermissionEntry[];
 }
 
 /**

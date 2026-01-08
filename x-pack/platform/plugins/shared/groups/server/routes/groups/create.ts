@@ -7,7 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
-import { GROUPS_API_PRIVILEGES } from '../../../common/constants';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const createGroupRoute = createServerRoute({
   endpoint: 'POST /internal/groups',
@@ -17,8 +17,7 @@ export const createGroupRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.MANAGE_GROUP],
     },
   },
   params: z.object({
@@ -29,12 +28,11 @@ export const createGroupRoute = createServerRoute({
     }),
   }),
   handler: async ({ params, getScopedClients, request }) => {
-    const { groupsClient } = await getScopedClients({ request });
+    const { groupsClient, aclService } = await getScopedClients({ request });
     const { name, description, metadata } = params.body;
-    
-    // Note: For now, set owner to 'system'. In a future PR, we can integrate
-    // with the security plugin to get the actual authenticated user.
-    const userId = 'system';
+
+    // Get the authenticated user to set as owner
+    const userId = aclService.getCurrentUser(request) ?? 'system';
 
     const group = await groupsClient.createGroup({
       name,

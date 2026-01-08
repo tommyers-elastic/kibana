@@ -7,6 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const assetGroupsRoute = createServerRoute({
   endpoint: 'GET /internal/groups/by-asset/{assetType}/{assetId}',
@@ -16,8 +17,7 @@ export const assetGroupsRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.READ_GROUP],
     },
   },
   params: z.object({
@@ -29,7 +29,7 @@ export const assetGroupsRoute = createServerRoute({
   handler: async ({ params, getScopedClients, request }) => {
     const { membersClient } = await getScopedClients({ request });
     const { assetType, assetId } = params.path;
-    
+
     const members = await membersClient.getMemberGroups(assetType, assetId);
 
     return { groups: members };

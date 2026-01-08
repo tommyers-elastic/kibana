@@ -7,6 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const removeMemberRoute = createServerRoute({
   endpoint: 'DELETE /internal/groups/{groupId}/members/{assetType}/{assetId}',
@@ -16,8 +17,7 @@ export const removeMemberRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.MANAGE_GROUP],
     },
   },
   params: z.object({
@@ -27,12 +27,26 @@ export const removeMemberRoute = createServerRoute({
       assetId: z.string(),
     }),
   }),
-  handler: async ({ params, getScopedClients, request }) => {
-    const { membersClient } = await getScopedClients({ request });
+  handler: async ({ params, getScopedClients, request, response }) => {
+    const { groupsClient, membersClient, aclService } = await getScopedClients({ request });
     const { groupId, assetType, assetId } = params.path;
-    
+
+    // Validate that the group exists
+    const group = await groupsClient.getGroup(groupId);
+    if (!group) {
+      throw new Error('Group not found');
+    }
+
+    // Check per-group ACL
+    const canWrite = await aclService.canWrite(request, group);
+    if (!canWrite) {
+      return response.forbidden({
+        body: { message: 'Insufficient permissions to remove members from this group' },
+      });
+    }
+
     const removed = await membersClient.removeMember(groupId, assetType, assetId);
-    
+
     if (!removed) {
       throw new Error('Member not found');
     }

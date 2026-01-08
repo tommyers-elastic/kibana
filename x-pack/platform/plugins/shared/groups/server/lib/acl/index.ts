@@ -5,8 +5,5 @@
  * 2.0.
  */
 
-export const PLUGIN_ID = 'groups';
-export const GROUPS_FEATURE_ID = 'groups';
-
-export const ACL_ACCESS_LEVELS = ['read', 'write', 'admin'] as const;
-export type ACLAccessLevel = (typeof ACL_ACCESS_LEVELS)[number];
+export { ACLService } from './acl_service';
+export type { ACLAccessLevel, GroupACL } from './types';

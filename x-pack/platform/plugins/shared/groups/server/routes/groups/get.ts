@@ -7,7 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
-import { GROUPS_API_PRIVILEGES } from '../../../common/constants';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const getGroupRoute = createServerRoute({
   endpoint: 'GET /internal/groups/{id}',
@@ -17,8 +17,7 @@ export const getGroupRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.READ_GROUP],
     },
   },
   params: z.object({
@@ -26,12 +25,20 @@ export const getGroupRoute = createServerRoute({
       id: z.string(),
     }),
   }),
-  handler: async ({ params, getScopedClients, request }) => {
-    const { groupsClient } = await getScopedClients({ request });
+  handler: async ({ params, getScopedClients, request, response }) => {
+    const { groupsClient, aclService } = await getScopedClients({ request });
     const group = await groupsClient.getGroup(params.path.id);
 
     if (!group) {
       throw new Error('Group not found');
+    }
+
+    // Check per-group ACL
+    const canRead = await aclService.canRead(request, group);
+    if (!canRead) {
+      return response.forbidden({
+        body: { message: 'Insufficient permissions to read this group' },
+      });
     }
 
     return { group };

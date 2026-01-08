@@ -7,6 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const addMemberRoute = createServerRoute({
   endpoint: 'POST /internal/groups/{groupId}/members',
@@ -16,8 +17,7 @@ export const addMemberRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.MANAGE_GROUP],
     },
   },
   params: z.object({
@@ -29,20 +29,27 @@ export const addMemberRoute = createServerRoute({
       assetId: z.string().min(1),
     }),
   }),
-  handler: async ({ params, getScopedClients, request }) => {
-    const { groupsClient, membersClient } = await getScopedClients({ request });
+  handler: async ({ params, getScopedClients, request, response }) => {
+    const { groupsClient, membersClient, aclService } = await getScopedClients({ request });
     const { groupId } = params.path;
     const { assetType, assetId } = params.body;
-    
+
     // Validate that the group exists
     const group = await groupsClient.getGroup(groupId);
     if (!group) {
       throw new Error('Group not found');
     }
 
-    // Note: For now, set addedBy to 'system'. In a future PR, we can integrate
-    // with the security plugin to get the actual authenticated user.
-    const userId = 'system';
+    // Check per-group ACL
+    const canWrite = await aclService.canWrite(request, group);
+    if (!canWrite) {
+      return response.forbidden({
+        body: { message: 'Insufficient permissions to add members to this group' },
+      });
+    }
+
+    // Get the authenticated user
+    const userId = aclService.getCurrentUser(request) ?? 'system';
 
     const member = await membersClient.addMember({
       groupId,

@@ -9,10 +9,12 @@ import type { KibanaRequest } from '@kbn/core/server';
 import type { DefaultRouteHandlerResources } from '@kbn/server-route-repository';
 import type { GroupsStorageClient } from '../lib/storage/groups_storage_client';
 import type { MembersStorageClient } from '../lib/storage/members_storage_client';
+import type { ACLService } from '../lib/acl';
 
 export interface GroupsRouteHandlerScopedClients {
   groupsClient: GroupsStorageClient;
   membersClient: MembersStorageClient;
+  aclService: ACLService;
 }
 
 export type GetScopedClients = ({

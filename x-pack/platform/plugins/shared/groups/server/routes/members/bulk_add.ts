@@ -7,6 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const bulkAddMembersRoute = createServerRoute({
   endpoint: 'POST /internal/groups/{groupId}/members/_bulk',
@@ -16,8 +17,7 @@ export const bulkAddMembersRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.MANAGE_GROUP],
     },
   },
   params: z.object({
@@ -25,26 +25,35 @@ export const bulkAddMembersRoute = createServerRoute({
       groupId: z.string(),
     }),
     body: z.object({
-      members: z.array(z.object({
-        assetType: z.string().min(1),
-        assetId: z.string().min(1),
-      })),
+      members: z.array(
+        z.object({
+          assetType: z.string().min(1),
+          assetId: z.string().min(1),
+        })
+      ),
     }),
   }),
-  handler: async ({ params, getScopedClients, request }) => {
-    const { groupsClient, membersClient } = await getScopedClients({ request });
+  handler: async ({ params, getScopedClients, request, response }) => {
+    const { groupsClient, membersClient, aclService } = await getScopedClients({ request });
     const { groupId } = params.path;
     const { members } = params.body;
-    
+
     // Validate that the group exists
     const group = await groupsClient.getGroup(groupId);
     if (!group) {
       throw new Error('Group not found');
     }
 
-    // Note: For now, set addedBy to 'system'. In a future PR, we can integrate
-    // with the security plugin to get the actual authenticated user.
-    const userId = 'system';
+    // Check per-group ACL
+    const canWrite = await aclService.canWrite(request, group);
+    if (!canWrite) {
+      return response.forbidden({
+        body: { message: 'Insufficient permissions to add members to this group' },
+      });
+    }
+
+    // Get the authenticated user
+    const userId = aclService.getCurrentUser(request) ?? 'system';
 
     // Add each member, collecting results
     const results = await Promise.allSettled(
@@ -60,7 +69,7 @@ export const bulkAddMembersRoute = createServerRoute({
     );
 
     // Transform results into success/failure format
-    const response = results.map((result, index) => {
+    const responseResults = results.map((result, index) => {
       if (result.status === 'fulfilled') {
         return result.value;
       } else {
@@ -73,6 +82,6 @@ export const bulkAddMembersRoute = createServerRoute({
       }
     });
 
-    return { results: response };
+    return { results: responseResults };
   },
 });

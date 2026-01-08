@@ -48,9 +48,7 @@ export class GroupsStorageClient {
       name: params.name,
       description: params.description,
       owner: params.owner,
-      permissions: {
-        [params.owner]: 'admin',
-      },
+      permissions: [],
       metadata: params.metadata || {},
       createdAt: now,
       updatedAt: now,

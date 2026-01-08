@@ -7,6 +7,7 @@
 
 import { z } from '@kbn/zod';
 import { createServerRoute } from '../create_server_route';
+import { GROUPS_PRIVILEGES } from '../../lib/features';
 
 export const listMembersRoute = createServerRoute({
   endpoint: 'GET /internal/groups/{groupId}/members',
@@ -16,8 +17,7 @@ export const listMembersRoute = createServerRoute({
   },
   security: {
     authz: {
-      enabled: false,
-      reason: 'This route is opted out from authorization',
+      requiredPrivileges: [GROUPS_PRIVILEGES.READ_GROUP],
     },
   },
   params: z.object({
@@ -30,15 +30,23 @@ export const listMembersRoute = createServerRoute({
       perPage: z.coerce.number().min(1).max(100).default(20),
     }),
   }),
-  handler: async ({ params, getScopedClients, request }) => {
-    const { groupsClient, membersClient } = await getScopedClients({ request });
+  handler: async ({ params, getScopedClients, request, response }) => {
+    const { groupsClient, membersClient, aclService } = await getScopedClients({ request });
     const { groupId } = params.path;
     const { assetType, page, perPage } = params.query;
-    
+
     // Validate that the group exists
     const group = await groupsClient.getGroup(groupId);
     if (!group) {
       throw new Error('Group not found');
+    }
+
+    // Check per-group ACL
+    const canRead = await aclService.canRead(request, group);
+    if (!canRead) {
+      return response.forbidden({
+        body: { message: 'Insufficient permissions to read this group' },
+      });
     }
 
     const result = await membersClient.getMembers({
