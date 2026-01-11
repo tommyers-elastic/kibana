@@ -26,14 +26,14 @@ export const listMembersRoute = createServerRoute({
     }),
     query: z.object({
       assetType: z.string().optional(),
-      page: z.coerce.number().min(1).default(1),
-      perPage: z.coerce.number().min(1).max(100).default(20),
+      from: z.coerce.number().optional(),
+      size: z.coerce.number().optional(),
     }),
   }),
   handler: async ({ params, getScopedClients, request, response }) => {
     const { groupsClient, membersClient, aclService } = await getScopedClients({ request });
     const { groupId } = params.path;
-    const { assetType, page, perPage } = params.query;
+    const { assetType, from, size } = params.query;
 
     // Validate that the group exists
     const group = await groupsClient.getGroup(groupId);
@@ -52,8 +52,8 @@ export const listMembersRoute = createServerRoute({
     const result = await membersClient.getMembers({
       groupId,
       assetType,
-      page,
-      perPage,
+      page: from !== undefined ? Math.floor(from / (size || 20)) + 1 : 1,
+      perPage: size,
     });
 
     return result;
