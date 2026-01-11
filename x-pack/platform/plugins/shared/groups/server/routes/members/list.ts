@@ -56,6 +56,9 @@ export const listMembersRoute = createServerRoute({
       perPage: size,
     });
 
-    return result;
+    return {
+      members: result.data,
+      total: result.total,
+    };
   },
 });
