@@ -21,20 +21,17 @@ export const listGroupsRoute = createServerRoute({
     },
   },
   params: z.object({
-    query: z
-      .object({
-        name: z.string().optional(),
-        from: z.coerce.number().optional(),
-        size: z.coerce.number().optional(),
-      })
-      .optional()
-      .default({}),
+    query: z.object({
+      search: z.string().optional(),
+      from: z.coerce.number().optional(),
+      size: z.coerce.number().optional(),
+    }),
   }),
   handler: async ({ params, getScopedClients, request }) => {
     const { groupsClient } = await getScopedClients({ request });
-    const query = params.query || {};
+    const query = params.query;
     const result = await groupsClient.listGroups({
-      search: query.name,
+      search: query.search,
       page: query.from !== undefined ? Math.floor(query.from / (query.size || 20)) + 1 : 1,
       perPage: query.size,
     });
