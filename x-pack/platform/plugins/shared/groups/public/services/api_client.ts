@@ -49,13 +49,15 @@ export class GroupsAPIClient {
 
   // Group CRUD operations
   async createGroup(params: CreateGroupParams): Promise<Group> {
-    return this.http.post<Group>('/internal/groups', {
+    const response = await this.http.post<{ group: Group }>('/internal/groups', {
       body: JSON.stringify(params),
     });
+    return response.group;
   }
 
   async getGroup(groupId: string): Promise<Group> {
-    return this.http.get<Group>(`/internal/groups/${groupId}`);
+    const response = await this.http.get<{ group: Group }>(`/internal/groups/${groupId}`);
+    return response.group;
   }
 
   async listGroups(params?: PaginationParams & { search?: string }): Promise<ListGroupsResponse> {
@@ -70,9 +72,10 @@ export class GroupsAPIClient {
   }
 
   async updateGroup(groupId: string, params: UpdateGroupParams): Promise<Group> {
-    return this.http.put<Group>(`/internal/groups/${groupId}`, {
+    const response = await this.http.put<{ group: Group }>(`/internal/groups/${groupId}`, {
       body: JSON.stringify(params),
     });
+    return response.group;
   }
 
   async deleteGroup(groupId: string): Promise<void> {
@@ -81,9 +84,13 @@ export class GroupsAPIClient {
 
   // Membership operations
   async addMember(groupId: string, params: AddMemberParams): Promise<Member> {
-    return this.http.post<Member>(`/internal/groups/${groupId}/members`, {
-      body: JSON.stringify(params),
-    });
+    const response = await this.http.post<{ member: Member }>(
+      `/internal/groups/${groupId}/members`,
+      {
+        body: JSON.stringify(params),
+      }
+    );
+    return response.member;
   }
 
   async listMembers(
