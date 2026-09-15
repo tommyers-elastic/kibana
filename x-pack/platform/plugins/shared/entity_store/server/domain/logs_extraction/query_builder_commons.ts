@@ -19,8 +19,9 @@ import { entityStoreConditionToESQL as conditionToESQL } from '../../../common/e
 import { castEntityField, castField } from '../../../common/esql/cast';
 import { recentData } from '../../../common/domain/definitions/esql';
 import type {
-  EntityDefinition,
+  EntityDefinitionWithoutId,
   FieldValueSchema,
+  MaterialisedEntityDefinition,
   SetFieldsByCondition,
 } from '../../../common/domain/definitions/entity_schema';
 import { escapeEsqlStringLiteral } from '../../../common/esql/strings';
@@ -180,7 +181,9 @@ export function extractPaginationParams(
  * Builds the ESQL fragment that evaluates shared and identity fieldEvaluations (EVAL only).
  * Returns empty string when there are no field evaluations.
  */
-export function buildFieldEvaluations(entityDefinition: EntityDefinition): string {
+export function buildFieldEvaluations(
+  entityDefinition: Pick<EntityDefinitionWithoutId, 'materialisation'>
+): string {
   const fieldEvaluationsEsql = getFieldEvaluationsEsqlFromDefinition(entityDefinition);
   if (fieldEvaluationsEsql === undefined || fieldEvaluationsEsql === '') {
     return '';
@@ -296,9 +299,9 @@ export function statsFieldDestinations(fields: EntityField[]): Set<string> {
  */
 export function mapPostAggFilterFieldsToRecentForEsql(
   postAggFilter: Condition,
-  entityDefinition: Pick<EntityDefinition, 'fields'>
+  entityDefinition: Pick<MaterialisedEntityDefinition, 'materialisation'>
 ): Condition {
-  const destinations = statsFieldDestinations(entityDefinition.fields);
+  const destinations = statsFieldDestinations(entityDefinition.materialisation.fields);
 
   const mapNode = (node: Condition): Condition => {
     if (isAlwaysCondition(node) || isNeverCondition(node)) {
@@ -419,6 +422,8 @@ export function buildPaginationSection(
   return parts;
 }
 
-export function hasFieldEvaluations(entityDefinition: EntityDefinition): boolean {
+export function hasFieldEvaluations(
+  entityDefinition: Pick<EntityDefinitionWithoutId, 'materialisation'>
+): boolean {
   return getFieldEvaluationsFromDefinition(entityDefinition).length > 0;
 }

@@ -6,6 +6,7 @@
  */
 
 import type { EntityField } from '../domain/definitions/entity_schema';
+import { getEntityFields } from '../domain/definitions/entity_schema';
 import { hostEntityDefinition } from '../domain/definitions/host';
 import { userEntityDefinition } from '../domain/definitions/user';
 import { serviceEntityDefinition } from '../domain/definitions/service';
@@ -26,7 +27,7 @@ const fieldTypeMap: ReadonlyMap<string, string> = (() => {
     serviceEntityDefinition,
     genericEntityDefinition,
   ]) {
-    for (const field of def.fields) {
+    for (const field of getEntityFields(def)) {
       if (field.mapping?.type && !map.has(field.source)) {
         map.set(field.source, field.mapping.type);
       }

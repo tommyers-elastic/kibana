@@ -9,25 +9,41 @@ export {
   getEuidFromObject,
   getEuidFromObjectForSearch,
   getEntityIdentifiersFromDocument,
+  getEuidFromDefinition,
+  getEuidForSearchFromDefinition,
+  getEntityIdentifiersFromDefinition,
 } from './memory';
 export { getEuidFromTimelineNonEcsData, type NonEcsTimelineDataRow } from './non_ecs_timeline_data';
 export {
   getEuidPainlessEvaluation,
   getEuidPainlessEvaluationForSearch,
   getEuidPainlessRuntimeMapping,
+  getEuidPainlessEvaluationFromDefinition,
+  getEuidPainlessEvaluationForSearchFromDefinition,
+  getEuidPainlessRuntimeMappingFromDefinition,
 } from './painless';
 export {
   getEuidDslFilterBasedOnDocument,
   getEuidDslFilterBasedOnEntityRecord,
   getEuidDslDocumentsContainsIdFilter,
+  getEuidDslFilterBasedOnDocumentFromDefinition,
+  getEuidDslFilterBasedOnEntityRecordFromDefinition,
+  getEuidDslDocumentsContainsIdFilterFromDefinition,
 } from './dsl';
-export { getEuidKqlFilterBasedOnDocument } from './kql';
+export {
+  getEuidKqlFilterBasedOnDocument,
+  getEuidKqlFilterBasedOnDocumentFromDefinition,
+} from './kql';
 
 export {
   getEuidEsqlDocumentsContainsIdFilter,
   getEuidEsqlEvaluation,
   getEuidEsqlFilterBasedOnDocument,
+  getEuidEsqlDocumentsContainsIdFilterFromDefinition,
+  getEuidEsqlEvaluationFromDefinition,
+  getEuidEsqlFilterBasedOnDocumentFromDefinition,
   getFieldEvaluationsEsql,
+  getFieldEvaluationsEsqlFromDefinition,
   getHostScopedUserEuidEsql,
 } from './esql';
 export {
@@ -38,6 +54,9 @@ export {
   getEuidSourceFields,
   getEuidNamespaceSourceFields,
   getEuidNamespaceSourcePrefix,
+  getEuidSourceFieldsFromDefinition,
+  getEuidNamespaceSourceFieldsFromDefinition,
+  getEuidNamespaceSourcePrefixFromDefinition,
   type IdentitySourceFields,
   type NamespaceSourceFields,
 } from './identity_fields';

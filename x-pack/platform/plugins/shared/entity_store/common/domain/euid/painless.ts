@@ -12,8 +12,14 @@ import type {
   EuidAttribute,
   FieldEvaluation,
   FieldEvaluationWhenClauseFieldMappingThen,
+  SetFieldsByCondition,
 } from '../definitions/entity_schema';
-import { isSingleFieldIdentity } from '../definitions/entity_schema';
+import {
+  getPostAggFilter,
+  getPostStatsFieldOverrides,
+  getPreAggFieldOverrides,
+  isSingleFieldIdentity,
+} from '../definitions/entity_schema';
 import { getEntityDefinitionWithoutId } from '../definitions/registry';
 import type { EuidGateOptions } from './commons';
 import { isEuidField, waiveForAlerts } from './commons';
@@ -38,9 +44,7 @@ function wrapEvaluationScriptForKeywordRuntimeField(evaluationScript: string): s
  * Used for pre-agg and `whenConditionTrueSetFieldsAfterStats` (see getEuidFromObject).
  */
 function buildPreAggEvaluatedVarOverridesPreamble(
-  whenRules:
-    | EntityDefinitionWithoutId['whenConditionTrueSetFieldsPreAgg']
-    | EntityDefinitionWithoutId['whenConditionTrueSetFieldsAfterStats'],
+  whenRules: SetFieldsByCondition[],
   evaluatedVars: Map<string, string>
 ): string {
   if (!whenRules?.length) {
@@ -82,7 +86,21 @@ export function getEuidPainlessRuntimeMapping(
   type: 'keyword';
   script: { source: string };
 } {
-  const returnScript = getEuidPainlessEvaluation(entityType, options);
+  return getEuidPainlessRuntimeMappingFromDefinition(
+    getEntityDefinitionWithoutId(entityType),
+    options
+  );
+}
+
+/** {@link getEuidPainlessRuntimeMapping} for a definition object rather than a registered type name. */
+export function getEuidPainlessRuntimeMappingFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  options?: EuidGateOptions
+): {
+  type: 'keyword';
+  script: { source: string };
+} {
+  const returnScript = getEuidPainlessEvaluationFromDefinition(entityDefinition, options);
   const emitScript = wrapEvaluationScriptForKeywordRuntimeField(returnScript);
   return {
     type: 'keyword',
@@ -112,10 +130,22 @@ export function getEuidPainlessEvaluation(
   entityType: EntityType,
   options?: EuidGateOptions
 ): string {
+  return getEuidPainlessEvaluationFromDefinition(getEntityDefinitionWithoutId(entityType), options);
+}
+
+/**
+ * {@link getEuidPainlessEvaluation} for a definition object rather than a registered type name. The
+ * id prefix is `definition.type` verbatim (e.g. `"k8s.pod:" + …`).
+ */
+export function getEuidPainlessEvaluationFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  options?: EuidGateOptions
+): string {
   const { applyPostAggFilter = true } = options ?? {};
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
-  const { identityField } = entityDefinition;
-  const prefixExpr = identityField.skipTypePrepend ? '' : `"${entityType}:" + `;
+  const { identityField, type: entityType } = entityDefinition;
+  const prefixExpr = identityField.skipTypePrepend
+    ? ''
+    : `"${escapePainlessString(entityType)}:" + `;
 
   if (isSingleFieldIdentity(identityField)) {
     const field = identityField.singleField;
@@ -138,11 +168,11 @@ export function getEuidPainlessEvaluation(
     result.evaluatedVars.forEach((v, k) => evaluatedVars.set(k, v));
   }
   preamble += buildPreAggEvaluatedVarOverridesPreamble(
-    entityDefinition.whenConditionTrueSetFieldsPreAgg,
+    getPreAggFieldOverrides(entityDefinition),
     evaluatedVars
   );
   preamble += buildPreAggEvaluatedVarOverridesPreamble(
-    entityDefinition.whenConditionTrueSetFieldsAfterStats,
+    getPostStatsFieldOverrides(entityDefinition),
     evaluatedVars
   );
 
@@ -150,7 +180,7 @@ export function getEuidPainlessEvaluation(
   const filterOpts: StreamlangToPainlessDocOptions = { evaluatedVars };
   const filterChecks: string[] = [];
   const gateConditions = applyPostAggFilter
-    ? [identityField.documentsFilter, waiveForAlerts(entityDefinition.postAggFilter)]
+    ? [identityField.documentsFilter, waiveForAlerts(getPostAggFilter(entityDefinition))]
     : [identityField.documentsFilter];
   for (const filterCond of gateConditions.filter((c): c is Condition => Boolean(c))) {
     filterChecks.push(
@@ -226,6 +256,13 @@ export function getEuidPainlessEvaluation(
  */
 export function getEuidPainlessEvaluationForSearch(entityType: EntityType): string {
   return getEuidPainlessEvaluation(entityType, { applyPostAggFilter: false });
+}
+
+/** {@link getEuidPainlessEvaluationForSearch} for a definition object rather than a registered type name. */
+export function getEuidPainlessEvaluationForSearchFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId
+): string {
+  return getEuidPainlessEvaluationFromDefinition(entityDefinition, { applyPostAggFilter: false });
 }
 
 function painlessFieldNonEmpty(field: string): string {

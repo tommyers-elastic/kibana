@@ -98,7 +98,7 @@ function getFieldDescriptions(
   flatProps: Record<string, unknown>,
   description: ManagedEntityDefinition
 ): Record<string, EntityField & { value: unknown }> {
-  const allFieldDescriptions = description.fields.reduce((obj, field) => {
+  const allFieldDescriptions = description.materialisation.fields.reduce((obj, field) => {
     obj[field.destination || field.source] = field;
     return obj;
   }, {} as Record<string, EntityField>);

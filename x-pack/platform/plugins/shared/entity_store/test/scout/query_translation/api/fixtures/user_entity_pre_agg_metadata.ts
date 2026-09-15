@@ -16,6 +16,10 @@ import {
   getIdentityFieldEvaluationsFromDefinition,
 } from '../../../../../common/domain/euid/field_evaluations';
 import { getEntityDefinitionWithoutId } from '../../../../../common/domain/definitions/registry';
+import {
+  getPostStatsFieldOverrides,
+  getPreAggFieldOverrides,
+} from '../../../../../common/domain/definitions/entity_schema';
 
 const USER_ENTITY_TYPE = 'user' as const;
 
@@ -43,11 +47,13 @@ export function deriveUserEntityPreAggMetadata(hit: { _source?: unknown }): {
   if (identityEvaluations.length > 0) {
     Object.assign(doc, applyFieldEvaluations(doc, identityEvaluations));
   }
-  if (def.whenConditionTrueSetFieldsPreAgg?.length) {
-    applyWhenConditionTrueSetFields(doc, def.whenConditionTrueSetFieldsPreAgg);
+  const preAggOverrides = getPreAggFieldOverrides(def);
+  if (preAggOverrides.length) {
+    applyWhenConditionTrueSetFields(doc, preAggOverrides);
   }
-  if (def.whenConditionTrueSetFieldsAfterStats?.length) {
-    applyWhenConditionTrueSetFields(doc, def.whenConditionTrueSetFieldsAfterStats);
+  const postStatsOverrides = getPostStatsFieldOverrides(def);
+  if (postStatsOverrides.length) {
+    applyWhenConditionTrueSetFields(doc, postStatsOverrides);
   }
   return {
     namespace: doc['entity.namespace'] as string | undefined,

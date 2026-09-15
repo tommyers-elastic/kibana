@@ -404,8 +404,9 @@ describe('user containsId filter condition (documentsFilter AND postAggFilter)',
     throw new Error('User has calculated identity');
   }
   let condition: Condition = identityField.documentsFilter;
-  if (def.postAggFilter) {
-    condition = { and: [condition, def.postAggFilter] };
+  const { postAggFilter } = def.materialisation;
+  if (postAggFilter) {
+    condition = { and: [condition, postAggFilter] };
   }
 
   const fieldEvaluations = identityField.fieldEvaluations!;

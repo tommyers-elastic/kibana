@@ -323,7 +323,8 @@ describe('applyFieldEvaluations', () => {
 });
 
 describe('shared entity.source field evaluation', () => {
-  const hostSourceEvaluation = getEntityDefinitionWithoutId('host').fieldEvaluations ?? [];
+  const hostSourceEvaluation =
+    getEntityDefinitionWithoutId('host').materialisation.fieldEvaluations ?? [];
 
   it('should prefer event.module over event.dataset and data_stream.dataset', () => {
     expect(
@@ -374,7 +375,7 @@ describe('getFieldEvaluationsFromDefinition', () => {
     const serviceDefinition = getEntityDefinitionWithoutId('service');
 
     expect(getFieldEvaluationsFromDefinition(serviceDefinition)).toEqual(
-      serviceDefinition.fieldEvaluations
+      serviceDefinition.materialisation.fieldEvaluations
     );
   });
 
@@ -382,10 +383,10 @@ describe('getFieldEvaluationsFromDefinition', () => {
     const userDefinition = getEntityDefinitionWithoutId('user');
 
     expect(getFieldEvaluationsFromDefinition(userDefinition)).toHaveLength(
-      userDefinition.fieldEvaluations?.length ?? 0
+      userDefinition.materialisation.fieldEvaluations?.length ?? 0
     );
     expect(getFieldEvaluationsFromDefinition(userDefinition)).toEqual(
-      userDefinition.fieldEvaluations
+      userDefinition.materialisation.fieldEvaluations
     );
   });
 });

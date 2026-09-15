@@ -456,7 +456,7 @@ describe('buildPaginationSection', () => {
 
 describe('statsFieldDestinations', () => {
   it('should collect all field destinations for user definition', () => {
-    const { fields } = getEntityDefinition('user', 'default');
+    const { fields } = getEntityDefinition('user', 'default').materialisation;
     const dest = statsFieldDestinations(fields);
     expect(dest.has('event.kind')).toBe(true);
     expect(dest.has('user.name')).toBe(true);
@@ -485,8 +485,9 @@ describe('statsFieldDestinations', () => {
 describe('mapPostAggFilterFieldsToRecentForEsql', () => {
   it('should prefix STATS destinations with recent. and leave entity.id plain', () => {
     const userDef = getEntityDefinition('user', 'default');
-    expect(userDef.postAggFilter).toBeDefined();
-    const mapped = mapPostAggFilterFieldsToRecentForEsql(userDef.postAggFilter!, userDef);
+    const { postAggFilter } = userDef.materialisation;
+    expect(postAggFilter).toBeDefined();
+    const mapped = mapPostAggFilterFieldsToRecentForEsql(postAggFilter!, userDef);
     const esql = conditionToESQL(mapped);
     expect(esql).toContain(recentData('event.kind'));
     expect(esql).toContain('entity.id');
@@ -495,7 +496,10 @@ describe('mapPostAggFilterFieldsToRecentForEsql', () => {
 
   it('should be idempotent when fields are already recent.*', () => {
     const userDef = getEntityDefinition('user', 'default');
-    const once = mapPostAggFilterFieldsToRecentForEsql(userDef.postAggFilter!, userDef);
+    const once = mapPostAggFilterFieldsToRecentForEsql(
+      userDef.materialisation.postAggFilter!,
+      userDef
+    );
     const twice = mapPostAggFilterFieldsToRecentForEsql(once, userDef);
     expect(twice).toEqual(once);
   });

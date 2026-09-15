@@ -14,7 +14,7 @@ import type {
   FieldEvaluationWhenClause,
   FieldEvaluationWhenClauseFieldMappingThen,
 } from '../definitions/entity_schema';
-import { isSingleFieldIdentity } from '../definitions/entity_schema';
+import { getMaterialisation, isSingleFieldIdentity } from '../definitions/entity_schema';
 import { evaluateStreamlangCondition } from './commons';
 
 /** Result of resolving document + field evaluation into a filter-friendly spec (no EVAL). */
@@ -258,9 +258,9 @@ export function applyFieldEvaluations(
  * {@link getIdentityFieldEvaluationsFromDefinition}.
  */
 export function getFieldEvaluationsFromDefinition(
-  entityDefinition: Pick<EntityDefinitionWithoutId, 'fieldEvaluations' | 'identityField'>
+  entityDefinition: Pick<EntityDefinitionWithoutId, 'materialisation'>
 ): FieldEvaluation[] {
-  return entityDefinition.fieldEvaluations ?? [];
+  return getMaterialisation(entityDefinition)?.fieldEvaluations ?? [];
 }
 
 /**

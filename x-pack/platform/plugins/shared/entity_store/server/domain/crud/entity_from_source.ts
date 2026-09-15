@@ -20,7 +20,7 @@ import {
 import { getEntityDefinitionWithoutId } from '../../../common/domain/definitions/registry';
 import {
   isSingleFieldIdentity,
-  type EntityDefinitionWithoutId,
+  type MaterialisedEntityDefinitionWithoutId,
 } from '../../../common/domain/definitions/entity_schema';
 import { ENTITY_SOURCE_FIELD } from '../../../common/domain/definitions/common_fields';
 import type { EntityCreatedBy } from '../../../common/domain/definitions/common_fields';
@@ -62,8 +62,9 @@ export function buildEntityFromSource({
   set(built, 'entity.EngineMetadata.UntypedId', untypedId);
   set(built, 'entity.created_by', createdBy);
   // Match extraction's fallback so alert-only entities receive entity.type at creation.
-  if (definition.entityTypeFallback) {
-    set(built, ENTITY_TYPE_FIELD, definition.entityTypeFallback);
+  const { entityTypeFallback } = definition.materialisation;
+  if (entityTypeFallback) {
+    set(built, ENTITY_TYPE_FIELD, entityTypeFallback);
   }
 
   const { name, confidence } = deriveEntityNameAndConfidence(definition, doc, built);
@@ -102,7 +103,7 @@ export function buildEntityFromSource({
 function getUntypedId(
   entityType: EntityType,
   euid: string,
-  definition: EntityDefinitionWithoutId
+  definition: MaterialisedEntityDefinitionWithoutId
 ): string {
   const { identityField } = definition;
   if (isSingleFieldIdentity(identityField) && identityField.skipTypePrepend) {
@@ -113,7 +114,7 @@ function getUntypedId(
 }
 
 function deriveEntitySource(
-  definition: EntityDefinitionWithoutId,
+  definition: MaterialisedEntityDefinitionWithoutId,
   doc: unknown
 ): string[] | undefined {
   const fieldEvaluations = getFieldEvaluationsFromDefinition(definition);
@@ -126,13 +127,14 @@ function deriveEntitySource(
 }
 
 function deriveEntityNameAndConfidence(
-  definition: EntityDefinitionWithoutId,
+  definition: MaterialisedEntityDefinitionWithoutId,
   doc: unknown,
   built: Record<string, unknown>
 ): { name?: string; confidence?: string } {
-  if (definition.whenConditionTrueSetFieldsAfterStats?.length) {
+  const { whenConditionTrueSetFieldsAfterStats, fields } = definition.materialisation;
+  if (whenConditionTrueSetFieldsAfterStats?.length) {
     const workingDoc = merge({}, doc, built);
-    applyWhenConditionTrueSetFields(workingDoc, definition.whenConditionTrueSetFieldsAfterStats);
+    applyWhenConditionTrueSetFields(workingDoc, whenConditionTrueSetFieldsAfterStats);
     const name = getFieldValue(workingDoc, 'entity.name');
     const confidence = getFieldValue(workingDoc, 'entity.confidence');
     if (name !== undefined || confidence !== undefined) {
@@ -140,7 +142,7 @@ function deriveEntityNameAndConfidence(
     }
   }
 
-  const nameField = definition.fields.find((field) => field.destination === 'entity.name');
+  const nameField = fields.find((field) => field.destination === 'entity.name');
   const name = nameField ? getFieldValue(doc, nameField.source) : undefined;
   return { name };
 }

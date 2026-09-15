@@ -15,7 +15,12 @@ import type {
   EuidAttribute,
   FieldEvaluationWhenClauseFieldMappingThen,
 } from '../definitions/entity_schema';
-import { isSingleFieldIdentity } from '../definitions/entity_schema';
+import {
+  getMaterialisation,
+  getPostStatsFieldOverrides,
+  getPreAggFieldOverrides,
+  isSingleFieldIdentity,
+} from '../definitions/entity_schema';
 import { getEntityDefinitionWithoutId } from '../definitions/registry';
 import { USER_ENTITY_NAMESPACE } from '../definitions/user_entity_constants';
 import {
@@ -64,12 +69,22 @@ export function getEuidEsqlFilterBasedOnDocument(
   entityType: EntityType,
   doc: any
 ): string | undefined {
+  return getEuidEsqlFilterBasedOnDocumentFromDefinition(
+    getEntityDefinitionWithoutId(entityType),
+    doc
+  );
+}
+
+/** {@link getEuidEsqlFilterBasedOnDocument} for a definition object rather than a registered type name. */
+export function getEuidEsqlFilterBasedOnDocumentFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  doc: any
+): string | undefined {
   if (!doc) {
     return undefined;
   }
 
   doc = getDocument(doc);
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
   const { identityField } = entityDefinition;
 
   if (isSingleFieldIdentity(identityField)) {
@@ -85,11 +100,13 @@ export function getEuidEsqlFilterBasedOnDocument(
     const evaluated = applyFieldEvaluations(doc, fieldEvaluations);
     doc = { ...doc, ...evaluated };
   }
-  if (entityDefinition.whenConditionTrueSetFieldsPreAgg?.length) {
-    applyWhenConditionTrueSetFields(doc, entityDefinition.whenConditionTrueSetFieldsPreAgg);
+  const preAggOverrides = getPreAggFieldOverrides(entityDefinition);
+  if (preAggOverrides.length) {
+    applyWhenConditionTrueSetFields(doc, preAggOverrides);
   }
-  if (entityDefinition.whenConditionTrueSetFieldsAfterStats?.length) {
-    applyWhenConditionTrueSetFields(doc, entityDefinition.whenConditionTrueSetFieldsAfterStats);
+  const postStatsOverrides = getPostStatsFieldOverrides(entityDefinition);
+  if (postStatsOverrides.length) {
+    applyWhenConditionTrueSetFields(doc, postStatsOverrides);
   }
   if (!documentPassesCalculatedIdentityPipelineGate(doc, entityDefinition)) {
     return undefined;
@@ -384,12 +401,12 @@ export function getHostScopedUserEuidEsql(): {
  * Use in a pipeline as | EVAL <result>. Returns undefined when there are no field evaluations.
  */
 export function getFieldEvaluationsEsqlFromDefinition(
-  definition: EntityDefinitionWithoutId
+  definition: Pick<EntityDefinitionWithoutId, 'materialisation'>
 ): string | undefined {
   // Use only top-level shared evaluations (e.g. entity.source).
   // Identity-specific evaluations (e.g. entity.namespace) are emitted by
   // getEuidEsqlEvaluation directly, co-located with the EUID expression.
-  const evaluations = definition.fieldEvaluations ?? [];
+  const evaluations = getMaterialisation(definition)?.fieldEvaluations ?? [];
   if (evaluations.length === 0) {
     return undefined;
   }
@@ -414,7 +431,15 @@ export function getFieldEvaluationsEsqlFromDefinition(
  * @returns An ESQL filter string that checks if the document contains an entity id.
  */
 export function getEuidEsqlDocumentsContainsIdFilter(entityType: EntityType) {
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
+  return getEuidEsqlDocumentsContainsIdFilterFromDefinition(
+    getEntityDefinitionWithoutId(entityType)
+  );
+}
+
+/** {@link getEuidEsqlDocumentsContainsIdFilter} for a definition object rather than a registered type name. */
+export function getEuidEsqlDocumentsContainsIdFilterFromDefinition(
+  entityDefinition: Pick<EntityDefinitionWithoutId, 'identityField'>
+): string {
   const { identityField } = entityDefinition;
 
   if (isSingleFieldIdentity(identityField)) {
@@ -440,10 +465,25 @@ export function getEuidEsqlDocumentsContainsIdFilter(entityType: EntityType) {
 export function getEuidEsqlEvaluation(
   entityType: EntityType,
   outputColumn: string,
+  options: { withTypeId?: boolean } = {}
+): string {
+  return getEuidEsqlEvaluationFromDefinition(
+    getEntityDefinitionWithoutId(entityType),
+    outputColumn,
+    options
+  );
+}
+
+/**
+ * {@link getEuidEsqlEvaluation} for a definition object rather than a registered type name. The id
+ * prefix is `definition.type` verbatim (e.g. `CONCAT("k8s.pod:", …)`).
+ */
+export function getEuidEsqlEvaluationFromDefinition(
+  entityDefinition: Pick<EntityDefinitionWithoutId, 'type' | 'identityField'>,
+  outputColumn: string,
   { withTypeId = true }: { withTypeId?: boolean } = {}
 ): string {
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
-  const { identityField } = entityDefinition;
+  const { identityField, type: entityType } = entityDefinition;
   const mustPrependTypeId = withTypeId && !identityField.skipTypePrepend;
 
   if (isSingleFieldIdentity(identityField)) {
@@ -509,13 +549,9 @@ export function getEuidEsqlEvaluation(
   return assignments.join(',\n ');
 }
 
-function appendTypeIdIfNeeded(
-  entityType: EntityType,
-  euidLogic: string,
-  mustPrependTypeId: boolean
-) {
+function appendTypeIdIfNeeded(entityType: string, euidLogic: string, mustPrependTypeId: boolean) {
   if (mustPrependTypeId) {
-    return `CONCAT("${entityType}:", ${euidLogic})`;
+    return `CONCAT("${escapeEsqlString(entityType)}:", ${euidLogic})`;
   }
   return euidLogic;
 }

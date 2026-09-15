@@ -5,8 +5,16 @@
  * 2.0.
  */
 
-import type { EntityType, EuidAttribute } from '../definitions/entity_schema';
-import { isSingleFieldIdentity } from '../definitions/entity_schema';
+import type {
+  EntityDefinitionWithoutId,
+  EntityType,
+  EuidAttribute,
+} from '../definitions/entity_schema';
+import {
+  getPostStatsFieldOverrides,
+  getPreAggFieldOverrides,
+  isSingleFieldIdentity,
+} from '../definitions/entity_schema';
 import { getEntityDefinitionWithoutId } from '../definitions/registry';
 import type { EuidGateOptions } from './commons';
 import {
@@ -30,7 +38,14 @@ import { applyFieldEvaluations } from './field_evaluations';
  * For single-field identities there is nothing to evaluate, so `doc` is returned unchanged.
  */
 export function buildEvaluatedDoc(entityType: EntityType, doc: any): any {
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
+  return buildEvaluatedDocFromDefinition(getEntityDefinitionWithoutId(entityType), doc);
+}
+
+/** {@link buildEvaluatedDoc} for a definition object rather than a registered type name. */
+export function buildEvaluatedDocFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  doc: any
+): any {
   const { identityField } = entityDefinition;
 
   if (isSingleFieldIdentity(identityField)) {
@@ -42,17 +57,13 @@ export function buildEvaluatedDoc(entityType: EntityType, doc: any): any {
     const evaluated = applyFieldEvaluations(doc, identityField.fieldEvaluations);
     evaluatedDoc = { ...evaluatedDoc, ...evaluated };
   }
-  if (entityDefinition.whenConditionTrueSetFieldsPreAgg?.length) {
-    applyWhenConditionTrueSetFields(
-      evaluatedDoc,
-      entityDefinition.whenConditionTrueSetFieldsPreAgg
-    );
+  const preAggOverrides = getPreAggFieldOverrides(entityDefinition);
+  if (preAggOverrides.length) {
+    applyWhenConditionTrueSetFields(evaluatedDoc, preAggOverrides);
   }
-  if (entityDefinition.whenConditionTrueSetFieldsAfterStats?.length) {
-    applyWhenConditionTrueSetFields(
-      evaluatedDoc,
-      entityDefinition.whenConditionTrueSetFieldsAfterStats
-    );
+  const postStatsOverrides = getPostStatsFieldOverrides(entityDefinition);
+  if (postStatsOverrides.length) {
+    applyWhenConditionTrueSetFields(evaluatedDoc, postStatsOverrides);
   }
   return evaluatedDoc;
 }
@@ -81,13 +92,24 @@ export function buildEvaluatedDoc(entityType: EntityType, doc: any): any {
  * @returns An entity id string, or undefined if the document does not contain enough identifying information.
  */
 export function getEuidFromObject(entityType: EntityType, doc: any, options?: EuidGateOptions) {
+  return getEuidFromDefinition(getEntityDefinitionWithoutId(entityType), doc, options);
+}
+
+/**
+ * {@link getEuidFromObject} for a definition object rather than a registered type name. The id
+ * prefix is `definition.type` verbatim (e.g. `k8s.pod:`).
+ */
+export function getEuidFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  doc: any,
+  options?: EuidGateOptions
+): string | undefined {
   if (!doc) {
     return undefined;
   }
 
   doc = getDocument(doc);
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
-  const { identityField } = entityDefinition;
+  const { identityField, type: entityType } = entityDefinition;
 
   if (isSingleFieldIdentity(identityField)) {
     const value = getFieldValue(doc, identityField.singleField);
@@ -100,7 +122,7 @@ export function getEuidFromObject(entityType: EntityType, doc: any, options?: Eu
     return `${entityType}:${value}`;
   }
 
-  const evaluatedDoc = buildEvaluatedDoc(entityType, doc);
+  const evaluatedDoc = buildEvaluatedDocFromDefinition(entityDefinition, doc);
 
   if (!documentPassesCalculatedIdentityPipelineGate(evaluatedDoc, entityDefinition, options)) {
     return undefined;
@@ -134,6 +156,14 @@ export function getEuidFromObjectForSearch(entityType: EntityType, doc: any) {
   return getEuidFromObject(entityType, doc, { applyPostAggFilter: false });
 }
 
+/** {@link getEuidFromObjectForSearch} for a definition object rather than a registered type name. */
+export function getEuidForSearchFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  doc: any
+): string | undefined {
+  return getEuidFromDefinition(entityDefinition, doc, { applyPostAggFilter: false });
+}
+
 /**
  * Extracts identity field name → value pairs from a document (flattened, nested, or ES hit with `_source`)
  * using the same rules as {@link getEuidFromObject}. Use for entity store resolution / flyout identity seeds.
@@ -142,12 +172,19 @@ export function getEntityIdentifiersFromDocument(
   entityType: EntityType,
   doc: unknown
 ): Record<string, string> | undefined {
+  return getEntityIdentifiersFromDefinition(getEntityDefinitionWithoutId(entityType), doc);
+}
+
+/** {@link getEntityIdentifiersFromDocument} for a definition object rather than a registered type name. */
+export function getEntityIdentifiersFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  doc: unknown
+): Record<string, string> | undefined {
   if (!doc) {
     return undefined;
   }
 
   const workingDoc = getDocument(doc);
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
   const { identityField } = entityDefinition;
 
   if (isSingleFieldIdentity(identityField)) {
@@ -158,7 +195,7 @@ export function getEntityIdentifiersFromDocument(
     return { [identityField.singleField]: value };
   }
 
-  const evaluatedDoc = buildEvaluatedDoc(entityType, workingDoc);
+  const evaluatedDoc = buildEvaluatedDocFromDefinition(entityDefinition, workingDoc);
 
   if (!documentPassesCalculatedIdentityPipelineGate(evaluatedDoc, entityDefinition)) {
     return undefined;

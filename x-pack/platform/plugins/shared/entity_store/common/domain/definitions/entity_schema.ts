@@ -5,10 +5,34 @@
  * 2.0.
  */
 
-import { conditionSchema as streamlangConditionSchema } from '@kbn/streamlang';
+import { isEqual } from 'lodash';
 import { z } from '@kbn/zod/v4';
+import type { Condition } from '@kbn/streamlang';
+import { identityCoreSchema } from './identity_core_schema';
+import { identityTupleToIdentityField } from './identity_tuple';
+import { inventoryExtensionSchema } from './inventory_schema';
+import {
+  materialisationSchema,
+  type EntityField,
+  type ExtractionMaterialisation,
+  type MaterialisationMode,
+  type SetFieldsByCondition,
+} from './materialisation_schema';
+
+/**
+ * An entity definition is a shared identity core plus optional, independently validated
+ * solution extensions:
+ *
+ * - `identity_core_schema.ts`: type, name and identity (consumed by the EUID compiler).
+ * - `materialisation_schema.ts`: extraction into the entity store (Security).
+ * - `inventory_schema.ts`: live inventory queries over telemetry (Observability).
+ *
+ * This module composes them into `entitySchema` and re-exports every schema and type so existing
+ * imports keep working.
+ */
 
 export type EntityType = z.infer<typeof EntityType>;
+/** The closed set of built-in, code-defined Security types. Dynamic types are a later stage. */
 export const EntityType = z.enum(['user', 'host', 'service', 'generic']);
 
 export const ALL_ENTITY_TYPES = Object.values(EntityType.enum);
@@ -17,203 +41,129 @@ export const ALL_ENTITY_TYPES = Object.values(EntityType.enum);
 export type ExtractionMode = z.infer<typeof ExtractionMode>;
 export const ExtractionMode = z.enum(['single', 'priority', 'nonPriority']);
 
-const mappingSchema = z.any();
-
-const retentionOperationSchema = z.discriminatedUnion('operation', [
-  z.object({ operation: z.literal('collect_values') }),
-  z.object({ operation: z.literal('prefer_newest_value') }),
-  z.object({ operation: z.literal('prefer_oldest_value') }),
-  z.object({ operation: z.literal('managed') }),
-]);
-
-const fieldSchema = z.object({
-  allowAPIUpdate: z.optional(z.boolean()),
-  destination: z.string(),
-  mapping: z.optional(mappingSchema),
-  retention: retentionOperationSchema,
-  source: z.string(),
-});
-
-const euidFieldSchema = z.object({
-  field: z.string(),
-});
-
-const euidSeparatorSchema = z.object({
-  sep: z.string(),
-});
-
-// DoS guard: cap every user-supplied string in the whenClause schema before it reaches Painless/ESQL generation.
-const MAX_FIELD_EVALUATION_STRING_LENGTH = 1000;
-
-// Field evaluation: pre-evaluate a field before euid generation (first match wins; fallback to source value or fallbackValue).
-const fieldEvaluationWhenClauseSourceMatchSchema = z.object({
-  sourceMatchesAny: z.array(z.string()),
-  then: z.string(),
-});
-const fieldEvaluationWhenClauseFieldMappingThenSchema = z.object({
-  field: z.string().max(MAX_FIELD_EVALUATION_STRING_LENGTH),
-  mapping: z.record(
-    z.string().max(MAX_FIELD_EVALUATION_STRING_LENGTH),
-    z.string().max(MAX_FIELD_EVALUATION_STRING_LENGTH)
-  ),
-});
-
-const fieldEvaluationWhenClauseConditionSchema = z.object({
-  condition: streamlangConditionSchema,
-  then: z.union([
-    z.string().max(MAX_FIELD_EVALUATION_STRING_LENGTH),
-    fieldEvaluationWhenClauseFieldMappingThenSchema,
-  ]),
-});
-const fieldEvaluationWhenClauseSchema = z.union([
-  fieldEvaluationWhenClauseSourceMatchSchema,
-  fieldEvaluationWhenClauseConditionSchema,
-]);
-
-const fieldEvaluationSourceSchema = z.union([
-  z.object({ field: z.string() }),
-  z.object({ firstChunkOfField: z.string(), splitBy: z.string() }),
-]);
-
-const fieldEvaluationSchema = z.object({
-  destination: z.string(),
-  sources: z.array(fieldEvaluationSourceSchema),
-  fallbackValue: z.string().nullable(),
-  whenClauses: z.array(fieldEvaluationWhenClauseSchema),
-});
-
-const euidCompositionSchema = z
-  .array(z.union([euidFieldSchema, euidSeparatorSchema]))
-  .min(1)
-  .refine((parts) => parts.some((part) => 'field' in part), {
-    message: 'Each EUID composition must contain at least one field part',
+export const entitySchema = identityCoreSchema
+  .extend({
+    id: z.string().min(1).max(512),
+    // Absent means `mode: 'none'`: the definition is never extracted into the store.
+    materialisation: z.optional(materialisationSchema),
+    inventory: z.optional(inventoryExtensionSchema),
+  })
+  .superRefine((definition, ctx) => {
+    if (!definition.inventory) {
+      return;
+    }
+    // The compiler reads `identityField`, the inventory query generator reads `inventory.identity`;
+    // both must describe the same tuple.
+    const expected = identityTupleToIdentityField(definition.inventory.identity);
+    if (!isEqual(definition.identityField, expected)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['identityField'],
+        message:
+          'identityField must be the normalised form of inventory.identity (see identityTupleToIdentityField)',
+      });
+    }
   });
 
-const euidRankingBranchSchema = z.object({
-  when: streamlangConditionSchema.optional(),
-  ranking: z.array(euidCompositionSchema).min(1),
-});
-
-export const euidRankingSchema = z.object({
-  branches: z.array(euidRankingBranchSchema).min(1),
-});
-
-// Any field used in the euid calculation must be mapped in the fields array,
-// otherwise we won't have guarantees of field being available
-const calculatedIdentityFieldLogicSchema = z.object({
-  // Ranking mechanism for EUID: branches evaluated in order; first matching branch wins.
-  // Branch with no `when` always matches (fallback). Used by ESQL, Painless, Memory, DSL.
-  euidRanking: euidRankingSchema,
-
-  // Optional pre-evaluated fields (e.g. entity.namespace from event.module). Applied before
-  // euid generation and translated to ESQL, Painless, and in-memory.
-  fieldEvaluations: z.optional(z.array(fieldEvaluationSchema)),
-
-  // Document-level filter (Condition from @kbn/streamlang). Only documents matching this
-  // filter are considered for this entity type. Must express "at least one identity field
-  // present" (and any entity-specific rules, e.g. user IDP pre-conditions). Translated to
-  // DSL and ESQL via conditionToQueryDsl and conditionToESQL.
-  documentsFilter: streamlangConditionSchema,
-
-  // When true, the entity id is not prefixed with the entity type (e.g. output "a" instead of "generic:a").
-  skipTypePrepend: z.optional(z.boolean()),
-});
-
-/**
- * Single-field identity: entity is identified by one field only (e.g. service.name, entity.id).
- * No composition, no field evaluations. ESQL/DSL use a simplified path for this shape.
- */
-export const singleFieldIdentitySchema = z.object({
-  singleField: z.string(),
-  // When true, the entity id is not prefixed with the entity type (e.g. output "a" instead of "generic:a").
-  skipTypePrepend: z.optional(z.boolean()),
-});
-
-const identityFieldSchema = z.union([
-  calculatedIdentityFieldLogicSchema,
-  singleFieldIdentitySchema,
-]);
-
-// Field value: literal string, single source reference, or composition (CONCAT of fields).
-const fieldValueSchema = z.union([
-  z.string(),
-  z.object({ source: z.string() }),
-  z.object({
-    composition: z.object({
-      fields: z.array(z.string()).min(1),
-      sep: z.string(),
-    }),
-  }),
-]);
-export type FieldValueSchema = z.infer<typeof fieldValueSchema>;
-
-// Schema for "when condition true set fields" (condition + field overrides). Used e.g. for pre-agg overrides.
-export const setFieldsByConditionSchema = z.object({
-  condition: streamlangConditionSchema,
-  fields: z.record(z.string(), fieldValueSchema).refine((value) => Object.keys(value).length > 0, {
-    message: 'At least one field override is required',
-  }),
-});
-export type SetFieldsByCondition = z.infer<typeof setFieldsByConditionSchema>;
-
-// Definition-owned reasons stay separate so a rule can only report a reason it owns.
-export const creationRejectionReasonSchema = z.enum([
-  'user_not_local_namespace',
-  'host_missing_host_id',
-]);
-export type CreationRejectionReason = z.infer<typeof creationRejectionReasonSchema>;
-
-/** Conditional rules require both `requires` and `rejectionReason`; `{}` opts in unconditionally. */
-const creatableFromSingleDocumentSchema = z.union([
-  z.strictObject({
-    requires: streamlangConditionSchema,
-    rejectionReason: creationRejectionReasonSchema,
-  }),
-  z.strictObject({}),
-]);
-export type CreatableFromSingleDocument = z.infer<typeof creatableFromSingleDocumentSchema>;
-
-export const entitySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: EntityType,
-  filter: z.string().optional(),
-  entityTypeFallback: z.string().optional(),
-  fields: z.array(fieldSchema),
-  // Optional evaluated fields applied before pre-agg overrides and STATS for all entity types.
-  fieldEvaluations: z.optional(z.array(fieldEvaluationSchema)),
-  identityField: identityFieldSchema,
-  indexPatterns: z.array(z.string()),
-  // Optional filter (Condition from @kbn/streamlang) applied in ESQL only, right after the
-  // LOOKUP JOIN, to filter rows (e.g. keep already-stored entities or IDP-like events). No DSL equivalent.
-  postAggFilter: z.optional(streamlangConditionSchema),
-  // Optional: when conditions are true on source docs, set the given fields (EVAL after field evals, before STATS).
-  whenConditionTrueSetFieldsPreAgg: z.optional(z.array(setFieldsByConditionSchema)),
-  // Post-STATS EVAL in logs ESQL (recent.* vs plain). Single-doc paths re-apply entries after pre-agg for parity.
-  whenConditionTrueSetFieldsAfterStats: z.optional(z.array(setFieldsByConditionSchema)),
-  // Omission disables single-document creation for the entity type.
-  creatableFromSingleDocument: z.optional(creatableFromSingleDocumentSchema),
-});
-
-export type EntityField = z.infer<typeof fieldSchema>; // entities fields
-export type CalculatedEntityIdentity = z.infer<typeof calculatedIdentityFieldLogicSchema>; // full identity (euidRanking + documentsFilter + optional fieldEvaluations)
-export type SingleFieldIdentity = z.infer<typeof singleFieldIdentitySchema>;
-export type EntityIdentity = z.infer<typeof identityFieldSchema>; // definition-time identity (full or singleField)
 export type EntityDefinition = z.infer<typeof entitySchema>; // entity with id generated in runtime
 export type EntityDefinitionWithoutId = Omit<EntityDefinition, 'id'>;
-export type ManagedEntityDefinition = EntityDefinition & { type: EntityType }; // entity with a known 'type'
-export type EuidField = z.infer<typeof euidFieldSchema>;
-export type EuidSeparator = z.infer<typeof euidSeparatorSchema>;
-export type EuidAttribute = EuidField | EuidSeparator;
-export type EuidRankingBranch = z.infer<typeof euidRankingBranchSchema>;
-export type EuidRanking = z.infer<typeof euidRankingSchema>;
-export type FieldEvaluationWhenClause = z.infer<typeof fieldEvaluationWhenClauseSchema>;
-export type FieldEvaluationWhenClauseFieldMappingThen = z.infer<
-  typeof fieldEvaluationWhenClauseFieldMappingThenSchema
->;
-export type FieldEvaluationSource = z.infer<typeof fieldEvaluationSourceSchema>;
-export type FieldEvaluation = z.infer<typeof fieldEvaluationSchema>;
 
-export function isSingleFieldIdentity(identity: EntityIdentity): identity is SingleFieldIdentity {
-  return 'singleField' in identity;
+/** A definition whose materialisation mode is `extraction`: it has fields, templates and tasks. */
+export type MaterialisedEntityDefinition = EntityDefinition & {
+  materialisation: ExtractionMaterialisation;
+};
+export type MaterialisedEntityDefinitionWithoutId = Omit<MaterialisedEntityDefinition, 'id'>;
+
+/** A built-in Security definition: known closed `type` and extraction materialisation. */
+export type ManagedEntityDefinition = MaterialisedEntityDefinition & { type: EntityType };
+
+type HasMaterialisation = Pick<EntityDefinitionWithoutId, 'materialisation'>;
+
+export function getMaterialisationMode(definition: HasMaterialisation): MaterialisationMode {
+  return definition.materialisation?.mode ?? 'none';
 }
+
+export function isMaterialisedDefinition<T extends HasMaterialisation>(
+  definition: T
+): definition is T & { materialisation: ExtractionMaterialisation } {
+  return definition.materialisation?.mode === 'extraction';
+}
+
+/** The extraction extension, or `undefined` for a non-materialised definition. */
+export function getMaterialisation(
+  definition: HasMaterialisation
+): ExtractionMaterialisation | undefined {
+  return isMaterialisedDefinition(definition) ? definition.materialisation : undefined;
+}
+
+export function getEntityFields(definition: HasMaterialisation): EntityField[] {
+  return getMaterialisation(definition)?.fields ?? [];
+}
+
+export function getPostAggFilter(definition: HasMaterialisation): Condition | undefined {
+  return getMaterialisation(definition)?.postAggFilter;
+}
+
+export function getPreAggFieldOverrides(definition: HasMaterialisation): SetFieldsByCondition[] {
+  return getMaterialisation(definition)?.whenConditionTrueSetFieldsPreAgg ?? [];
+}
+
+export function getPostStatsFieldOverrides(definition: HasMaterialisation): SetFieldsByCondition[] {
+  return getMaterialisation(definition)?.whenConditionTrueSetFieldsAfterStats ?? [];
+}
+
+export {
+  identityCoreSchema,
+  identityFieldSchema,
+  euidRankingSchema,
+  singleFieldIdentitySchema,
+  fieldEvaluationSchema,
+  entityTypeNameSchema,
+  ENTITY_TYPE_NAME_PATTERN,
+  isSingleFieldIdentity,
+} from './identity_core_schema';
+export type {
+  EntityIdentityCore,
+  CalculatedEntityIdentity,
+  SingleFieldIdentity,
+  EntityIdentity,
+  EuidField,
+  EuidSeparator,
+  EuidAttribute,
+  EuidRankingBranch,
+  EuidRanking,
+  FieldEvaluationWhenClause,
+  FieldEvaluationWhenClauseFieldMappingThen,
+  FieldEvaluationSource,
+  FieldEvaluation,
+} from './identity_core_schema';
+
+export {
+  materialisationSchema,
+  extractionMaterialisationSchema,
+  noMaterialisationSchema,
+  setFieldsByConditionSchema,
+  creationRejectionReasonSchema,
+} from './materialisation_schema';
+export type {
+  EntityField,
+  FieldValueSchema,
+  SetFieldsByCondition,
+  CreationRejectionReason,
+  CreatableFromSingleDocument,
+  MaterialisationExtension,
+  ExtractionMaterialisation,
+  MaterialisationMode,
+} from './materialisation_schema';
+
+export { inventoryExtensionSchema } from './inventory_schema';
+export type {
+  InventoryExtension,
+  InventorySource,
+  InventorySourceEngine,
+  InventoryMetric,
+  InventoryCapture,
+  InventoryLookup,
+  InventoryMetadataWrite,
+  InventorySort,
+} from './inventory_schema';

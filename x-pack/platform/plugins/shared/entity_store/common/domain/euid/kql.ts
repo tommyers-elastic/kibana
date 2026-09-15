@@ -16,8 +16,16 @@ import {
   isNotCondition,
   isAlwaysCondition,
 } from '@kbn/streamlang';
-import type { EntityType, FieldEvaluation } from '../definitions/entity_schema';
-import { isSingleFieldIdentity } from '../definitions/entity_schema';
+import type {
+  EntityDefinitionWithoutId,
+  EntityType,
+  FieldEvaluation,
+} from '../definitions/entity_schema';
+import {
+  getPostStatsFieldOverrides,
+  getPreAggFieldOverrides,
+  isSingleFieldIdentity,
+} from '../definitions/entity_schema';
 import { getEntityDefinitionWithoutId } from '../definitions/registry';
 import {
   applyWhenConditionTrueSetFields,
@@ -70,12 +78,22 @@ export function getEuidKqlFilterBasedOnDocument(
   entityType: EntityType,
   doc: any
 ): string | undefined {
+  return getEuidKqlFilterBasedOnDocumentFromDefinition(
+    getEntityDefinitionWithoutId(entityType),
+    doc
+  );
+}
+
+/** {@link getEuidKqlFilterBasedOnDocument} for a definition object rather than a registered type name. */
+export function getEuidKqlFilterBasedOnDocumentFromDefinition(
+  entityDefinition: EntityDefinitionWithoutId,
+  doc: any
+): string | undefined {
   if (!doc) {
     return undefined;
   }
 
   doc = getDocument(doc);
-  const entityDefinition = getEntityDefinitionWithoutId(entityType);
   const { identityField } = entityDefinition;
 
   if (isSingleFieldIdentity(identityField)) {
@@ -91,11 +109,13 @@ export function getEuidKqlFilterBasedOnDocument(
     const evaluated = applyFieldEvaluations(doc, fieldEvaluations);
     doc = { ...doc, ...evaluated };
   }
-  if (entityDefinition.whenConditionTrueSetFieldsPreAgg?.length) {
-    applyWhenConditionTrueSetFields(doc, entityDefinition.whenConditionTrueSetFieldsPreAgg);
+  const preAggOverrides = getPreAggFieldOverrides(entityDefinition);
+  if (preAggOverrides.length) {
+    applyWhenConditionTrueSetFields(doc, preAggOverrides);
   }
-  if (entityDefinition.whenConditionTrueSetFieldsAfterStats?.length) {
-    applyWhenConditionTrueSetFields(doc, entityDefinition.whenConditionTrueSetFieldsAfterStats);
+  const postStatsOverrides = getPostStatsFieldOverrides(entityDefinition);
+  if (postStatsOverrides.length) {
+    applyWhenConditionTrueSetFields(doc, postStatsOverrides);
   }
   if (!documentPassesCalculatedIdentityPipelineGate(doc, entityDefinition)) {
     return undefined;

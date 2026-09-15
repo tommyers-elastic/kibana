@@ -16,7 +16,7 @@ import type {
   FieldEvaluationSource,
   FieldValueSchema,
 } from '../definitions/entity_schema';
-import { isSingleFieldIdentity } from '../definitions/entity_schema';
+import { getPostAggFilter, isSingleFieldIdentity } from '../definitions/entity_schema';
 
 interface FieldValue {
   [key: string]: string;
@@ -152,7 +152,7 @@ export function documentPassesCalculatedIdentityPipelineGate(
   entityDefinition: EntityDefinitionWithoutId,
   options?: EuidGateOptions
 ): boolean {
-  const { identityField, postAggFilter } = entityDefinition;
+  const { identityField } = entityDefinition;
   const { applyPostAggFilter = true } = options ?? {};
   if (isSingleFieldIdentity(identityField)) {
     return true;
@@ -161,7 +161,7 @@ export function documentPassesCalculatedIdentityPipelineGate(
     doc,
     mergeDocumentsFilterAndPostAgg(
       identityField.documentsFilter,
-      applyPostAggFilter ? waiveForAlerts(postAggFilter) : undefined
+      applyPostAggFilter ? waiveForAlerts(getPostAggFilter(entityDefinition)) : undefined
     )
   );
 }

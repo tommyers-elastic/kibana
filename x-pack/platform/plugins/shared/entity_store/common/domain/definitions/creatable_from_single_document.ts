@@ -37,7 +37,10 @@ export type EntityCreationCandidate = EntityCreationAccepted | EntityCreationRej
 
 /** Returns whether the entity type supports creation from a single document. */
 export function isEntityTypeCreatableFromSingleDocument(entityType: EntityType): boolean {
-  return getEntityDefinitionWithoutId(entityType).creatableFromSingleDocument !== undefined;
+  return (
+    getEntityDefinitionWithoutId(entityType).materialisation.creatableFromSingleDocument !==
+    undefined
+  );
 }
 
 /** Applies an entity type's single-document creation policy. */
@@ -50,7 +53,8 @@ export function getEntityCreationCandidate(
   }
 
   const doc = getDocument(sourceDoc);
-  const { creatableFromSingleDocument: rule } = getEntityDefinitionWithoutId(entityType);
+  const { creatableFromSingleDocument: rule } =
+    getEntityDefinitionWithoutId(entityType).materialisation;
   if (!rule) {
     return { accepted: false, reason: 'entity_type_not_creatable' };
   }

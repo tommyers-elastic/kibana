@@ -7,8 +7,8 @@
 
 import type { MappingTypeMapping } from '@elastic/elasticsearch/lib/api/types';
 import type {
-  EntityDefinition,
   EntityType,
+  MaterialisedEntityDefinition,
 } from '../../../common/domain/definitions/entity_schema';
 import { ENTITY_BASE_PREFIX, ENTITY_SCHEMA_VERSION_V2 } from '../../../common/domain/entity_index';
 
@@ -27,7 +27,7 @@ const BASE_ENTITY_INDEX_MAPPING = {
   'entity.risk.calculated_score_norm': { type: 'float' },
 } as const satisfies MappingProperties;
 
-export const getComponentTemplateName = (type: EntityType, namespace: string) =>
+export const getComponentTemplateName = (type: string, namespace: string) =>
   `${ENTITY_BASE_PREFIX}-${ENTITY_SCHEMA_VERSION_V2}-${type}_${namespace}-latest@platform`;
 
 /** @deprecated Legacy Security-scoped name; used only for upgrade migration. */
@@ -35,7 +35,7 @@ export const getLegacySecurityComponentTemplateName = (type: EntityType, namespa
   `${ENTITY_BASE_PREFIX}-${ENTITY_SCHEMA_VERSION_V2}-security_${type}_${namespace}-latest@platform`;
 
 export const getEntityDefinitionComponentTemplate = (
-  definition: EntityDefinition,
+  definition: MaterialisedEntityDefinition,
   namespace: string
 ) => {
   return {
@@ -44,18 +44,18 @@ export const getEntityDefinitionComponentTemplate = (
   };
 };
 
-const getIndexMappings = (definition: EntityDefinition): MappingTypeMapping => ({
+const getIndexMappings = (definition: MaterialisedEntityDefinition): MappingTypeMapping => ({
   properties: {
     ...BASE_ENTITY_INDEX_MAPPING,
     ...Object.fromEntries(
-      definition.fields
+      definition.materialisation.fields
         .filter(({ mapping }) => mapping)
         .map(({ source, destination, mapping }) => [destination || source, mapping])
     ),
   },
 });
 
-export const getUpdatesComponentTemplateName = (type: EntityType, namespace: string) =>
+export const getUpdatesComponentTemplateName = (type: string, namespace: string) =>
   `${ENTITY_BASE_PREFIX}-${ENTITY_SCHEMA_VERSION_V2}-${type}_${namespace}-updates@platform`;
 
 /** @deprecated Legacy Security-scoped name; used only for upgrade migration. */
@@ -66,7 +66,7 @@ export const getLegacySecurityUpdatesComponentTemplateName = (
   `${ENTITY_BASE_PREFIX}-${ENTITY_SCHEMA_VERSION_V2}-security_${type}_${namespace}-updates@platform`;
 
 export const getUpdatesEntityDefinitionComponentTemplate = (
-  definition: EntityDefinition,
+  definition: MaterialisedEntityDefinition,
   namespace: string
 ) => {
   return {
@@ -75,11 +75,11 @@ export const getUpdatesEntityDefinitionComponentTemplate = (
   };
 };
 
-const getUpdatesIndexMappings = (definition: EntityDefinition): MappingTypeMapping => ({
+const getUpdatesIndexMappings = (definition: MaterialisedEntityDefinition): MappingTypeMapping => ({
   properties: {
     ...BASE_ENTITY_INDEX_MAPPING,
     ...Object.fromEntries(
-      definition.fields
+      definition.materialisation.fields
         .filter(({ mapping }) => mapping)
         .filter(({ source }) => source[0] !== '_')
         .map(({ source, mapping }) => [source, mapping])

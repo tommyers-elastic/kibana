@@ -13,7 +13,7 @@ import {
   getEntityFieldsDescriptions,
   isNotEmptyCondition,
 } from './common_fields';
-import type { EntityDefinitionWithoutId } from './entity_schema';
+import type { MaterialisedEntityDefinitionWithoutId } from './entity_schema';
 import {
   ENTITY_CONFIDENCE,
   LOCAL_NAMESPACE_EXCLUDED_USER_NAMES,
@@ -35,10 +35,9 @@ const localNamespaceGate: Condition = {
   ],
 };
 
-export const userEntityDefinition: EntityDefinitionWithoutId = {
+export const userEntityDefinition: MaterialisedEntityDefinitionWithoutId = {
   type: 'user',
   name: `Security 'user' Entity Store Definition`,
-  fieldEvaluations: [ENTITY_SOURCE_FIELD_EVALUATION],
   identityField: {
     /**
      * UEBA user documents filter (pre-aggregation: which documents enter the pipeline).
@@ -133,110 +132,113 @@ export const userEntityDefinition: EntityDefinitionWithoutId = {
       ],
     },
   },
-  entityTypeFallback: 'Identity',
-  indexPatterns: [],
-  /** Post-aggregation filter (after LOOKUP JOIN)*/
-  postAggFilter: {
-    or: [
-      // If the entity already exists in the store, it doesn't matter any of the gates
-      entityIdExistsAfterLookup,
+  materialisation: {
+    mode: 'extraction',
+    fieldEvaluations: [ENTITY_SOURCE_FIELD_EVALUATION],
+    entityTypeFallback: 'Identity',
+    /** Post-aggregation filter (after LOOKUP JOIN)*/
+    postAggFilter: {
+      or: [
+        // If the entity already exists in the store, it doesn't matter any of the gates
+        entityIdExistsAfterLookup,
 
-      // If it's local namespace, no need to check idps
-      { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
+        // If it's local namespace, no need to check idps
+        { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
 
-      // It's IDP
-      idpGate,
-    ],
-  },
-
-  /**
-   * Restricts single-document creation to local users; other namespaces would mint a
-   * high-confidence entity without authoritative IdP evidence.
-   */
-  creatableFromSingleDocument: {
-    requires: { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
-    rejectionReason: 'user_not_local_namespace',
-  },
-
-  /**
-   * Post-STATS: entity.name for local vs non-local; entity.confidence from namespace (local → medium,
-   * else → high). Logs ESQL maps to `recent.*` after STATS.
-   */
-  whenConditionTrueSetFieldsAfterStats: [
-    {
-      condition: {
-        and: [
-          { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
-          isNotEmptyCondition('host.name'),
-        ],
-      },
-      fields: {
-        'entity.name': { composition: { fields: ['user.name', 'host.name'], sep: '@' } },
-      },
+        // It's IDP
+        idpGate,
+      ],
     },
-    {
-      condition: {
-        and: [
-          { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
-          { not: isNotEmptyCondition('host.name') },
-        ],
-      },
-      fields: {
-        'entity.name': { source: 'user.name' },
-      },
-    },
-    {
-      condition: { field: 'entity.namespace', neq: USER_ENTITY_NAMESPACE.Local },
-      fields: {
-        'entity.name': { source: 'user.name' },
-        'entity.confidence': ENTITY_CONFIDENCE.High,
-      },
-    },
-    {
-      condition: { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
-      fields: {
-        'entity.confidence': ENTITY_CONFIDENCE.Medium,
-      },
-    },
-  ],
-  fields: [
-    newestValue({ source: 'entity.name' }),
-    collect({ source: 'event.kind' }),
-    collect({ source: 'event.category' }),
-    collect({ source: 'event.type' }),
-    collect({ source: 'event.outcome' }),
 
-    newestValue({ source: 'cloud.provider' }),
+    /**
+     * Restricts single-document creation to local users; other namespaces would mint a
+     * high-confidence entity without authoritative IdP evidence.
+     */
+    creatableFromSingleDocument: {
+      requires: { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
+      rejectionReason: 'user_not_local_namespace',
+    },
 
-    newestValue({ source: 'entity.namespace' }),
-    oldestValue({ source: 'entity.confidence' }),
-
-    collect({ source: 'user.domain' }),
-    collect({ source: 'user.email' }),
-    newestValue({ source: 'user.name' }),
-    collect({
-      source: 'user.full_name',
-      mapping: {
-        type: 'keyword',
+    /**
+     * Post-STATS: entity.name for local vs non-local; entity.confidence from namespace (local → medium,
+     * else → high). Logs ESQL maps to `recent.*` after STATS.
+     */
+    whenConditionTrueSetFieldsAfterStats: [
+      {
+        condition: {
+          and: [
+            { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
+            isNotEmptyCondition('host.name'),
+          ],
+        },
         fields: {
-          text: {
-            type: 'match_only_text',
-          },
+          'entity.name': { composition: { fields: ['user.name', 'host.name'], sep: '@' } },
         },
       },
-    }),
-    collect({ source: 'user.hash' }),
-    collect({ source: 'user.id' }),
-    collect({ source: 'user.roles' }),
-    collect({ source: 'user.group.domain' }),
-    collect({ source: 'user.group.id' }),
-    collect({ source: 'user.group.name' }),
-    ...getCommonFieldDescriptions('user'),
-    ...getEntityFieldsDescriptions('user'),
+      {
+        condition: {
+          and: [
+            { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
+            { not: isNotEmptyCondition('host.name') },
+          ],
+        },
+        fields: {
+          'entity.name': { source: 'user.name' },
+        },
+      },
+      {
+        condition: { field: 'entity.namespace', neq: USER_ENTITY_NAMESPACE.Local },
+        fields: {
+          'entity.name': { source: 'user.name' },
+          'entity.confidence': ENTITY_CONFIDENCE.High,
+        },
+      },
+      {
+        condition: { field: 'entity.namespace', eq: USER_ENTITY_NAMESPACE.Local },
+        fields: {
+          'entity.confidence': ENTITY_CONFIDENCE.Medium,
+        },
+      },
+    ],
+    fields: [
+      newestValue({ source: 'entity.name' }),
+      collect({ source: 'event.kind' }),
+      collect({ source: 'event.category' }),
+      collect({ source: 'event.type' }),
+      collect({ source: 'event.outcome' }),
 
-    /* Used to populate the identity field */
-    collect({ source: 'host.entity.id' }),
-    collect({ source: 'host.id' }),
-    newestValue({ source: 'host.name' }),
-  ],
-} as const satisfies EntityDefinitionWithoutId;
+      newestValue({ source: 'cloud.provider' }),
+
+      newestValue({ source: 'entity.namespace' }),
+      oldestValue({ source: 'entity.confidence' }),
+
+      collect({ source: 'user.domain' }),
+      collect({ source: 'user.email' }),
+      newestValue({ source: 'user.name' }),
+      collect({
+        source: 'user.full_name',
+        mapping: {
+          type: 'keyword',
+          fields: {
+            text: {
+              type: 'match_only_text',
+            },
+          },
+        },
+      }),
+      collect({ source: 'user.hash' }),
+      collect({ source: 'user.id' }),
+      collect({ source: 'user.roles' }),
+      collect({ source: 'user.group.domain' }),
+      collect({ source: 'user.group.id' }),
+      collect({ source: 'user.group.name' }),
+      ...getCommonFieldDescriptions('user'),
+      ...getEntityFieldsDescriptions('user'),
+
+      /* Used to populate the identity field */
+      collect({ source: 'host.entity.id' }),
+      collect({ source: 'host.id' }),
+      newestValue({ source: 'host.name' }),
+    ],
+  },
+} as const satisfies MaterialisedEntityDefinitionWithoutId;

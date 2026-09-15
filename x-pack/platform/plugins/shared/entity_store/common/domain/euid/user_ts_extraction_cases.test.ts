@@ -29,11 +29,13 @@ function deriveUserMeta(doc: Record<string, unknown>) {
   if (identityEvaluations.length > 0) {
     Object.assign(d, applyFieldEvaluations(d, identityEvaluations));
   }
-  if (def.whenConditionTrueSetFieldsPreAgg?.length) {
-    applyWhenConditionTrueSetFields(d, def.whenConditionTrueSetFieldsPreAgg);
+  const { whenConditionTrueSetFieldsPreAgg, whenConditionTrueSetFieldsAfterStats } =
+    def.materialisation;
+  if (whenConditionTrueSetFieldsPreAgg?.length) {
+    applyWhenConditionTrueSetFields(d, whenConditionTrueSetFieldsPreAgg);
   }
-  if (def.whenConditionTrueSetFieldsAfterStats?.length) {
-    applyWhenConditionTrueSetFields(d, def.whenConditionTrueSetFieldsAfterStats);
+  if (whenConditionTrueSetFieldsAfterStats?.length) {
+    applyWhenConditionTrueSetFields(d, whenConditionTrueSetFieldsAfterStats);
   }
   return {
     namespace: d['entity.namespace'] as string | undefined,
