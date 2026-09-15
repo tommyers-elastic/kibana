@@ -1,0 +1,94 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) DSL: documents filter, document filter and record filter 1`] = `
+Object {
+  "bool": Object {
+    "must": Array [
+      Object {
+        "bool": Object {
+          "must": Array [
+            Object {
+              "exists": Object {
+                "field": "kubernetes.namespace",
+              },
+            },
+            Object {
+              "bool": Object {
+                "must_not": Object {
+                  "match": Object {
+                    "kubernetes.namespace": "",
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+      Object {
+        "bool": Object {
+          "must": Array [
+            Object {
+              "exists": Object {
+                "field": "kubernetes.deployment.name",
+              },
+            },
+            Object {
+              "bool": Object {
+                "must_not": Object {
+                  "match": Object {
+                    "kubernetes.deployment.name": "",
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  },
+}
+`;
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) DSL: documents filter, document filter and record filter 2`] = `
+Object {
+  "bool": Object {
+    "filter": Array [
+      Object {
+        "term": Object {
+          "kubernetes.namespace": "payments",
+        },
+      },
+      Object {
+        "term": Object {
+          "kubernetes.deployment.name": "checkout-api",
+        },
+      },
+    ],
+  },
+}
+`;
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) ES|QL: evaluation, documents filter and document filter 1`] = `
+"kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
+ kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
+ kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
+ kubernetes_deployment_name_present_or_null = CASE(kubernetes_deployment_name_present, TO_STRING(kubernetes.deployment.name)),
+ entity.id = CONCAT(\\"k8s.deployment:\\", CONCAT(kubernetes_namespace_present_or_null, \\"/\\", kubernetes_deployment_name_present_or_null))"
+`;
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) ES|QL: evaluation, documents filter and document filter 2`] = `"TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\" AND TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\""`;
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) ES|QL: evaluation, documents filter and document filter 3`] = `"((kubernetes.namespace == \\"payments\\") AND (kubernetes.deployment.name == \\"checkout-api\\"))"`;
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) Painless: evaluation and runtime mapping use the dotted type as prefix 1`] = `"if (!(((doc.containsKey('kubernetes.namespace') && doc['kubernetes.namespace'].size() > 0 && doc['kubernetes.namespace'].value != null && doc['kubernetes.namespace'].value != \\"\\" && (!(doc.containsKey('kubernetes.namespace') && doc['kubernetes.namespace'].size() > 0 && doc['kubernetes.namespace'].value != null && doc['kubernetes.namespace'].value != \\"\\") || doc['kubernetes.namespace'].value != \\"\\")) && (doc.containsKey('kubernetes.deployment.name') && doc['kubernetes.deployment.name'].size() > 0 && doc['kubernetes.deployment.name'].value != null && doc['kubernetes.deployment.name'].value != \\"\\" && (!(doc.containsKey('kubernetes.deployment.name') && doc['kubernetes.deployment.name'].size() > 0 && doc['kubernetes.deployment.name'].value != null && doc['kubernetes.deployment.name'].value != \\"\\") || doc['kubernetes.deployment.name'].value != \\"\\"))))) { return null; } if (doc.containsKey('kubernetes.namespace') && doc['kubernetes.namespace'].size() > 0 && doc['kubernetes.namespace'].value != null && doc['kubernetes.namespace'].value != \\"\\" && doc.containsKey('kubernetes.deployment.name') && doc['kubernetes.deployment.name'].size() > 0 && doc['kubernetes.deployment.name'].value != null && doc['kubernetes.deployment.name'].value != \\"\\") { return \\"k8s.deployment:\\" + doc['kubernetes.namespace'].value + \\"/\\" + doc['kubernetes.deployment.name'].value; } return null;"`;
+
+exports[`EUID compiler over Observability inventory definitions composite identity (k8s.deployment) Painless: evaluation and runtime mapping use the dotted type as prefix 2`] = `
+Object {
+  "script": Object {
+    "source": "String ___euid_rt_eval(def doc) { if (!(((doc.containsKey('kubernetes.namespace') && doc['kubernetes.namespace'].size() > 0 && doc['kubernetes.namespace'].value != null && doc['kubernetes.namespace'].value != \\"\\" && (!(doc.containsKey('kubernetes.namespace') && doc['kubernetes.namespace'].size() > 0 && doc['kubernetes.namespace'].value != null && doc['kubernetes.namespace'].value != \\"\\") || doc['kubernetes.namespace'].value != \\"\\")) && (doc.containsKey('kubernetes.deployment.name') && doc['kubernetes.deployment.name'].size() > 0 && doc['kubernetes.deployment.name'].value != null && doc['kubernetes.deployment.name'].value != \\"\\" && (!(doc.containsKey('kubernetes.deployment.name') && doc['kubernetes.deployment.name'].size() > 0 && doc['kubernetes.deployment.name'].value != null && doc['kubernetes.deployment.name'].value != \\"\\") || doc['kubernetes.deployment.name'].value != \\"\\"))))) { return null; } if (doc.containsKey('kubernetes.namespace') && doc['kubernetes.namespace'].size() > 0 && doc['kubernetes.namespace'].value != null && doc['kubernetes.namespace'].value != \\"\\" && doc.containsKey('kubernetes.deployment.name') && doc['kubernetes.deployment.name'].size() > 0 && doc['kubernetes.deployment.name'].value != null && doc['kubernetes.deployment.name'].value != \\"\\") { return \\"k8s.deployment:\\" + doc['kubernetes.namespace'].value + \\"/\\" + doc['kubernetes.deployment.name'].value; } return null; } String ___euid = ___euid_rt_eval(doc); if (___euid != null) { emit(___euid); }",
+  },
+  "type": "keyword",
+}
+`;
+
+exports[`EUID compiler over Observability inventory definitions single-field identity (k8s.pod) DSL, KQL and Painless single-field fast paths 1`] = `"if (doc.containsKey('kubernetes.pod.uid') && doc['kubernetes.pod.uid'].size() > 0 && doc['kubernetes.pod.uid'].value != null && doc['kubernetes.pod.uid'].value != \\"\\") { return \\"k8s.pod:\\" + doc['kubernetes.pod.uid'].value; } return null;"`;
