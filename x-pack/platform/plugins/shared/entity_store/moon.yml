@@ -54,6 +54,7 @@ dependsOn:
   - '@kbn/scout'
   - '@kbn/core-feature-flags-server'
   - '@kbn/usage-collection-plugin'
+  - '@kbn/features-plugin'
 tags:
   - plugin
   - prod
