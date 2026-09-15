@@ -18,7 +18,7 @@ import { EntityStoreTaskType } from './constants';
 import { createAssetManagerClient } from './factories';
 import type { EntityStoreCoreSetup } from '../types';
 import type { EntityType } from '../../common/domain/definitions/entity_schema';
-import { ALL_ENTITY_TYPES } from '../../common/domain/definitions/entity_schema';
+import { getMaterialisedEntityTypes } from '../../common/domain/definitions/registry';
 import {
   resolveLatestEntitiesIndexName,
   resolveMetadataDataStreamName,
@@ -177,9 +177,9 @@ async function runTask({
   });
   const index = await resolveLatestEntitiesIndexName(esClient, namespace);
 
-  // Report Entity Store usage and resolution state per entity type
+  // Report Entity Store usage and resolution state per materialised entity type
   await Promise.all(
-    ALL_ENTITY_TYPES.map(async (entityType) => {
+    getMaterialisedEntityTypes().map(async (entityType) => {
       try {
         const { count: storeSize } = await getStoreSize(esClient, index, entityType, signal);
         telemetryReporter.reportEvent(ENTITY_STORE_USAGE_EVENT, {

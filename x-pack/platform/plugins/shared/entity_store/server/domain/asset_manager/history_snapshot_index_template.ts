@@ -15,7 +15,7 @@ import {
 } from '../../../common/domain/entity_index';
 import { getComponentTemplateName } from './component_templates';
 import { getHistorySnapshotIndexPattern } from './history_snapshot_index';
-import { ALL_ENTITY_TYPES } from '../../../common/domain/definitions/entity_schema';
+import { getMaterialisedEntityTypes } from '../../../common/domain/definitions/registry';
 
 export const getHistorySnapshotIndexTemplateId = (namespace: string) =>
   `${ENTITY_BASE_PREFIX}_${ENTITY_SCHEMA_VERSION_V2}_${ENTITY_HISTORY}_${namespace}_index_template` as const;
@@ -36,10 +36,10 @@ export const getHistorySnapshotIndexTemplateConfig = (
   },
   composed_of: [
     ECS_MAPPINGS_COMPONENT_TEMPLATE,
-    ...ALL_ENTITY_TYPES.map((t) => getComponentTemplateName(t, namespace)),
+    ...getMaterialisedEntityTypes().map((t) => getComponentTemplateName(t, namespace)),
   ],
   ignore_missing_component_templates: [
-    ...ALL_ENTITY_TYPES.map((t) => getComponentTemplateName(t, namespace)),
+    ...getMaterialisedEntityTypes().map((t) => getComponentTemplateName(t, namespace)),
   ],
   index_patterns: [getHistorySnapshotIndexPattern(namespace)],
   priority: 200,

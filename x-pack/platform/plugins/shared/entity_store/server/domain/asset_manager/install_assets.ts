@@ -16,8 +16,10 @@ import {
   deleteIndexTemplate,
   deleteComponentTemplate,
 } from '../../infra/elasticsearch';
-import { ALL_ENTITY_TYPES } from '../../../common/domain/definitions/entity_schema';
-import { getEntityDefinition } from '../../../common/domain/definitions/registry';
+import {
+  getMaterialisedEntityDefinitions,
+  getMaterialisedEntityTypes,
+} from '../../../common/domain/definitions/registry';
 import { getLatestEntityIndexTemplateConfig } from './latest_index_template';
 import {
   getLatestEntitiesIndexName,
@@ -81,8 +83,8 @@ interface InstallSharedElasticsearchAssetOptions extends SharedElasticsearchAsse
 
 /**
  * Installs all shared Elasticsearch assets and storage that must exist before per-entity
- * initialization begins: ingest pipeline, component templates (for ALL entity types),
- * index templates, and the latest index.
+ * initialization begins: ingest pipeline, component templates (for all materialised entity
+ * types), index templates, and the latest index.
  */
 export async function installSharedElasticsearchAssets({
   esClient,
@@ -193,7 +195,7 @@ async function installAllComponentTemplates(
   namespace: string,
   logger: Logger
 ) {
-  const definitions = ALL_ENTITY_TYPES.map((type) => getEntityDefinition(type, namespace));
+  const definitions = getMaterialisedEntityDefinitions(namespace);
   await Promise.all([
     ...definitions.map((definition) =>
       (async () => {
@@ -261,7 +263,7 @@ async function uninstallIndicesAndDataStreams(
       ]);
       logger.debug(`deleted entity updates index templates`);
       await Promise.all(
-        ALL_ENTITY_TYPES.map((type) =>
+        getMaterialisedEntityTypes().map((type) =>
           deleteComponentTemplate(esClient, getUpdatesComponentTemplateName(type, namespace))
         )
       );

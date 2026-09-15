@@ -8,13 +8,23 @@
 import { loggerMock, type MockedLogger } from '@kbn/logging-mocks';
 import { elasticsearchServiceMock } from '@kbn/core/server/mocks';
 import { CRUDClient } from './crud_client';
-import { EntityStoreNotInstalledError } from '../errors';
+import { BadCRUDRequestError, EntityStoreNotInstalledError } from '../errors';
+import { isMaterialisedEntityType } from '../../../common/domain/definitions/registry';
 import { hashEuid, getEuidFromObject } from '../../../common/domain/euid';
 import {
   ENTITY_ASSET_CRITICALITY_UPDATED_TRIGGER_ID,
   ENTITY_RISK_SCORE_CHANGED_TRIGGER_ID,
 } from '../../../common/workflow/triggers';
 import type { Entity } from '../../../common';
+
+jest.mock('../../../common/domain/definitions/registry', () => ({
+  ...jest.requireActual('../../../common/domain/definitions/registry'),
+  isMaterialisedEntityType: jest.fn(() => true),
+}));
+
+const mockIsMaterialisedEntityType = isMaterialisedEntityType as jest.MockedFunction<
+  typeof isMaterialisedEntityType
+>;
 
 // Drains all pending microtasks so fire-and-forget Promise chains complete.
 const flushPromises = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -28,6 +38,71 @@ describe('CRUDClient', () => {
     esClient = elasticsearchServiceMock.createElasticsearchClient();
     logger = loggerMock.create();
     client = new CRUDClient({ esClient, logger, namespace: 'default' });
+  });
+
+  describe('non-materialised entity types', () => {
+    const entity: Entity = { entity: { id: 'generic-1' } };
+
+    beforeEach(() => {
+      esClient.indices.exists.mockResolvedValue(true);
+      mockIsMaterialisedEntityType.mockImplementation((type) => type !== 'generic');
+    });
+
+    afterEach(() => {
+      mockIsMaterialisedEntityType.mockImplementation(() => true);
+    });
+
+    it('createEntity rejects with a bad request before touching the index', async () => {
+      await expect(client.createEntity('generic', entity)).rejects.toThrow(BadCRUDRequestError);
+      await expect(client.createEntity('generic', entity)).rejects.toThrow(/not materialised/);
+      expect(esClient.create).not.toHaveBeenCalled();
+    });
+
+    it('updateEntity rejects with a bad request before touching the index', async () => {
+      await expect(client.updateEntity('generic', entity, false)).rejects.toThrow(
+        BadCRUDRequestError
+      );
+      expect(esClient.update).not.toHaveBeenCalled();
+    });
+
+    it('bulkUpdateEntity rejects the whole batch when it contains a non-materialised type', async () => {
+      await expect(
+        client.bulkUpdateEntity({
+          objects: [
+            { type: 'host', doc: { entity: { id: 'host:h1' }, host: { id: ['h1'] } } },
+            { type: 'generic', doc: entity },
+          ],
+        })
+      ).rejects.toThrow(BadCRUDRequestError);
+      expect(esClient.bulk).not.toHaveBeenCalled();
+    });
+
+    it('createEntitiesFromSource reports the request as failed without calling bulk', async () => {
+      const result = await client.createEntitiesFromSource([
+        {
+          type: 'generic',
+          source: { entity: { id: 'generic-1' } },
+          expectedEntityId: 'generic-1',
+          createdBy: 'risk_score_maintainer',
+        },
+      ]);
+
+      expect(result).toEqual({
+        created: [],
+        alreadyExists: [],
+        skipped: [],
+        failed: [{ euid: 'generic-1', reason: 'entity_type_not_materialised' }],
+      });
+      expect(esClient.bulk).not.toHaveBeenCalled();
+    });
+
+    it('still accepts writes for materialised types', async () => {
+      esClient.create.mockResolvedValue({ result: 'created' } as never);
+
+      await client.createEntity('host', { host: { id: 'h1' } } as Entity);
+
+      expect(esClient.create).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('assertInstalled', () => {

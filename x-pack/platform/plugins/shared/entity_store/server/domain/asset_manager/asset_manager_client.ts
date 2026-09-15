@@ -71,7 +71,10 @@ import {
 } from './metadata_data_stream';
 import type { LogsExtractionClient } from '../logs_extraction';
 import type { ManagedEntityDefinition } from '../../../common/domain/definitions/entity_schema';
-import { getEntityDefinition } from '../../../common/domain/definitions/registry';
+import {
+  getEntityDefinition,
+  isMaterialisedEntityType,
+} from '../../../common/domain/definitions/registry';
 import {
   type TelemetryReporter,
   ENTITY_STORE_DELETION_EVENT,
@@ -131,12 +134,13 @@ export class AssetManagerClient {
 
   public async init(
     request: KibanaRequest,
-    entityTypes: EntityType[],
+    requestedEntityTypes: EntityType[],
     logsExtractionParams?: LogExtractionInstallParams,
     historySnapshotParams?: HistorySnapshotBodyParams
   ) {
     try {
       const historySnapshot = HistorySnapshotState.parse(historySnapshotParams ?? {});
+      const entityTypes = this.filterMaterialisedTypes(requestedEntityTypes);
 
       // Phase 1: Install shared ES assets/storage and run independent setup tasks.
       await Promise.all([
@@ -214,6 +218,10 @@ export class AssetManagerClient {
   }
 
   public async start(request: KibanaRequest, type: EntityType) {
+    if (!isMaterialisedEntityType(type)) {
+      this.logger.get(type).debug(`Skipping start of non-materialised entity type: ${type}`);
+      return;
+    }
     try {
       this.logger.get(type).debug(`Scheduling extract entity task for type: ${type}`);
 
@@ -498,6 +506,10 @@ export class AssetManagerClient {
   }
 
   public async install(type: EntityType): Promise<boolean> {
+    if (!isMaterialisedEntityType(type)) {
+      this.logger.get(type).debug(`Skipping install of non-materialised entity type: ${type}`);
+      return false;
+    }
     try {
       const { engines } = await this.getStatus();
       if (engines.some((e) => e.type === type)) {
@@ -515,6 +527,21 @@ export class AssetManagerClient {
       this.logger.error(`Error installing assets for entity type ${type}`, { error });
       throw error;
     }
+  }
+
+  /**
+   * Non-materialised (inventory-only) definitions have no engine: no descriptor, templates or
+   * extraction task. They are dropped from install requests rather than rejected so a caller
+   * asking for "all types" keeps working as the registry grows.
+   */
+  private filterMaterialisedTypes(entityTypes: EntityType[]): EntityType[] {
+    const skipped = entityTypes.filter((type) => !isMaterialisedEntityType(type));
+    if (skipped.length > 0) {
+      this.logger.debug(
+        `Skipping non-materialised entity types during init: [${skipped.join(', ')}]`
+      );
+    }
+    return entityTypes.filter((type) => !skipped.includes(type));
   }
 
   private async getEngineWithComponents(

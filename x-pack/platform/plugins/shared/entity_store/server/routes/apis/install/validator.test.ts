@@ -6,6 +6,15 @@
  */
 
 import { BodySchema } from './validator';
+import { getMaterialisedEntityTypes } from '../../../../common/domain/definitions/registry';
+
+describe('BodySchema entityTypes', () => {
+  it('defaults to every materialised entity type', () => {
+    const parsed = BodySchema.parse({});
+    expect(parsed.entityTypes).toEqual(getMaterialisedEntityTypes());
+    expect(parsed.entityTypes).toEqual(['user', 'host', 'service', 'generic']);
+  });
+});
 
 describe('BodySchema historySnapshot', () => {
   it('accepts valid frequency', () => {

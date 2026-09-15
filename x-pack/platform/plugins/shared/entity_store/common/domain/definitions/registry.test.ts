@@ -6,9 +6,13 @@
  */
 
 import { ALL_ENTITY_TYPES, entitySchema } from './entity_schema';
+import { buildInventoryEntityDefinition } from './inventory_definition';
 import {
   getEntityDefinitionWithoutId,
+  getMaterialisedEntityDefinitions,
+  getMaterialisedEntityTypes,
   hasPriorityVariant,
+  isMaterialisedEntityType,
   resolveExtractionMode,
 } from './registry';
 
@@ -40,4 +44,47 @@ describe('resolveExtractionMode', () => {
       expect(resolveExtractionMode(true, type)).toBe('single');
     }
   );
+});
+
+describe('materialised entity types', () => {
+  it('reports every built-in type as materialised', () => {
+    expect(getMaterialisedEntityTypes()).toEqual(ALL_ENTITY_TYPES);
+    for (const type of ALL_ENTITY_TYPES) {
+      expect(isMaterialisedEntityType(type)).toBe(true);
+    }
+  });
+
+  it('stamps the per-space id on materialised definitions', () => {
+    const definitions = getMaterialisedEntityDefinitions('space-a');
+    expect(definitions.map(({ type }) => type)).toEqual(ALL_ENTITY_TYPES);
+    expect(definitions.map(({ id }) => id)).toEqual(
+      ALL_ENTITY_TYPES.map((type) => `security_${type}_space-a`)
+    );
+  });
+
+  it('filters out definitions whose materialisation mode is none or absent', () => {
+    const inventoryOnly = buildInventoryEntityDefinition({
+      type: 'k8s.pod',
+      name: 'pod',
+      inventory: {
+        identity: ['kubernetes.pod.uid'],
+        sources: [{ index: 'metrics-*', engine: 'TS' }],
+      },
+    });
+    const bareCore = {
+      type: 'k8s.node',
+      name: 'node',
+      identityField: { singleField: 'kubernetes.node.name' },
+    };
+
+    expect(
+      getMaterialisedEntityTypes([
+        getEntityDefinitionWithoutId('host'),
+        inventoryOnly,
+        bareCore,
+        getEntityDefinitionWithoutId('service'),
+      ])
+    ).toEqual(['host', 'service']);
+    expect(getMaterialisedEntityTypes([inventoryOnly, bareCore])).toEqual([]);
+  });
 });

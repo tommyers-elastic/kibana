@@ -14,7 +14,7 @@ import type {
   ManagedEntityDefinition,
   MaterialisedEntityDefinitionWithoutId,
 } from './entity_schema';
-import { isMaterialisedDefinition } from './entity_schema';
+import { ALL_ENTITY_TYPES, isMaterialisedDefinition } from './entity_schema';
 import { hostEntityDefinition } from './host';
 import { userEntityDefinition } from './user';
 import { serviceEntityDefinition } from './service';
@@ -32,8 +32,9 @@ const entitiesDefinitionRegistry = {
   generic: genericEntityDefinition,
 } as const satisfies Record<EntityType, MaterialisedEntityDefinitionWithoutId>;
 
-const BUILT_IN_DEFINITIONS: readonly EntityDefinitionWithoutId[] = Object.values(
-  entitiesDefinitionRegistry
+// Enum order, not object-key order: `composed_of` in the index templates is order-sensitive.
+const BUILT_IN_DEFINITIONS: readonly EntityDefinitionWithoutId[] = ALL_ENTITY_TYPES.map(
+  (type) => entitiesDefinitionRegistry[type]
 );
 
 /** Stub: always false until priority definition variants are registered. */

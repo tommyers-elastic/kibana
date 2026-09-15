@@ -31,6 +31,7 @@ import { scheduleResilienceTask, stopResilienceTask } from '../../tasks/resilien
 import { removeEntityMaintainer } from '../../tasks/entity_maintainers';
 import { entityMaintainersRegistry } from '../../tasks/entity_maintainers/entity_maintainers_registry';
 import { stopAndRemoveV1, stopAndRemoveV1SharedTasks } from '../../infra/remove_v1';
+import { isMaterialisedEntityType } from '../../../common/domain/definitions/registry';
 
 jest.mock('./install_assets');
 jest.mock('../../tasks/extract_entity_task');
@@ -46,6 +47,14 @@ jest.mock('../../tasks/entity_maintainers/entity_maintainers_registry', () => ({
   },
 }));
 jest.mock('../../infra/remove_v1');
+jest.mock('../../../common/domain/definitions/registry', () => ({
+  ...jest.requireActual('../../../common/domain/definitions/registry'),
+  isMaterialisedEntityType: jest.fn(() => true),
+}));
+
+const mockIsMaterialisedEntityType = isMaterialisedEntityType as jest.MockedFunction<
+  typeof isMaterialisedEntityType
+>;
 
 const mockInstallSharedElasticsearchAssets =
   installSharedElasticsearchAssets as jest.MockedFunction<typeof installSharedElasticsearchAssets>;
@@ -175,6 +184,38 @@ describe('AssetManagerClient', () => {
       savedObjectsClient: {
         delete: jest.fn().mockResolvedValue({}),
       } as unknown as SavedObjectsClientContract,
+    });
+  });
+
+  describe('non-materialised entity types', () => {
+    beforeEach(() => {
+      mockIsMaterialisedEntityType.mockImplementation((type) => type !== 'service');
+    });
+
+    afterEach(() => {
+      mockIsMaterialisedEntityType.mockImplementation(() => true);
+    });
+
+    it('init skips non-materialised types: no descriptor, no v1 cleanup, no extraction task', async () => {
+      await client.init({} as KibanaRequest, ['host', 'service']);
+
+      expect(mockEngineDescriptorClient.init).toHaveBeenCalledTimes(1);
+      expect(mockEngineDescriptorClient.init).toHaveBeenCalledWith('host');
+      expect(mockStopAndRemoveV1).toHaveBeenCalledTimes(1);
+      expect(mockStopAndRemoveV1.mock.calls[0][0].type).toBe('host');
+      expect(mockScheduleExtractEntityTask).toHaveBeenCalledTimes(1);
+      expect(mockScheduleExtractEntityTask.mock.calls[0][0].type).toBe('host');
+    });
+
+    it('install returns false for a non-materialised type without creating a descriptor', async () => {
+      await expect(client.install('service')).resolves.toBe(false);
+      expect(mockEngineDescriptorClient.init).not.toHaveBeenCalled();
+    });
+
+    it('start is a no-op for a non-materialised type', async () => {
+      await client.start({} as KibanaRequest, 'service');
+      expect(mockEngineDescriptorClient.update).not.toHaveBeenCalled();
+      expect(mockScheduleExtractEntityTask).not.toHaveBeenCalled();
     });
   });
 

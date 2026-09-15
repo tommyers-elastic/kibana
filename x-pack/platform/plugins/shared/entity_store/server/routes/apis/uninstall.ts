@@ -11,14 +11,15 @@ import { buildStrictRouteValidationWithZod } from './utils/build_strict_route_va
 import { API_VERSIONS, ENTITY_STORE_ROUTES } from '../../../common';
 import { DEFAULT_ENTITY_STORE_PERMISSIONS } from '../constants';
 import type { EntityStorePluginRouter } from '../../types';
-import { ALL_ENTITY_TYPES, EntityType } from '../../../common/domain/definitions/entity_schema';
+import { EntityType } from '../../../common/domain/definitions/entity_schema';
+import { getMaterialisedEntityTypes } from '../../../common/domain/definitions/registry';
 import { wrapMiddlewares } from '../middleware';
 
 const bodySchema = z.object({
   entityTypes: z
     .array(EntityType)
     .optional()
-    .default(ALL_ENTITY_TYPES)
+    .default(getMaterialisedEntityTypes())
     .describe('Entity types to uninstall. Defaults to all installed types.'),
 });
 

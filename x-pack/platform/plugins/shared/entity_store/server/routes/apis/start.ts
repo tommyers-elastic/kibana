@@ -13,14 +13,15 @@ import { API_VERSIONS, ENTITY_STORE_ROUTES } from '../../../common';
 import { DEFAULT_ENTITY_STORE_PERMISSIONS } from '../constants';
 import type { EntityStorePluginRouter } from '../../types';
 import { wrapMiddlewares } from '../middleware';
-import { ALL_ENTITY_TYPES, EntityType } from '../../../common/domain/definitions/entity_schema';
+import { EntityType } from '../../../common/domain/definitions/entity_schema';
+import { getMaterialisedEntityTypes } from '../../../common/domain/definitions/registry';
 import { ENGINE_STATUS } from '../../domain/constants';
 
 const bodySchema = z.object({
   entityTypes: z
     .array(EntityType)
     .optional()
-    .default(ALL_ENTITY_TYPES)
+    .default(getMaterialisedEntityTypes())
     .describe('Entity types to start. Defaults to all installed types.'),
 });
 

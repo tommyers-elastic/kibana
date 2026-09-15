@@ -9,7 +9,10 @@ import { getFlattenedObject } from '@kbn/std';
 import { ENTITY_ID_FIELD } from '../../../common/domain/definitions/common_fields';
 import { getEuidSourceFields } from '../../../common/domain/euid';
 import type { Entity } from '../../../common/domain/definitions/entity.gen';
-import { getEntityDefinition } from '../../../common/domain/definitions/registry';
+import {
+  getEntityDefinition,
+  isMaterialisedEntityType,
+} from '../../../common/domain/definitions/registry';
 import type { EntityType } from '../../../common';
 import type {
   EntityField,
@@ -52,6 +55,15 @@ export function validateDocIdentification(
     );
   }
   return generatedId || doc.entity!.id!;
+}
+
+/** Writes are only possible for materialised types: a non-materialised definition has no index. */
+export function assertEntityTypeIsMaterialised(entityType: EntityType): void {
+  if (!isMaterialisedEntityType(entityType)) {
+    throw new BadCRUDRequestError(
+      `Entity type "${entityType}" is not materialised in the entity store and cannot be written to`
+    );
+  }
 }
 
 export interface ValidatedDoc {

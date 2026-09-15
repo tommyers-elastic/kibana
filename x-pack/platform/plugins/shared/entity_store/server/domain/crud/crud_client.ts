@@ -28,9 +28,10 @@ import {
 } from '../errors';
 import { buildEntityListSourceFilter } from '../../../common/domain/definitions/entity_list_source';
 import { getEntityCreationCandidate } from '../../../common/domain/definitions/creatable_from_single_document';
+import { isMaterialisedEntityType } from '../../../common/domain/definitions/registry';
 import type { EntityCreationRejectionReason } from '../../../common/domain/definitions/creatable_from_single_document';
 import type { EntityCreatedBy } from '../../../common/domain/definitions/common_fields';
-import { validateAndTransformDoc } from './utils';
+import { assertEntityTypeIsMaterialised, validateAndTransformDoc } from './utils';
 import { buildEntityFromSource } from './entity_from_source';
 import { runWithSpan } from '../../telemetry/traces';
 import {
@@ -124,6 +125,7 @@ export interface CreateEntityFromSourceRequest {
 
 export type CreateEntityFromSourceRejectionReason =
   | EntityCreationRejectionReason
+  | 'entity_type_not_materialised'
   | 'euid_mismatch'
   | 'reserved_field'
   | 'bulk_create_failed';
@@ -383,6 +385,7 @@ export class CRUDClient {
   // ID will be validated and used if correct
   // 3. Identity only - no ID and identifying data - ID will be generated
   public async updateEntity(entityType: EntityType, doc: Entity, force: boolean): Promise<void> {
+    assertEntityTypeIsMaterialised(entityType);
     await this.assertInstalled();
     const generatedId = getEuidFromObject(entityType, doc);
     const valid = validateAndTransformDoc(
@@ -436,6 +439,7 @@ export class CRUDClient {
 
     this.logger.debug(`Preparing ${objects.length} entities for bulk update`);
     for (const { type: entityType, doc } of objects) {
+      assertEntityTypeIsMaterialised(entityType);
       const generatedId = getEuidFromObject(entityType, doc);
       const valid = validateAndTransformDoc(
         'update',
@@ -498,6 +502,7 @@ export class CRUDClient {
 
   // createEntity generates EUID and creates the entity in the LATEST index
   public async createEntity(entityType: EntityType, doc: Entity): Promise<void> {
+    assertEntityTypeIsMaterialised(entityType);
     await this.assertInstalled();
     const id = getEuidFromObject(entityType, doc);
     if (!id) {
@@ -538,6 +543,14 @@ export class CRUDClient {
     const euids: string[] = [];
 
     for (const request of requests) {
+      if (!isMaterialisedEntityType(request.type)) {
+        result.failed.push({
+          euid: request.expectedEntityId,
+          reason: 'entity_type_not_materialised',
+        });
+        continue;
+      }
+
       const reservedField = request.fields
         ? Object.keys(request.fields).find((field) => RESERVED_CREATE_FROM_SOURCE_FIELDS.has(field))
         : undefined;
