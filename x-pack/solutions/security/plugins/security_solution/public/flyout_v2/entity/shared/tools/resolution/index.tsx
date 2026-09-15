@@ -7,7 +7,7 @@
 
 import React, { memo } from 'react';
 import { EuiFlyoutBody, EuiFlyoutHeader } from '@elastic/eui';
-import type { EntityType } from '@kbn/entity-store/public';
+import type { BuiltInEntityType as EntityType } from '@kbn/entity-store/public';
 import type { EntityType as SecurityEntityType } from '../../../../../../common/entity_analytics/types';
 import { EntityIconByType } from '../../../../../entity_analytics/components/entity_store/entity_icon_by_type';
 import { ResolutionGroupTab } from '../../../../../entity_analytics/components/entity_resolution/resolution_group_tab';

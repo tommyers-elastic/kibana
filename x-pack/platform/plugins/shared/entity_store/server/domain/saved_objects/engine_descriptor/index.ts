@@ -10,7 +10,10 @@ import type {
   SavedObjectsFindResponse,
 } from '@kbn/core-saved-objects-api-server';
 import { SavedObjectsErrorHelpers, type Logger } from '@kbn/core/server';
-import type { EntityType } from '../../../../common/domain/definitions/entity_schema';
+import type {
+  BuiltInEntityType,
+  EntityType,
+} from '../../../../common/domain/definitions/entity_schema';
 import type { EngineDescriptor } from './constants';
 import { EngineLogExtractionState, VersionState } from './constants';
 import { EngineDescriptorTypeName } from './types';
@@ -48,7 +51,8 @@ export class EngineDescriptorClient {
     return response.saved_objects[0].attributes;
   }
 
-  async init(entityType: EntityType): Promise<EngineDescriptor> {
+  /** Only built-ins have engines; a dynamic definition never gets a descriptor. */
+  async init(entityType: BuiltInEntityType): Promise<EngineDescriptor> {
     const engineDescriptor = await this.find(entityType);
 
     if (engineDescriptor.total > 0) {

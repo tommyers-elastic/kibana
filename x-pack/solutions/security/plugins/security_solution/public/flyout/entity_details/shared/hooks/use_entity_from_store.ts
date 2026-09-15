@@ -8,7 +8,10 @@
 import { useMemo } from 'react';
 import { useQuery, type QueryClient } from '@kbn/react-query';
 import type { IHttpFetchError } from '@kbn/core/public';
-import type { EntityType, SearchEntitiesFromEntityStoreResponse } from '@kbn/entity-store/public';
+import type {
+  BuiltInEntityType as EntityType,
+  SearchEntitiesFromEntityStoreResponse,
+} from '@kbn/entity-store/public';
 import { useEntityStoreEuidApi } from '@kbn/entity-store/public';
 import type {
   HostEntity,

@@ -14,26 +14,37 @@ import type {
   ManagedEntityDefinition,
   MaterialisedEntityDefinitionWithoutId,
 } from './entity_schema';
-import { ALL_ENTITY_TYPES, isMaterialisedDefinition } from './entity_schema';
+import { isMaterialisedDefinition } from './entity_schema';
+import {
+  ALL_BUILT_IN_ENTITY_TYPES,
+  isBuiltInEntityType,
+  type BuiltInEntityType,
+} from './built_in_entity_types';
 import { hostEntityDefinition } from './host';
 import { userEntityDefinition } from './user';
 import { serviceEntityDefinition } from './service';
 import { genericEntityDefinition } from './generic';
 
 /**
- * The closed registry of built-in Security definitions. All four are materialised (extracted into
- * the store); that invariant is enforced by the `satisfies` clause so server code that owns
- * templates, tasks and CRUD can read `materialisation` without narrowing.
+ * The static registry of built-in Security definitions, keyed by the closed built-in type enum.
+ * All four are materialised (extracted into the store); that invariant is enforced by the
+ * `satisfies` clause so server code that owns templates, tasks and CRUD can read
+ * `materialisation` without narrowing.
+ *
+ * Dynamic (code- or API-registered) definitions are not here: they are resolved by the server-side
+ * `EntityDefinitionRegistry`, which layers them over these built-ins per space. Everything in this
+ * module is synchronous and built-in only, which is what the type-name EUID compiler entry points
+ * and the materialisation code paths need.
  */
 const entitiesDefinitionRegistry = {
   host: hostEntityDefinition,
   user: userEntityDefinition,
   service: serviceEntityDefinition,
   generic: genericEntityDefinition,
-} as const satisfies Record<EntityType, MaterialisedEntityDefinitionWithoutId>;
+} as const satisfies Record<BuiltInEntityType, MaterialisedEntityDefinitionWithoutId>;
 
 // Enum order, not object-key order: `composed_of` in the index templates is order-sensitive.
-const BUILT_IN_DEFINITIONS: readonly EntityDefinitionWithoutId[] = ALL_ENTITY_TYPES.map(
+const BUILT_IN_DEFINITIONS: readonly EntityDefinitionWithoutId[] = ALL_BUILT_IN_ENTITY_TYPES.map(
   (type) => entitiesDefinitionRegistry[type]
 );
 
@@ -52,8 +63,17 @@ export const resolveExtractionMode = (
 export const getEntityDefinitionId = (entityType: EntityType, space: string) =>
   `security_${entityType}_${space}`;
 
+function assertBuiltInEntityType(type: string): asserts type is BuiltInEntityType {
+  assert(isBuiltInEntityType(type), `No entity description found for type: ${type}`);
+}
+
+/**
+ * Built-in definition stamped with the per-space id. Throws for any other type name: dynamic
+ * definitions have no engine and are resolved through the server-side registry.
+ */
 export function getEntityDefinition(type: EntityType, namespace: string): ManagedEntityDefinition {
-  const definition = getEntityDefinitionWithoutId(type);
+  assertBuiltInEntityType(type);
+  const definition = entitiesDefinitionRegistry[type];
 
   return {
     ...definition,
@@ -62,37 +82,46 @@ export function getEntityDefinition(type: EntityType, namespace: string): Manage
   };
 }
 
+/** Built-in definition without a per-space id. Throws for any other type name. */
 export function getEntityDefinitionWithoutId(
   type: EntityType
 ): MaterialisedEntityDefinitionWithoutId {
-  const definition = entitiesDefinitionRegistry[type];
-  assert(definition, `No entity description found for type: ${type}`);
-
-  return definition;
+  assertBuiltInEntityType(type);
+  return entitiesDefinitionRegistry[type];
 }
 
 /**
  * Types whose definitions are materialised (`materialisation.mode === 'extraction'`). Only these
  * get component templates, extraction tasks, install/start/stop steps and CRUD writes.
- * Defaults to the built-in registry; pass `definitions` to evaluate another set (tests, later a
- * dynamic registry).
+ * Defaults to the built-in registry; pass `definitions` to evaluate another set (tests, the
+ * server-side registry).
  */
 export function getMaterialisedEntityTypes<T extends EntityDefinitionWithoutId>(
   definitions: readonly T[]
 ): Array<T['type']>;
-export function getMaterialisedEntityTypes(): EntityType[];
+export function getMaterialisedEntityTypes(): BuiltInEntityType[];
 export function getMaterialisedEntityTypes(
-  definitions: readonly EntityDefinitionWithoutId[] = BUILT_IN_DEFINITIONS
+  definitions?: readonly EntityDefinitionWithoutId[]
 ): string[] {
+  if (definitions === undefined) {
+    return ALL_BUILT_IN_ENTITY_TYPES.filter((type) =>
+      isMaterialisedDefinition(entitiesDefinitionRegistry[type])
+    );
+  }
   return definitions.filter(isMaterialisedDefinition).map(({ type }) => type);
 }
 
-/** Whether a built-in type is materialised. Non-materialised types have no index to write to. */
-export function isMaterialisedEntityType(type: EntityType): boolean {
-  return isMaterialisedDefinition(getEntityDefinitionWithoutId(type));
+/**
+ * Whether a type is materialised. Only built-ins can be; any other name (a dynamic definition,
+ * or a typo) is not, so this is safe to call with unvalidated input.
+ */
+export function isMaterialisedEntityType(type: EntityType): type is BuiltInEntityType {
+  return isBuiltInEntityType(type) && isMaterialisedDefinition(entitiesDefinitionRegistry[type]);
 }
 
 /** Built-in materialised definitions stamped with the per-space id. */
 export function getMaterialisedEntityDefinitions(namespace: string): ManagedEntityDefinition[] {
   return getMaterialisedEntityTypes().map((type) => getEntityDefinition(type, namespace));
 }
+
+export { BUILT_IN_DEFINITIONS };

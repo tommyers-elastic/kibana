@@ -7,7 +7,7 @@
 
 import React, { useState, useCallback, useMemo } from 'react';
 import { EuiBadge, EuiFlexGroup, EuiFlexItem, EuiSpacer, EuiText, EuiTitle } from '@elastic/eui';
-import type { EntityType } from '@kbn/entity-store/public';
+import type { BuiltInEntityType as EntityType } from '@kbn/entity-store/public';
 import { useExpandableFlyoutApi } from '@kbn/expandable-flyout';
 import { API_VERSIONS } from '../../../../common/entity_analytics/constants';
 import {

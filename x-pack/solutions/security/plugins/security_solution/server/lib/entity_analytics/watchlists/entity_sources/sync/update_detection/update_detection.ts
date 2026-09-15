@@ -8,7 +8,7 @@
 import type { ElasticsearchClient, Logger } from '@kbn/core/server';
 import type { CRUDClient } from '@kbn/entity-store/server/domain/crud/crud_client';
 import { ALL_ENTITY_TYPES } from '@kbn/entity-store/common';
-import type { EntityType } from '@kbn/entity-store/common';
+import type { BuiltInEntityType as EntityType } from '@kbn/entity-store/common';
 import type { WatchlistDataSources } from '../../../../../../../common/api/entity_analytics';
 import type { EntityStoreEntityIdsByType, WatchlistsByEuid } from '../../../entities/service';
 import type { WatchlistBulkEntity } from '../../types';

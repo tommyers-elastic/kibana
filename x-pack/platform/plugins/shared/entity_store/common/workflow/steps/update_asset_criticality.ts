@@ -9,7 +9,7 @@ import { z } from '@kbn/zod/v4';
 import { StepCategory } from '@kbn/workflows';
 import type { CommonStepDefinition } from '@kbn/workflows-extensions/common';
 import { i18n } from '@kbn/i18n';
-import { EntityType } from '../../domain/definitions/entity_schema';
+import { BuiltInEntityType } from '../../domain/definitions/built_in_entity_types';
 import { AssetCriticalityLevel } from '../../domain/definitions/entity.gen';
 
 export const UPDATE_ASSET_CRITICALITY_STEP_ID = 'entityStore.updateAssetCriticality' as const;
@@ -26,7 +26,7 @@ const MAX_ENTITY_ID_VALUE_LENGTH = 1000;
 export const MAX_WORKFLOW_MESSAGE_LENGTH = 1500;
 
 export const updateAssetCriticalityInputSchema = z.object({
-  entity_type: EntityType.describe(
+  entity_type: BuiltInEntityType.describe(
     'The Entity Store entity type, e.g. "host", "user" or "service"'
   ),
   entity_id: z

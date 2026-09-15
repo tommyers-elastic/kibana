@@ -18,6 +18,11 @@
  */
 
 import { z } from '@kbn/zod/v4';
+import {
+  ALL_BUILT_IN_ENTITY_TYPES,
+  BuiltInEntityType,
+  isBuiltInEntityType,
+} from './domain/definitions/built_in_entity_types';
 
 export const PLUGIN_ID = 'entityStore';
 export const PLUGIN_NAME = 'Entity Store';
@@ -110,11 +115,15 @@ export const getErrorMessage = (error: unknown): string => {
   return String(error);
 };
 
-// Entity types (slim definitions; for EUID translation use common/euid_helpers)
-export type EntityType = z.infer<typeof EntityType>;
-export const EntityType = z.enum(['user', 'host', 'service', 'generic']);
-
-export const ALL_ENTITY_TYPES = Object.values(EntityType.enum);
+// Entity types (slim definitions; for EUID translation use common/euid_helpers).
+// `EntityType` is any type name (built-in or dynamically registered); `BuiltInEntityType` is the
+// closed set of the four Security types that have engines.
+export type EntityType = string;
+/** @deprecated Value alias for `BuiltInEntityType`; as a type, `EntityType` is now any type name. */
+export const EntityType = BuiltInEntityType;
+/** @deprecated Use `ALL_BUILT_IN_ENTITY_TYPES`: dynamic definitions are not in this list. */
+export const ALL_ENTITY_TYPES = ALL_BUILT_IN_ENTITY_TYPES;
+export { BuiltInEntityType, ALL_BUILT_IN_ENTITY_TYPES, isBuiltInEntityType };
 
 export { ExtractionMode } from './domain/definitions/entity_schema';
 
@@ -216,3 +225,33 @@ export type {
   AiSummaryMetadataStaleness,
   AiSummaryMetadataStalenessSnapshot,
 } from './domain/entity_metadata/ai_summary_metadata';
+
+// Dynamic entity definitions (Observability inventory). Space-scoped, `mode: 'none'` only.
+export type {
+  EntityDefinitionRecord,
+  EntityDefinitionSource,
+} from './domain/definitions/definition_record';
+
+/** UI setting (API-only, hidden from the advanced settings UI) gating the definitions API. */
+export const FF_ENABLE_DYNAMIC_DEFINITIONS = 'entityStore:dynamicDefinitionsEnabled';
+
+/** Saved object type holding API-registered definitions. */
+export const ENTITY_DEFINITION_SAVED_OBJECT_TYPE = 'entity-store-definition';
+
+/** Kibana feature that grants the definitions API privileges; neutral, not tied to Security. */
+export const ENTITY_DEFINITIONS_FEATURE_ID = 'entityDefinitions';
+
+export const ENTITY_DEFINITIONS_API_PRIVILEGES = {
+  read: 'read_entity_definitions',
+  manage: 'manage_entity_definitions',
+} as const;
+
+const INTERNAL_DEFINITIONS_BASE_ROUTE = '/internal/entity_store/definitions';
+
+export const ENTITY_DEFINITIONS_ROUTES = {
+  LIST: INTERNAL_DEFINITIONS_BASE_ROUTE,
+  CREATE: INTERNAL_DEFINITIONS_BASE_ROUTE,
+  GET: `${INTERNAL_DEFINITIONS_BASE_ROUTE}/{type}`,
+  REPLACE: `${INTERNAL_DEFINITIONS_BASE_ROUTE}/{type}`,
+  DELETE: `${INTERNAL_DEFINITIONS_BASE_ROUTE}/{type}`,
+} as const;

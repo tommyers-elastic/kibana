@@ -6,7 +6,7 @@
  */
 
 import { z } from '@kbn/zod/v4';
-import { EntityType } from '../../../../common/domain/definitions/entity_schema';
+import { BuiltInEntityType } from '../../../../common/domain/definitions/built_in_entity_types';
 import { LogExtractionTypeOverride } from '../global_state/constants';
 
 export type EngineStatus = z.infer<typeof EngineStatus>;
@@ -40,7 +40,7 @@ export const VersionState = z.object({
 
 export type EngineDescriptor = z.infer<typeof EngineDescriptor>;
 export const EngineDescriptor = z.object({
-  type: EntityType,
+  type: BuiltInEntityType,
   status: EngineStatus,
   logExtractionState: EngineLogExtractionState,
   /** Per entity-type log extraction overrides. Optional: descriptors written before model version 8 do not have the field. */

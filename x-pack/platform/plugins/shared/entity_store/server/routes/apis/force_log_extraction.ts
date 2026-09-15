@@ -12,10 +12,10 @@ import { API_VERSIONS, ENTITY_STORE_ROUTES } from '../../../common';
 import { DEFAULT_ENTITY_STORE_PERMISSIONS } from '../constants';
 import type { EntityStorePluginRouter } from '../../types';
 import { wrapMiddlewares } from '../middleware';
-import { EntityType } from '../../../common/domain/definitions/entity_schema';
+import { BuiltInEntityType } from '../../../common/domain/definitions/built_in_entity_types';
 
 const paramsSchema = z.object({
-  entityType: EntityType,
+  entityType: BuiltInEntityType,
 });
 
 const bodySchema = z.object({

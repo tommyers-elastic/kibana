@@ -8,7 +8,7 @@
 import { i18n } from '@kbn/i18n';
 import { z } from '@kbn/zod/v4';
 import type { CommonTriggerDefinition } from '@kbn/workflows-extensions/common';
-import { EntityType } from '../../domain/definitions/entity_schema';
+import { BuiltInEntityType } from '../../domain/definitions/built_in_entity_types';
 
 export const ENTITY_RISK_SCORE_CHANGED_TRIGGER_ID = 'entityStore.entityRiskScoreChanged' as const;
 
@@ -19,7 +19,7 @@ export const entityRiskScoreChangedEventSchema = z.object({
     .string()
     .max(1000)
     .describe('The unique EUID of the entity whose risk score changed.'),
-  entityType: EntityType.describe('The type of entity (e.g. host, user, service, generic).'),
+  entityType: BuiltInEntityType.describe('The type of entity (e.g. host, user, service, generic).'),
   score: z.number().describe('The normalized risk score after the update (0–100).'),
   previousScore: z
     .number()

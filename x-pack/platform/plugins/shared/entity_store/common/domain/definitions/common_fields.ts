@@ -6,7 +6,7 @@
  */
 
 import type { Condition } from '@kbn/streamlang';
-import type { EntityType, EntityField, FieldEvaluation } from './entity_schema';
+import type { BuiltInEntityType, EntityType, EntityField, FieldEvaluation } from './entity_schema';
 import {
   collectValues,
   newestValue,
@@ -64,7 +64,7 @@ export const ENTITY_CREATED_BY = {
 export type EntityCreatedBy = (typeof ENTITY_CREATED_BY)[keyof typeof ENTITY_CREATED_BY];
 
 export const getCommonFieldDescriptions = (
-  ecsField: Omit<EntityType, 'generic'> | 'entity'
+  ecsField: BuiltInEntityType | 'entity'
 ): EntityField[] => [
   newestValue({ source: 'asset.id' }),
   newestValue({ source: 'asset.name' }),

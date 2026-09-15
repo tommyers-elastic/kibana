@@ -7,7 +7,7 @@
 
 import React, { useCallback } from 'react';
 import { FormattedMessage } from '@kbn/i18n-react';
-import type { EntityType as EntityStoreEntityType } from '@kbn/entity-store/public';
+import type { BuiltInEntityType as EntityStoreEntityType } from '@kbn/entity-store/public';
 import { useExpandableFlyoutApi } from '@kbn/expandable-flyout';
 import type { CloudPostureEntityIdentifier } from '../../../cloud_security_posture/components/entity_insight';
 import type { FieldsTableProps } from '../../../flyout/entity_details/generic_right/components/fields_table';

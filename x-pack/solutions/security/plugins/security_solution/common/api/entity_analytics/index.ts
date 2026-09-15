@@ -33,7 +33,9 @@ export type {
   InspectQuery,
   ListEntitiesResponse,
 } from '@kbn/entity-store/common';
-export { EntityType } from '@kbn/entity-store/common';
+// The Security Solution's entity type is the closed built-in set; the store's `EntityType` is any
+// registered type name since dynamic definitions were introduced.
+export { BuiltInEntityType as EntityType } from '@kbn/entity-store/common';
 
 export type {
   ListEntitiesRequestQuery,

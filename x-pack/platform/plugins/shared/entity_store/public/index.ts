@@ -15,7 +15,13 @@ export type {
   NonEcsTimelineDataRow,
 } from './euid_api_context';
 
-export { ALL_ENTITY_TYPES, EntityType } from '../common';
+export {
+  ALL_ENTITY_TYPES,
+  EntityType,
+  BuiltInEntityType,
+  ALL_BUILT_IN_ENTITY_TYPES,
+  isBuiltInEntityType,
+} from '../common';
 export type { IdentitySourceFields } from '../common';
 
 export { searchEntitiesFromEntityStore } from './search_entities_api';

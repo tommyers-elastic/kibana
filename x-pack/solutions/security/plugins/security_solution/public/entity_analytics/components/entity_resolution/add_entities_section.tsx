@@ -19,7 +19,7 @@ import {
   EuiToolTip,
 } from '@elastic/eui';
 import type { EuiBasicTableColumn, CriteriaWithPagination } from '@elastic/eui';
-import type { EntityType } from '@kbn/entity-store/public';
+import type { BuiltInEntityType as EntityType } from '@kbn/entity-store/public';
 import { FormattedRelativePreferenceDate } from '../../../common/components/formatted_date';
 import { useSearchEntities } from './hooks/use_search_entities';
 import {

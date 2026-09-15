@@ -6,7 +6,7 @@
  */
 
 import { useMemo } from 'react';
-import type { EntityType } from '@kbn/entity-store/public';
+import type { BuiltInEntityType as EntityType } from '@kbn/entity-store/public';
 import { useEntitiesListQuery } from '../../entity_store/hooks/use_entities_list_query';
 
 interface UseSearchEntitiesParams {

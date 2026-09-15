@@ -8,6 +8,7 @@
 import { isEqual } from 'lodash';
 import { z } from '@kbn/zod/v4';
 import type { Condition } from '@kbn/streamlang';
+import { ALL_BUILT_IN_ENTITY_TYPES, BuiltInEntityType } from './built_in_entity_types';
 import { identityCoreSchema } from './identity_core_schema';
 import { identityTupleToIdentityField } from './identity_tuple';
 import { inventoryExtensionSchema } from './inventory_schema';
@@ -31,39 +32,71 @@ import {
  * imports keep working.
  */
 
-export type EntityType = z.infer<typeof EntityType>;
-/** The closed set of built-in, code-defined Security types. Dynamic types are a later stage. */
-export const EntityType = z.enum(['user', 'host', 'service', 'generic']);
+/**
+ * An entity type name: one of the built-in Security types or a dynamically registered definition
+ * (validated by `entityTypeNameSchema`). Code that is built-in only (engines, extraction, CRUD
+ * writes) narrows with `isBuiltInEntityType` or `BuiltInEntityType`.
+ */
+export type EntityType = string;
+/**
+ * @deprecated Value alias kept for existing callers that validate against the closed built-in set;
+ * use `BuiltInEntityType`. As a type, `EntityType` is now any type name.
+ */
+export const EntityType = BuiltInEntityType;
 
-export const ALL_ENTITY_TYPES = Object.values(EntityType.enum);
+/** @deprecated Use `ALL_BUILT_IN_ENTITY_TYPES`: dynamic definitions are not in this list. */
+export const ALL_ENTITY_TYPES = ALL_BUILT_IN_ENTITY_TYPES;
+
+export {
+  BuiltInEntityType,
+  ALL_BUILT_IN_ENTITY_TYPES,
+  isBuiltInEntityType,
+} from './built_in_entity_types';
 
 /** Which extraction process a task is running as. */
 export type ExtractionMode = z.infer<typeof ExtractionMode>;
 export const ExtractionMode = z.enum(['single', 'priority', 'nonPriority']);
 
-export const entitySchema = identityCoreSchema
+const entityDefinitionBaseSchema = identityCoreSchema.extend({
+  // Absent means `mode: 'none'`: the definition is never extracted into the store.
+  materialisation: z.optional(materialisationSchema),
+  inventory: z.optional(inventoryExtensionSchema),
+});
+
+type EntityDefinitionBase = z.infer<typeof entityDefinitionBaseSchema>;
+
+// The compiler reads `identityField`, the inventory query generator reads `inventory.identity`;
+// both must describe the same tuple.
+const assertIdentityConsistency = (
+  definition: EntityDefinitionBase,
+  ctx: z.RefinementCtx
+): void => {
+  if (!definition.inventory) {
+    return;
+  }
+  const expected = identityTupleToIdentityField(definition.inventory.identity);
+  if (!isEqual(definition.identityField, expected)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['identityField'],
+      message:
+        'identityField must be the normalised form of inventory.identity (see identityTupleToIdentityField)',
+    });
+  }
+};
+
+/**
+ * A definition as authored (no runtime `id`): the body of the definitions API and the input of
+ * `registerEntityDefinition`. Same shape and rules as `entitySchema` minus `id`.
+ */
+export const entityDefinitionInputSchema =
+  entityDefinitionBaseSchema.superRefine(assertIdentityConsistency);
+
+export const entitySchema = entityDefinitionBaseSchema
   .extend({
     id: z.string().min(1).max(512),
-    // Absent means `mode: 'none'`: the definition is never extracted into the store.
-    materialisation: z.optional(materialisationSchema),
-    inventory: z.optional(inventoryExtensionSchema),
   })
-  .superRefine((definition, ctx) => {
-    if (!definition.inventory) {
-      return;
-    }
-    // The compiler reads `identityField`, the inventory query generator reads `inventory.identity`;
-    // both must describe the same tuple.
-    const expected = identityTupleToIdentityField(definition.inventory.identity);
-    if (!isEqual(definition.identityField, expected)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['identityField'],
-        message:
-          'identityField must be the normalised form of inventory.identity (see identityTupleToIdentityField)',
-      });
-    }
-  });
+  .superRefine(assertIdentityConsistency);
 
 export type EntityDefinition = z.infer<typeof entitySchema>; // entity with id generated in runtime
 export type EntityDefinitionWithoutId = Omit<EntityDefinition, 'id'>;
@@ -75,7 +108,7 @@ export type MaterialisedEntityDefinition = EntityDefinition & {
 export type MaterialisedEntityDefinitionWithoutId = Omit<MaterialisedEntityDefinition, 'id'>;
 
 /** A built-in Security definition: known closed `type` and extraction materialisation. */
-export type ManagedEntityDefinition = MaterialisedEntityDefinition & { type: EntityType };
+export type ManagedEntityDefinition = MaterialisedEntityDefinition & { type: BuiltInEntityType };
 
 type HasMaterialisation = Pick<EntityDefinitionWithoutId, 'materialisation'>;
 

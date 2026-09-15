@@ -9,7 +9,7 @@ import { isNotEmptyCondition } from '../../../common/domain/definitions/common_f
 import type { Entity } from '../../../common/domain/definitions/entity.gen';
 import {
   type EntityField,
-  type EntityType,
+  type BuiltInEntityType,
   type ManagedEntityDefinition,
 } from '../../../common/domain/definitions/entity_schema';
 import { getEntityDefinition } from '../../../common/domain/definitions/registry';
@@ -33,7 +33,10 @@ const createField = (source: string, allowAPIUpdate = true): EntityField => ({
   retention: { operation: 'prefer_newest_value' },
 });
 
-const createDefinition = (type: EntityType, fields: EntityField[]): ManagedEntityDefinition => ({
+const createDefinition = (
+  type: BuiltInEntityType,
+  fields: EntityField[]
+): ManagedEntityDefinition => ({
   id: `security_${type}_default`,
   name: `${type} definition`,
   type,
