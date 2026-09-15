@@ -14,9 +14,12 @@ import { z } from '@kbn/zod/v4';
  * views are ES|QL over the declared `sources`, grouped by the literal `identity` tuple. Nothing
  * here is read by the extraction engine; it is consumed by the inventory query generator.
  *
- * Deliberately minimal for the v1 prototype. Time windows and sort order are client concerns, and
- * metadata lookup/write indices, edges and derived metadata are deferred (see the "Deferred"
- * section of the entity inventory context document).
+ * Authors declare *what* they need (identity, attributes, metrics per source), never *how* it is
+ * fetched. Engine selection (`TS` vs `FROM`), whether an attribute becomes a `BY` key or a
+ * `LAST(...)` aggregate, null handling and `*_OVER_TIME` wrapping are query generator concerns.
+ * Time windows and sort order are client concerns. Metadata lookup/write indices, edges and
+ * derived metadata are deferred (see the "Deferred" section of the entity inventory context
+ * document).
  *
  * Every string and array is bounded because this shape will be accepted over HTTP.
  */
@@ -24,13 +27,12 @@ import { z } from '@kbn/zod/v4';
 const MAX_FIELD_PATH_LENGTH = 512;
 const MAX_LABEL_LENGTH = 256;
 const MAX_INDEX_PATTERN_LENGTH = 256;
-const MAX_ESQL_EXPRESSION_LENGTH = 2000;
+const MAX_FILTER_LENGTH = 2000;
 const MAX_IDENTIFIER_LENGTH = 64;
 const MAX_IDENTITY_FIELDS = 8;
-const MAX_CARRY_FIELDS = 16;
+const MAX_ATTRIBUTES = 64;
 const MAX_SOURCES = 16;
 const MAX_METRICS_PER_SOURCE = 64;
-const MAX_CAPTURES_PER_SOURCE = 64;
 
 /**
  * A literal, mapped field path: dot-separated segments of letters, digits, `_`, `@` and `-`.
@@ -52,7 +54,7 @@ export const literalFieldPathSchema = z
     message: 'must be a literal field path (no expressions, wildcards, quoting or whitespace)',
   });
 
-/** Names of metrics and captures become ES|QL column names; keep them simple identifiers. */
+/** Metric names become ES|QL column names; keep them simple identifiers. */
 const IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
 
 const identifierSchema = z.string().min(1).max(MAX_IDENTIFIER_LENGTH).regex(IDENTIFIER_PATTERN, {
@@ -61,10 +63,12 @@ const identifierSchema = z.string().min(1).max(MAX_IDENTIFIER_LENGTH).regex(IDEN
 });
 
 /**
- * Opaque ES|QL fragment (an aggregate expression or a boolean filter). Validated for length only
- * in this stage; the query generator is responsible for placing it safely inside a query.
+ * Opaque ES|QL boolean expression narrowing a source to the documents of this type (e.g.
+ * `metricset.name == "pod"`). The one piece of ES|QL an author writes: it encodes knowledge of the
+ * data stream that cannot be inferred, and it is the biggest performance lever on list queries.
+ * Validated for length only in this stage; the query generator owns its safe placement.
  */
-const esqlExpressionSchema = z.string().min(1).max(MAX_ESQL_EXPRESSION_LENGTH);
+const sourceFilterSchema = z.string().min(1).max(MAX_FILTER_LENGTH);
 
 const indexPatternSchema = z.string().min(1).max(MAX_INDEX_PATTERN_LENGTH);
 
@@ -72,54 +76,41 @@ const uniqueStrings = (values: readonly string[]): boolean =>
   new Set(values).size === values.length;
 
 /**
- * Which ES|QL source command the metrics of a source run under. `TS` is only valid on
- * time-series data streams; `FROM` works everywhere. Captures always run as a companion `FROM`
- * query regardless of this value, because keyword aggregates return null under `TS` when the
- * scan spans mixed metric families.
+ * How a metric field is aggregated per entity over the window. The query generator emits the
+ * engine-correct form (e.g. `AVG(LAST_OVER_TIME(f))` under `TS`, `AVG(f)` under `FROM`).
+ * Counter-rate aggregations are not modelled yet.
  */
-export const inventorySourceEngineSchema = z.enum(['TS', 'FROM']);
-export type InventorySourceEngine = z.infer<typeof inventorySourceEngineSchema>;
+export const inventoryMetricAggregationSchema = z.enum([
+  'avg',
+  'min',
+  'max',
+  'sum',
+  'count_distinct',
+]);
+export type InventoryMetricAggregation = z.infer<typeof inventoryMetricAggregationSchema>;
 
-/** A named aggregate evaluated once per entity over the source's documents in the window. */
+/** A named metric: one field aggregated one way per entity. */
 export const inventoryMetricSchema = z.strictObject({
   name: identifierSchema,
-  esql: esqlExpressionSchema,
+  field: literalFieldPathSchema,
+  agg: inventoryMetricAggregationSchema,
 });
 export type InventoryMetric = z.infer<typeof inventoryMetricSchema>;
 
 /**
- * A named attribute aggregate (e.g. `LAST(k8s.pod.phase, @timestamp)`) with an optional document
- * family filter. Captures serve mutable or family-scoped attributes that cannot be `carry` fields.
- */
-export const inventoryCaptureSchema = z.strictObject({
-  name: identifierSchema,
-  esql: esqlExpressionSchema,
-  filter: esqlExpressionSchema.optional(),
-});
-export type InventoryCapture = z.infer<typeof inventoryCaptureSchema>;
-
-/**
- * One binding of the entity type to an index pattern. `filter` is the per-source discriminator
- * (e.g. `metricset.name == "pod"`) and is the biggest performance lever on list queries. Metric
- * and capture names must be unique within a source; across sources the same name means the same
- * measurement reported by a different pipeline.
+ * One binding of the entity type to an index pattern. Metrics are per source because metric
+ * fields do not alias across pipelines (units differ); across sources the same metric name means
+ * the same measurement reported by a different pipeline. Metric names must be unique within a source.
  */
 export const inventorySourceSchema = z
   .strictObject({
     index: indexPatternSchema,
-    engine: inventorySourceEngineSchema,
-    filter: esqlExpressionSchema.optional(),
+    filter: sourceFilterSchema.optional(),
     metrics: z.array(inventoryMetricSchema).max(MAX_METRICS_PER_SOURCE).optional(),
-    captures: z.array(inventoryCaptureSchema).max(MAX_CAPTURES_PER_SOURCE).optional(),
   })
-  .refine(
-    (source) =>
-      uniqueStrings([
-        ...(source.metrics ?? []).map(({ name }) => name),
-        ...(source.captures ?? []).map(({ name }) => name),
-      ]),
-    { message: 'metric and capture names must be unique within a source' }
-  );
+  .refine((source) => uniqueStrings((source.metrics ?? []).map(({ name }) => name)), {
+    message: 'metric names must be unique within a source',
+  });
 export type InventorySource = z.infer<typeof inventorySourceSchema>;
 
 export const inventoryExtensionSchema = z
@@ -137,22 +128,26 @@ export const inventoryExtensionSchema = z
       .max(MAX_IDENTITY_FIELDS)
       .refine(uniqueStrings, { message: 'identity fields must be unique' }),
     /**
-     * Display fields added as extra `BY` keys next to the identity. A carry field must be 1:1 with
-     * the identity AND present on every scanned document, otherwise it splits the entity into
-     * per-family rows. Mutable or family-scoped attributes belong in `captures` instead.
+     * Literal field paths shown per entity, resolved to the newest observed value across all
+     * sources that carry them. Structural fields (names, namespaces, nodes) should use canonical
+     * ECS names so the ECS<->OTel alias layer resolves them on both pipeline shapes.
      */
-    carry: z.array(literalFieldPathSchema).max(MAX_CARRY_FIELDS).optional(),
+    attributes: z
+      .array(literalFieldPathSchema)
+      .max(MAX_ATTRIBUTES)
+      .refine(uniqueStrings, { message: 'attributes must be unique' })
+      .optional(),
     /** Existence is identity occurrence in any declared source; metric-less entities list with null metrics. */
     sources: z.array(inventorySourceSchema).min(1).max(MAX_SOURCES),
   })
   .superRefine((inventory, ctx) => {
     const identity = new Set(inventory.identity);
-    for (const [index, field] of (inventory.carry ?? []).entries()) {
+    for (const [index, field] of (inventory.attributes ?? []).entries()) {
       if (identity.has(field)) {
         ctx.addIssue({
           code: 'custom',
-          path: ['carry', index],
-          message: `carry field "${field}" is already an identity field`,
+          path: ['attributes', index],
+          message: `attribute "${field}" is already an identity field`,
         });
       }
     }

@@ -9,10 +9,11 @@
  * Observability inventory definitions ported from the entity-query-benchmarking prototype
  * (`app/definitions.json`). Test fixtures only: nothing registers them yet.
  *
- * Structural fields (identity, carry) use canonical ECS names; the ECS<->OTel alias layer makes
- * them resolve on both pipeline shapes. Metrics do not alias (units differ), so every source
- * declares its own metric variants in the pipeline's native field names. Edges and derived
- * metadata from the prototype are deliberately not ported: the relationship model is a later stage.
+ * Structural fields (identity, attributes) use canonical ECS names; the ECS<->OTel alias layer
+ * makes them resolve on both pipeline shapes. Metrics do not alias (units differ), so every source
+ * declares its own metric variants in the pipeline's native field names. The prototype's raw ES|QL
+ * metrics and captures are expressed as `{ field, agg }` and `attributes`; the query generator
+ * owns the engine-specific ES|QL. Edges and derived metadata are deliberately not ported.
  */
 
 import type { EntityDefinitionWithoutId } from '../entity_schema';
@@ -28,48 +29,32 @@ export const k8sPodInventoryDefinition: EntityDefinitionWithoutId = buildInvento
   inventory: {
     label: 'K8s Pod',
     identity: ['kubernetes.pod.uid'],
-    carry: ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'],
+    attributes: [
+      'kubernetes.pod.name',
+      'kubernetes.namespace',
+      'kubernetes.node.name',
+      'kubernetes.pod.status.phase',
+    ],
     sources: [
       {
         index: OTEL_KUBELETSTATS_INDEX,
-        engine: 'TS',
         metrics: [
-          { name: 'cpu_cores', esql: 'AVG(LAST_OVER_TIME(k8s.pod.cpu.usage))' },
-          { name: 'mem_bytes', esql: 'AVG(LAST_OVER_TIME(k8s.pod.memory.usage))' },
+          { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg' },
+          { name: 'mem_bytes', field: 'k8s.pod.memory.usage', agg: 'avg' },
         ],
       },
       {
         index: ECS_KUBERNETES_INDEX,
-        engine: 'TS',
         filter: 'metricset.name IN ("pod", "state_pod")',
         metrics: [
-          {
-            name: 'cpu_node_pct',
-            esql: 'AVG(LAST_OVER_TIME(kubernetes.pod.cpu.usage.node.pct))',
-          },
-          {
-            name: 'mem_usage_bytes',
-            esql: 'AVG(LAST_OVER_TIME(kubernetes.pod.memory.usage.bytes))',
-          },
-        ],
-        captures: [
-          {
-            name: 'phase',
-            esql: 'LAST(kubernetes.pod.status.phase, @timestamp)',
-            filter: 'metricset.name == "state_pod"',
-          },
+          { name: 'cpu_node_pct', field: 'kubernetes.pod.cpu.usage.node.pct', agg: 'avg' },
+          { name: 'mem_usage_bytes', field: 'kubernetes.pod.memory.usage.bytes', agg: 'avg' },
         ],
       },
       {
+        // Contributes existence and attributes only (pod phase as a numeric gauge on this pipeline).
         index: OTEL_K8S_CLUSTER_INDEX,
-        engine: 'TS',
-        captures: [
-          {
-            name: 'phase',
-            esql: 'CASE(LAST(`k8s.pod.phase`, @timestamp) == 1, "pending", LAST(`k8s.pod.phase`, @timestamp) == 2, "running", LAST(`k8s.pod.phase`, @timestamp) == 3, "succeeded", LAST(`k8s.pod.phase`, @timestamp) == 4, "failed", "unknown")',
-            filter: 'k8s.pod.phase IS NOT NULL',
-          },
-        ],
+        filter: 'k8s.pod.phase IS NOT NULL',
       },
     ],
   },
@@ -85,25 +70,17 @@ export const k8sNodeInventoryDefinition: EntityDefinitionWithoutId = buildInvent
       sources: [
         {
           index: OTEL_KUBELETSTATS_INDEX,
-          engine: 'TS',
           metrics: [
-            { name: 'cpu_cores', esql: 'AVG(LAST_OVER_TIME(k8s.node.cpu.usage))' },
-            { name: 'mem_bytes', esql: 'AVG(LAST_OVER_TIME(k8s.node.memory.usage))' },
+            { name: 'cpu_cores', field: 'k8s.node.cpu.usage', agg: 'avg' },
+            { name: 'mem_bytes', field: 'k8s.node.memory.usage', agg: 'avg' },
           ],
         },
         {
           index: ECS_KUBERNETES_INDEX,
-          engine: 'TS',
           filter: 'metricset.name == "node"',
           metrics: [
-            {
-              name: 'cpu_nanocores',
-              esql: 'AVG(LAST_OVER_TIME(kubernetes.node.cpu.usage.nanocores))',
-            },
-            {
-              name: 'mem_usage_bytes',
-              esql: 'AVG(LAST_OVER_TIME(kubernetes.node.memory.usage.bytes))',
-            },
+            { name: 'cpu_nanocores', field: 'kubernetes.node.cpu.usage.nanocores', agg: 'avg' },
+            { name: 'mem_usage_bytes', field: 'kubernetes.node.memory.usage.bytes', agg: 'avg' },
           ],
         },
       ],
@@ -126,26 +103,26 @@ export const k8sDeploymentInventoryDefinition: EntityDefinitionWithoutId =
         {
           // Pod-level documents: the deployment is derived from the pods that reference it.
           index: OTEL_KUBELETSTATS_INDEX,
-          engine: 'FROM',
           metrics: [
-            { name: 'pods', esql: 'COUNT_DISTINCT(kubernetes.pod.name)' },
-            { name: 'avg_pod_cpu_cores', esql: 'AVG(k8s.pod.cpu.usage)' },
-            { name: 'nodes', esql: 'COUNT_DISTINCT(kubernetes.node.name)' },
+            { name: 'pods', field: 'kubernetes.pod.name', agg: 'count_distinct' },
+            { name: 'avg_pod_cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg' },
+            { name: 'nodes', field: 'kubernetes.node.name', agg: 'count_distinct' },
           ],
         },
         {
           // Deployment-level state documents reported by the kubernetes integration.
           index: ECS_KUBERNETES_INDEX,
-          engine: 'TS',
           filter: 'metricset.name == "state_deployment"',
           metrics: [
             {
               name: 'replicas_desired',
-              esql: 'MAX(LAST_OVER_TIME(kubernetes.deployment.replicas.desired))',
+              field: 'kubernetes.deployment.replicas.desired',
+              agg: 'max',
             },
             {
               name: 'replicas_available',
-              esql: 'MAX(LAST_OVER_TIME(kubernetes.deployment.replicas.available))',
+              field: 'kubernetes.deployment.replicas.available',
+              agg: 'max',
             },
           ],
         },
@@ -163,26 +140,22 @@ export const k8sStatefulsetInventoryDefinition: EntityDefinitionWithoutId =
       sources: [
         {
           index: OTEL_KUBELETSTATS_INDEX,
-          engine: 'FROM',
           metrics: [
-            { name: 'pods', esql: 'COUNT_DISTINCT(kubernetes.pod.name)' },
-            { name: 'avg_pod_cpu_cores', esql: 'AVG(k8s.pod.cpu.usage)' },
-            { name: 'nodes', esql: 'COUNT_DISTINCT(kubernetes.node.name)' },
+            { name: 'pods', field: 'kubernetes.pod.name', agg: 'count_distinct' },
+            { name: 'avg_pod_cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg' },
+            { name: 'nodes', field: 'kubernetes.node.name', agg: 'count_distinct' },
           ],
         },
         {
           index: ECS_KUBERNETES_INDEX,
-          engine: 'TS',
           filter: 'metricset.name == "state_statefulset"',
           metrics: [
             {
               name: 'replicas_desired',
-              esql: 'MAX(LAST_OVER_TIME(kubernetes.statefulset.replicas.desired))',
+              field: 'kubernetes.statefulset.replicas.desired',
+              agg: 'max',
             },
-            {
-              name: 'replicas_ready',
-              esql: 'MAX(LAST_OVER_TIME(kubernetes.statefulset.replicas.ready))',
-            },
+            { name: 'replicas_ready', field: 'kubernetes.statefulset.replicas.ready', agg: 'max' },
           ],
         },
       ],

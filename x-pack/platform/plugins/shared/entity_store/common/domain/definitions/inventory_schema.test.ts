@@ -14,7 +14,7 @@ import {
 
 const minimalInventory = {
   identity: ['kubernetes.pod.uid'],
-  sources: [{ index: 'metrics-kubeletstatsreceiver.otel-default', engine: 'TS' }],
+  sources: [{ index: 'metrics-kubeletstatsreceiver.otel-default' }],
 };
 
 describe('inventoryExtensionSchema', () => {
@@ -54,14 +54,39 @@ describe('inventoryExtensionSchema', () => {
     }
   );
 
-  it('rejects a carry field that repeats an identity field', () => {
+  it('accepts attributes and a source with structured metrics and a filter', () => {
     const result = inventoryExtensionSchema.safeParse({
       ...minimalInventory,
-      carry: ['kubernetes.pod.uid'],
+      attributes: ['kubernetes.pod.name', 'kubernetes.namespace'],
+      sources: [
+        {
+          index: 'metrics-kubernetes.tsdb-default',
+          filter: 'metricset.name == "pod"',
+          metrics: [{ name: 'cpu_pct', field: 'kubernetes.pod.cpu.usage.node.pct', agg: 'avg' }],
+        },
+      ],
+    });
+    expect(result.error?.issues).toBeUndefined();
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects an attribute that repeats an identity field', () => {
+    const result = inventoryExtensionSchema.safeParse({
+      ...minimalInventory,
+      attributes: ['kubernetes.pod.uid'],
     });
     expect(result.success).toBe(false);
-    expect(result.error?.issues[0].path).toEqual(['carry', 0]);
+    expect(result.error?.issues[0].path).toEqual(['attributes', 0]);
   });
+
+  it.each(['COUNT(*)', 'kubernetes.*', 'pod name'])(
+    'rejects attribute "%s" that is not a literal path',
+    (field) => {
+      expect(
+        inventoryExtensionSchema.safeParse({ ...minimalInventory, attributes: [field] }).success
+      ).toBe(false);
+    }
+  );
 
   it.each([
     ['edges', []],
@@ -70,6 +95,8 @@ describe('inventoryExtensionSchema', () => {
     ['metadataWrite', { index: 'x', keyFields: ['a'] }],
     ['inventoryWindow', '15m'],
     ['defaultSort', { field: 'last_seen', direction: 'desc' }],
+    ['carry', ['kubernetes.pod.name']],
+    ['captures', []],
   ])('rejects the deferred or unknown key %s so it fails loudly', (key, value) => {
     expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, [key]: value }).success).toBe(
       false
@@ -84,12 +111,13 @@ describe('inventoryExtensionSchema', () => {
 });
 
 describe('inventorySourceSchema', () => {
-  it('rejects duplicate metric and capture names within a source', () => {
+  it('rejects duplicate metric names within a source', () => {
     const result = inventorySourceSchema.safeParse({
       index: 'metrics-*',
-      engine: 'FROM',
-      metrics: [{ name: 'phase', esql: 'COUNT(*)' }],
-      captures: [{ name: 'phase', esql: 'LAST(kubernetes.pod.status.phase, @timestamp)' }],
+      metrics: [
+        { name: 'cpu', field: 'k8s.pod.cpu.usage', agg: 'avg' },
+        { name: 'cpu', field: 'kubernetes.pod.cpu.usage.node.pct', agg: 'avg' },
+      ],
     });
     expect(result.success).toBe(false);
   });
@@ -97,16 +125,28 @@ describe('inventorySourceSchema', () => {
   it('rejects metric names that are not simple identifiers', () => {
     const result = inventorySourceSchema.safeParse({
       index: 'metrics-*',
-      engine: 'FROM',
-      metrics: [{ name: 'Cpu Cores', esql: 'COUNT(*)' }],
+      metrics: [{ name: 'Cpu Cores', field: 'k8s.pod.cpu.usage', agg: 'avg' }],
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejects an unknown engine', () => {
-    expect(inventorySourceSchema.safeParse({ index: 'metrics-*', engine: 'SQL' }).success).toBe(
-      false
-    );
+  it('rejects an unknown aggregation and a non-literal metric field', () => {
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        metrics: [{ name: 'cpu', field: 'k8s.pod.cpu.usage', agg: 'rate' }],
+      }).success
+    ).toBe(false);
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        metrics: [{ name: 'cpu', field: 'AVG(k8s.pod.cpu.usage)', agg: 'avg' }],
+      }).success
+    ).toBe(false);
+  });
+
+  it.each(['engine', 'captures', 'esql'])('rejects the removed source key %s', (key) => {
+    expect(inventorySourceSchema.safeParse({ index: 'metrics-*', [key]: 'x' }).success).toBe(false);
   });
 });
 

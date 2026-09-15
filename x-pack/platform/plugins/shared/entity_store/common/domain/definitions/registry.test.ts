@@ -68,7 +68,7 @@ describe('materialised entity types', () => {
       name: 'pod',
       inventory: {
         identity: ['kubernetes.pod.uid'],
-        sources: [{ index: 'metrics-*', engine: 'TS' }],
+        sources: [{ index: 'metrics-*' }],
       },
     });
     const bareCore = {

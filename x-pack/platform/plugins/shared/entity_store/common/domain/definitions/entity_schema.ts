@@ -160,7 +160,6 @@ export { inventoryExtensionSchema } from './inventory_schema';
 export type {
   InventoryExtension,
   InventorySource,
-  InventorySourceEngine,
   InventoryMetric,
-  InventoryCapture,
+  InventoryMetricAggregation,
 } from './inventory_schema';

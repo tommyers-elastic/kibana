@@ -22,7 +22,7 @@ plus optional, independently validated **solution extensions**. The core is what
 | --- | --- | --- |
 | Identity core (`type`, `name`, `identityField`) | `identity_core_schema.ts` | EUID compiler (all five backends), extraction, CRUD |
 | Materialisation extension | `materialisation_schema.ts` | Logs extraction, component templates, CRUD field validation, single-document creation |
-| Inventory extension (`identity`, `sources`, `carry`, `label`) | `inventory_schema.ts` | Inventory query generation (later stage) |
+| Inventory extension (`identity`, `attributes`, `sources[].{index, filter, metrics}`, `label`) | `inventory_schema.ts` | Inventory query generation (later stage) |
 
 ### Materialisation modes
 
@@ -58,9 +58,13 @@ whitespace are rejected: identity must push down to the index. The raw list is k
 that `identityField` and `inventory.identity` agree. `buildInventoryEntityDefinition()` assembles a
 complete non-materialised definition from the authoring form.
 
-Time windows and sort order are client concerns and are not part of the definition. Metadata
-lookup/write indices, relationships (edges) and derived metadata are deferred; the entity inventory
-context document tracks what is deferred and why.
+Authors declare what they need, not how it is fetched: `attributes` is a list of literal field paths
+resolved to the newest value per entity, and each source's `metrics` are `{ name, field, agg }` with
+`agg` one of `avg | min | max | sum | count_distinct`. Engine selection, `BY` versus `LAST(...)`
+placement, null handling and `*_OVER_TIME` wrapping belong to the query generator. The only ES|QL an
+author writes is the optional per-source `filter` (the document-family discriminator). Time windows
+and sort order are client concerns. Metadata lookup/write indices, relationships (edges) and derived
+metadata are deferred; the entity inventory context document tracks what is deferred and why.
 
 ### Compiling a definition object
 

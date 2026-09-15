@@ -209,7 +209,7 @@ describe('entitySchema (identity core + extensions)', () => {
         name: 'deployment',
         inventory: {
           identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
-          sources: [{ index: 'metrics-*', engine: 'FROM' }],
+          sources: [{ index: 'metrics-*' }],
         },
       });
       const result = entitySchema.safeParse({
