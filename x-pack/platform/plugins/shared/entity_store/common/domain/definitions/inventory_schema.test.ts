@@ -7,7 +7,6 @@
 
 import { INVENTORY_DEFINITION_FIXTURES } from './__fixtures__/inventory_definitions';
 import {
-  inventoryDurationSchema,
   inventoryExtensionSchema,
   inventorySourceSchema,
   isLiteralFieldPath,
@@ -64,29 +63,23 @@ describe('inventoryExtensionSchema', () => {
     expect(result.error?.issues[0].path).toEqual(['carry', 0]);
   });
 
-  it('rejects unknown keys so authoring typos and unported prototype keys fail loudly', () => {
-    expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, edges: [] }).success).toBe(
+  it.each([
+    ['edges', []],
+    ['derivedMetadata', []],
+    ['lookups', []],
+    ['metadataWrite', { index: 'x', keyFields: ['a'] }],
+    ['inventoryWindow', '15m'],
+    ['defaultSort', { field: 'last_seen', direction: 'desc' }],
+  ])('rejects the deferred or unknown key %s so it fails loudly', (key, value) => {
+    expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, [key]: value }).success).toBe(
       false
     );
-    expect(
-      inventoryExtensionSchema.safeParse({ ...minimalInventory, derivedMetadata: [] }).success
-    ).toBe(false);
   });
 
   it('requires at least one source', () => {
     expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, sources: [] }).success).toBe(
       false
     );
-  });
-
-  it('rejects an invalid inventory window', () => {
-    expect(
-      inventoryExtensionSchema.safeParse({ ...minimalInventory, inventoryWindow: 'fifteen' })
-        .success
-    ).toBe(false);
-    expect(
-      inventoryExtensionSchema.safeParse({ ...minimalInventory, inventoryWindow: '0m' }).success
-    ).toBe(false);
   });
 });
 
@@ -114,16 +107,6 @@ describe('inventorySourceSchema', () => {
     expect(inventorySourceSchema.safeParse({ index: 'metrics-*', engine: 'SQL' }).success).toBe(
       false
     );
-  });
-});
-
-describe('inventoryDurationSchema', () => {
-  it.each(['15m', '1h', '30s', '7d'])('accepts %s', (duration) => {
-    expect(inventoryDurationSchema.safeParse(duration).success).toBe(true);
-  });
-
-  it.each(['15', 'm', '1.5h', '15 m', '-1m', '1w'])('rejects %s', (duration) => {
-    expect(inventoryDurationSchema.safeParse(duration).success).toBe(false);
   });
 });
 

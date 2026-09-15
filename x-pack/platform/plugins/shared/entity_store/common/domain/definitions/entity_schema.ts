@@ -163,7 +163,4 @@ export type {
   InventorySourceEngine,
   InventoryMetric,
   InventoryCapture,
-  InventoryLookup,
-  InventoryMetadataWrite,
-  InventorySort,
 } from './inventory_schema';

@@ -29,8 +29,6 @@ export const k8sPodInventoryDefinition: EntityDefinitionWithoutId = buildInvento
     label: 'K8s Pod',
     identity: ['kubernetes.pod.uid'],
     carry: ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'],
-    inventoryWindow: '15m',
-    defaultSort: { field: 'last_seen', direction: 'desc' },
     sources: [
       {
         index: OTEL_KUBELETSTATS_INDEX,
@@ -74,8 +72,6 @@ export const k8sPodInventoryDefinition: EntityDefinitionWithoutId = buildInvento
         ],
       },
     ],
-    lookups: [{ index: 'entity_meta_k8s_pod', on: ['kubernetes.pod.uid'] }],
-    metadataWrite: { index: 'entity_meta_k8s_pod', keyFields: ['kubernetes.pod.uid'] },
   },
 });
 
@@ -86,8 +82,6 @@ export const k8sNodeInventoryDefinition: EntityDefinitionWithoutId = buildInvent
     inventory: {
       label: 'K8s Node',
       identity: ['kubernetes.node.name'],
-      inventoryWindow: '15m',
-      defaultSort: { field: 'last_seen', direction: 'desc' },
       sources: [
         {
           index: OTEL_KUBELETSTATS_INDEX,
@@ -113,8 +107,6 @@ export const k8sNodeInventoryDefinition: EntityDefinitionWithoutId = buildInvent
           ],
         },
       ],
-      lookups: [{ index: 'entity_meta_k8s_node', on: ['kubernetes.node.name'] }],
-      metadataWrite: { index: 'entity_meta_k8s_node', keyFields: ['kubernetes.node.name'] },
     },
   }
 );
@@ -130,8 +122,6 @@ export const k8sDeploymentInventoryDefinition: EntityDefinitionWithoutId =
     inventory: {
       label: 'K8s Deployment',
       identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
-      inventoryWindow: '15m',
-      defaultSort: { field: 'pods', direction: 'desc' },
       sources: [
         {
           // Pod-level documents: the deployment is derived from the pods that reference it.
@@ -160,16 +150,6 @@ export const k8sDeploymentInventoryDefinition: EntityDefinitionWithoutId =
           ],
         },
       ],
-      lookups: [
-        {
-          index: 'entity_meta_k8s_deployment',
-          on: ['kubernetes.namespace', 'kubernetes.deployment.name'],
-        },
-      ],
-      metadataWrite: {
-        index: 'entity_meta_k8s_deployment',
-        keyFields: ['kubernetes.namespace', 'kubernetes.deployment.name'],
-      },
     },
   });
 
@@ -180,8 +160,6 @@ export const k8sStatefulsetInventoryDefinition: EntityDefinitionWithoutId =
     inventory: {
       label: 'K8s Statefulset',
       identity: ['kubernetes.namespace', 'kubernetes.statefulset.name'],
-      inventoryWindow: '15m',
-      defaultSort: { field: 'pods', direction: 'desc' },
       sources: [
         {
           index: OTEL_KUBELETSTATS_INDEX,
@@ -208,16 +186,6 @@ export const k8sStatefulsetInventoryDefinition: EntityDefinitionWithoutId =
           ],
         },
       ],
-      lookups: [
-        {
-          index: 'entity_meta_k8s_statefulset',
-          on: ['kubernetes.namespace', 'kubernetes.statefulset.name'],
-        },
-      ],
-      metadataWrite: {
-        index: 'entity_meta_k8s_statefulset',
-        keyFields: ['kubernetes.namespace', 'kubernetes.statefulset.name'],
-      },
     },
   });
 

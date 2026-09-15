@@ -22,7 +22,7 @@ plus optional, independently validated **solution extensions**. The core is what
 | --- | --- | --- |
 | Identity core (`type`, `name`, `identityField`) | `identity_core_schema.ts` | EUID compiler (all five backends), extraction, CRUD |
 | Materialisation extension | `materialisation_schema.ts` | Logs extraction, component templates, CRUD field validation, single-document creation |
-| Inventory extension | `inventory_schema.ts` | Inventory query generation (later stage) |
+| Inventory extension (`identity`, `sources`, `carry`, `label`) | `inventory_schema.ts` | Inventory query generation (later stage) |
 
 ### Materialisation modes
 
@@ -57,6 +57,10 @@ whitespace are rejected: identity must push down to the index. The raw list is k
 `inventory.identity` because the query generator groups `BY` these fields, and `entitySchema` checks
 that `identityField` and `inventory.identity` agree. `buildInventoryEntityDefinition()` assembles a
 complete non-materialised definition from the authoring form.
+
+Time windows and sort order are client concerns and are not part of the definition. Metadata
+lookup/write indices, relationships (edges) and derived metadata are deferred; the entity inventory
+context document tracks what is deferred and why.
 
 ### Compiling a definition object
 

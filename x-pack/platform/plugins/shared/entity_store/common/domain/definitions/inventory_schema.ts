@@ -14,6 +14,10 @@ import { z } from '@kbn/zod/v4';
  * views are ES|QL over the declared `sources`, grouped by the literal `identity` tuple. Nothing
  * here is read by the extraction engine; it is consumed by the inventory query generator.
  *
+ * Deliberately minimal for the v1 prototype. Time windows and sort order are client concerns, and
+ * metadata lookup/write indices, edges and derived metadata are deferred (see the "Deferred"
+ * section of the entity inventory context document).
+ *
  * Every string and array is bounded because this shape will be accepted over HTTP.
  */
 
@@ -27,8 +31,6 @@ const MAX_CARRY_FIELDS = 16;
 const MAX_SOURCES = 16;
 const MAX_METRICS_PER_SOURCE = 64;
 const MAX_CAPTURES_PER_SOURCE = 64;
-const MAX_LOOKUPS = 8;
-const MAX_LOOKUP_KEY_FIELDS = 8;
 
 /**
  * A literal, mapped field path: dot-separated segments of letters, digits, `_`, `@` and `-`.
@@ -49,13 +51,6 @@ export const literalFieldPathSchema = z
   .regex(LITERAL_FIELD_PATH_PATTERN, {
     message: 'must be a literal field path (no expressions, wildcards, quoting or whitespace)',
   });
-
-/** `{number}{s|m|h|d}`, matching the plugin's `parseDurationToMs`. */
-const DURATION_PATTERN = /^[1-9]\d*[smhd]$/;
-
-export const inventoryDurationSchema = z.string().regex(DURATION_PATTERN, {
-  message: 'must be a duration of the form {number}{s|m|h|d}, e.g. 15m',
-});
 
 /** Names of metrics and captures become ES|QL column names; keep them simple identifiers. */
 const IDENTIFIER_PATTERN = /^[a-z][a-z0-9_]*$/;
@@ -127,29 +122,6 @@ export const inventorySourceSchema = z
   );
 export type InventorySource = z.infer<typeof inventorySourceSchema>;
 
-/** Declared now, consumed by a later stage: a lookup-mode index joined onto list rows by key. */
-export const inventoryLookupSchema = z.strictObject({
-  index: indexPatternSchema,
-  on: z.array(literalFieldPathSchema).min(1).max(MAX_LOOKUP_KEY_FIELDS),
-  rename: z.record(literalFieldPathSchema, literalFieldPathSchema).optional(),
-});
-export type InventoryLookup = z.infer<typeof inventoryLookupSchema>;
-
-/** Declared now, consumed by a later stage: where user-supplied metadata for this type is written. */
-export const inventoryMetadataWriteSchema = z.strictObject({
-  index: indexPatternSchema,
-  keyFields: z.array(literalFieldPathSchema).min(1).max(MAX_LOOKUP_KEY_FIELDS),
-});
-export type InventoryMetadataWrite = z.infer<typeof inventoryMetadataWriteSchema>;
-
-/** Default list ordering; `field` is a metric, capture, carry field or a generated column such as `last_seen`. */
-export const inventorySortSchema = z.strictObject({
-  field: literalFieldPathSchema,
-  direction: z.enum(['asc', 'desc']),
-  nulls: z.enum(['first', 'last']).optional(),
-});
-export type InventorySort = z.infer<typeof inventorySortSchema>;
-
 export const inventoryExtensionSchema = z
   .strictObject({
     /** Human readable type name for the UI. */
@@ -170,16 +142,8 @@ export const inventoryExtensionSchema = z
      * per-family rows. Mutable or family-scoped attributes belong in `captures` instead.
      */
     carry: z.array(literalFieldPathSchema).max(MAX_CARRY_FIELDS).optional(),
-    /**
-     * Liveness horizon for lists and counts (a few multiples of the type's collection cadence).
-     * Detail views may use longer windows.
-     */
-    inventoryWindow: inventoryDurationSchema.optional(),
-    defaultSort: inventorySortSchema.optional(),
     /** Existence is identity occurrence in any declared source; metric-less entities list with null metrics. */
     sources: z.array(inventorySourceSchema).min(1).max(MAX_SOURCES),
-    lookups: z.array(inventoryLookupSchema).max(MAX_LOOKUPS).optional(),
-    metadataWrite: inventoryMetadataWriteSchema.optional(),
   })
   .superRefine((inventory, ctx) => {
     const identity = new Set(inventory.identity);
