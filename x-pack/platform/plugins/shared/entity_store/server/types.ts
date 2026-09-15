@@ -33,6 +33,7 @@ import type { SpacesPluginSetup, SpacesPluginStart } from '@kbn/spaces-plugin/se
 import type { CoreSetup } from '@kbn/core/server';
 import type { UsageCollectionSetup } from '@kbn/usage-collection-plugin/server';
 import type { ElasticsearchClient } from '@kbn/core/server';
+import type { FeaturesPluginSetup } from '@kbn/features-plugin/server';
 import type { AssetManagerClient } from './domain/asset_manager';
 import type {
   EntityMaintainersClient,
@@ -48,6 +49,8 @@ import type { ResolutionClient } from './domain/resolution';
 import type { ResolutionRulesClient } from './domain/resolution/rules';
 import type { RegisterEntityMaintainerConfig } from './tasks/entity_maintainers/types';
 import type { TelemetryReporter } from './telemetry/events';
+import type { EntityDefinitionWithoutId } from '../common/domain/definitions/entity_schema';
+import type { EntityDefinitionRegistry, EntityDefinitionsClient } from './domain/definitions';
 
 export interface EntityStoreSetupPlugins {
   taskManager: TaskManagerSetupContract;
@@ -55,6 +58,7 @@ export interface EntityStoreSetupPlugins {
   encryptedSavedObjects: EncryptedSavedObjectsPluginSetup;
   workflowsExtensions: WorkflowsExtensionsServerPluginSetup;
   usageCollection?: UsageCollectionSetup;
+  features: FeaturesPluginSetup;
 }
 
 export interface EntityStoreStartPlugins {
@@ -81,6 +85,10 @@ export interface EntityStoreApiRequestHandlerContext {
   logsExtractionClient: LogsExtractionClient;
   historySnapshotClient: HistorySnapshotClient;
   security: SecurityPluginStart;
+  /** Read side of entity definitions (built-in, code-registered and API-registered) for the request space. */
+  entityDefinitionRegistry: EntityDefinitionRegistry;
+  /** Write side of API-registered definitions; built over the request-scoped saved objects client. */
+  entityDefinitionsClient: EntityDefinitionsClient;
   namespace: string;
   analytics: TelemetryReporter;
 }
@@ -117,10 +125,23 @@ export interface EntityStoreStartContract {
     namespace: string,
     ids?: string[]
   ) => Promise<EntityMaintainerStatusEntry[]>;
+  /**
+   * Resolves entity definitions by type for a space: the four built-ins, definitions registered
+   * in code at setup and definitions registered per space through the API. Reads use an internal
+   * saved objects repository, so the caller is responsible for authorising its own user.
+   */
+  getEntityDefinitionRegistry: (namespace: string) => EntityDefinitionRegistry;
 }
 
 export interface EntityStoreSetupContract {
   registerEntityMaintainer: RegisterEntityMaintainer;
+  /**
+   * Registers a code-defined, non-materialised entity definition (e.g. Observability types shipped
+   * with Kibana). Global across spaces, held in memory, resolvable by the registry and the EUID
+   * compiler. Throws on an invalid definition, a reserved (built-in or already registered) type
+   * name, or a materialisation mode other than `none`.
+   */
+  registerEntityDefinition: (definition: EntityDefinitionWithoutId) => void;
 }
 
 export type EntityStoreCoreSetup = CoreSetup<EntityStoreStartPlugins, EntityStoreStartContract>;

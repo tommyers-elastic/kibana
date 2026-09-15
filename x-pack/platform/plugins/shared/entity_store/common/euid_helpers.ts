@@ -167,6 +167,40 @@ export const euid = {
    * evidence that the general path is too slow AND can state why the precondition
    * holds for every document your query reads.
    */
+  /**
+   * The same compilers for a definition *object* rather than a registered type name. Use these for
+   * dynamically registered (Observability inventory) definitions fetched from the definitions
+   * registry or API; the type-name entry points above resolve the four built-in types only.
+   */
+  fromDefinition: {
+    getEuid: euidModule.getEuidFromDefinition,
+    getEuidForSearch: euidModule.getEuidForSearchFromDefinition,
+    getEntityIdentifiers: euidModule.getEntityIdentifiersFromDefinition,
+    getEuidSourceFields: euidModule.getEuidSourceFieldsFromDefinition,
+    painless: {
+      getEuidEvaluation: euidModule.getEuidPainlessEvaluationFromDefinition,
+      getEuidEvaluationForSearch: euidModule.getEuidPainlessEvaluationForSearchFromDefinition,
+      getEuidRuntimeMapping: euidModule.getEuidPainlessRuntimeMappingFromDefinition,
+    },
+    esql: {
+      getEuidDocumentsContainsIdFilter:
+        euidModule.getEuidEsqlDocumentsContainsIdFilterFromDefinition,
+      getEuidEvaluation: euidModule.getEuidEsqlEvaluationFromDefinition,
+      getEuidFilterBasedOnDocument: euidModule.getEuidEsqlFilterBasedOnDocumentFromDefinition,
+      getFieldEvaluations: euidModule.getFieldEvaluationsEsqlFromDefinition,
+    },
+    dsl: {
+      getEuidFilterBasedOnDocument: euidModule.getEuidDslFilterBasedOnDocumentFromDefinition,
+      getEuidFilterBasedOnEntityRecord:
+        euidModule.getEuidDslFilterBasedOnEntityRecordFromDefinition,
+      getEuidDocumentsContainsIdFilter:
+        euidModule.getEuidDslDocumentsContainsIdFilterFromDefinition,
+    },
+    kql: {
+      getEuidFilterBasedOnDocument: euidModule.getEuidKqlFilterBasedOnDocumentFromDefinition,
+    },
+  },
+
   experimental: {
     /**
      * Minimal ESQL fragments (`{ evalAssignment, presenceGate }`) for the host-scoped

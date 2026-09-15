@@ -6,7 +6,7 @@
  */
 
 import type { IUiSettingsClient } from '@kbn/core/server';
-import { FF_ENABLE_ENTITY_STORE_V2 } from '../../../common';
+import { FF_ENABLE_DYNAMIC_DEFINITIONS, FF_ENABLE_ENTITY_STORE_V2 } from '../../../common';
 
 export { isLegacySecurityAssetsMigrationEnabled } from './legacy_security_assets_migration';
 export { isDualProcessEnabled } from './dual_process';
@@ -16,5 +16,9 @@ export class FeatureFlags {
 
   public async isEntityStoreV2Enabled(): Promise<boolean> {
     return this.uiSettingsClient.get(FF_ENABLE_ENTITY_STORE_V2);
+  }
+
+  public async isDynamicDefinitionsEnabled(): Promise<boolean> {
+    return this.uiSettingsClient.get(FF_ENABLE_DYNAMIC_DEFINITIONS);
   }
 }

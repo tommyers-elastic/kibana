@@ -7,6 +7,7 @@
 
 import { INVENTORY_DEFINITION_FIXTURES } from './__fixtures__/inventory_definitions';
 import {
+  entityDefinitionInputSchema,
   entitySchema,
   euidRankingSchema,
   getEntityFields,
@@ -220,5 +221,44 @@ describe('entitySchema (identity core + extensions)', () => {
       expect(result.success).toBe(false);
       expect(result.error?.issues[0].path).toEqual(['identityField']);
     });
+  });
+});
+
+describe('entityDefinitionInputSchema (API body / setup registration)', () => {
+  it('accepts every inventory fixture without an id', () => {
+    for (const fixture of INVENTORY_DEFINITION_FIXTURES) {
+      const result = entityDefinitionInputSchema.safeParse(fixture);
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('applies the same identity consistency rule as entitySchema', () => {
+    const [pod] = INVENTORY_DEFINITION_FIXTURES;
+    const result = entityDefinitionInputSchema.safeParse({
+      ...pod,
+      identityField: { singleField: 'kubernetes.pod.name' },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0].path).toEqual(['identityField']);
+    }
+  });
+
+  it('accepts a bare identity core and a materialised core alike (the registry decides what is registrable)', () => {
+    expect(
+      entityDefinitionInputSchema.safeParse({
+        type: 'k8s.pod',
+        name: 'pod',
+        identityField: { singleField: 'kubernetes.pod.uid' },
+      }).success
+    ).toBe(true);
+    expect(
+      entityDefinitionInputSchema.safeParse({
+        type: 'k8s.pod',
+        name: 'pod',
+        identityField: { singleField: 'kubernetes.pod.uid' },
+        materialisation: { mode: 'extraction', fields: [] },
+      }).success
+    ).toBe(true);
   });
 });

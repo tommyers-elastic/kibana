@@ -9,6 +9,7 @@ import type { IKibanaResponse, KibanaRequest, KibanaResponseFactory } from '@kbn
 import { runWithSpan } from '../../telemetry/traces';
 import type { EntityStoreRequestHandlerContext } from '../../types';
 import { featureFlagEnabledMiddleware } from './feature_flag_enabled';
+import { dynamicDefinitionsEnabledMiddleware } from './dynamic_definitions_enabled';
 
 export type Handler<P, Q, B, R> = (
   ctx: EntityStoreRequestHandlerContext,
@@ -21,12 +22,20 @@ type ReqHandler<P, Q, B> = Handler<P, Q, B, IKibanaResponse>;
 
 const REGISTERED_MIDDLEWARES: readonly Middleware[] = [featureFlagEnabledMiddleware];
 
+/** Entity store routes: the Security entity store v2 feature flag, then any route-specific middleware. */
 export function wrapMiddlewares<P, Q, B>(
   handler: ReqHandler<P, Q, B>,
   middlewares: readonly Middleware[] = []
 ) {
-  const pipeline: readonly Middleware[] = [...REGISTERED_MIDDLEWARES, ...middlewares];
+  return wrapWithPipeline(handler, [...REGISTERED_MIDDLEWARES, ...middlewares]);
+}
 
+/** Definitions API routes: gated on the dynamic definitions ui setting only, not on the Security store flag. */
+export function wrapDefinitionsMiddlewares<P, Q, B>(handler: ReqHandler<P, Q, B>) {
+  return wrapWithPipeline(handler, [dynamicDefinitionsEnabledMiddleware]);
+}
+
+function wrapWithPipeline<P, Q, B>(handler: ReqHandler<P, Q, B>, pipeline: readonly Middleware[]) {
   return async (
     ctx: EntityStoreRequestHandlerContext,
     req: KibanaRequest<P, Q, B>,

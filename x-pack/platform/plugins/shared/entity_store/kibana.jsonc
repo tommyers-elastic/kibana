@@ -15,7 +15,8 @@
       "dataViews",
       "security",
       "licensing",
-      "workflowsExtensions"
+      "workflowsExtensions",
+      "features"
     ],
     "optionalPlugins": [
       "encryptedSavedObjects",

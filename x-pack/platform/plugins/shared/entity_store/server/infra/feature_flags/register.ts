@@ -7,7 +7,7 @@
 
 import { schema } from '@kbn/config-schema';
 import type { UiSettingsServiceSetup } from '@kbn/core/server';
-import { FF_ENABLE_ENTITY_STORE_V2 } from '../../../common';
+import { FF_ENABLE_DYNAMIC_DEFINITIONS, FF_ENABLE_ENTITY_STORE_V2 } from '../../../common';
 
 export function registerUiSettings(uiSettings: UiSettingsServiceSetup) {
   uiSettings.register({
@@ -16,6 +16,16 @@ export function registerUiSettings(uiSettings: UiSettingsServiceSetup) {
       description: 'Switches the Entity Store Engine to v2',
       schema: schema.boolean(),
       value: true,
+      requiresPageReload: false,
+      readonly: true,
+      readonlyMode: 'ui',
+    },
+    [FF_ENABLE_DYNAMIC_DEFINITIONS]: {
+      name: 'Enable dynamic entity definitions',
+      description:
+        'Enables the entity definitions API used to register Observability inventory entity types at runtime',
+      schema: schema.boolean(),
+      value: false,
       requiresPageReload: false,
       readonly: true,
       readonlyMode: 'ui',

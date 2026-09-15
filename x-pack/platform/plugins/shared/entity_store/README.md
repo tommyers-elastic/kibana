@@ -73,6 +73,48 @@ of a registered type name (e.g. `getEuidEsqlEvaluationFromDefinition`, `getEuidF
 `getEuidDslFilterBasedOnDocumentFromDefinition`, `getEuidSourceFieldsFromDefinition`). The type-name
 variants delegate to them via the built-in registry.
 
+### Dynamic entity types (registration)
+
+`EntityType` is any type name (`string`, validated by `entityTypeNameSchema`); the four Security
+types are the closed `BuiltInEntityType` enum (`ALL_BUILT_IN_ENTITY_TYPES`, `isBuiltInEntityType`).
+Built-ins are reserved: they are the only types with engines and cannot be created, replaced or
+deleted through the API. The deprecated `EntityType` value and `ALL_ENTITY_TYPES` remain aliases of
+the built-in set so existing validation keeps rejecting unknown names.
+
+Definitions are resolved per space by the server-side `EntityDefinitionRegistry`
+(`server/domain/definitions`), layered from three sources:
+
+| Source | How it is registered | Scope | Materialisation |
+| --- | --- | --- | --- |
+| `built_in` | code (`common/domain/definitions/registry.ts`) | global | `extraction` |
+| `code` | `entityStore.registerEntityDefinition(definition)` on the **setup** contract | global, in memory | `none` only |
+| `api` | `POST /internal/entity_store/definitions` | per space (saved object `entity-store-definition`) | `none` only |
+
+Other plugins read definitions through the **start** contract:
+
+```ts
+const registry = plugins.entityStore.getEntityDefinitionRegistry(spaceId);
+const record = await registry.getDefinition('k8s.deployment'); // EntityDefinitionRecord | undefined
+const live = await registry.getDefinitions({ mode: 'none' });
+euid.fromDefinition.getEuid(record.definition, doc); // 'k8s.deployment:payments/checkout-api'
+```
+
+`EntityDefinitionRecord` carries `definition` (with a per-space `id`: `security_<type>_<space>` for
+built-ins, `registered_<type>_<space>` otherwise), `source`, `version`, `createdAt` and `updatedAt`.
+Readers that derive ids should report the `version` they used: replacing a definition bumps it, and a
+replace that changes the identity (rejected with 409 unless `?force=true`) makes ids derived under the
+previous version incomparable. API definitions are cached per space in each Kibana node for 30s and
+invalidated immediately by writes on that node.
+
+The HTTP API (`/internal/entity_store/definitions`, `elastic-api-version: 2`) offers `GET` (list,
+`?mode=none|extraction`), `POST` (create, 201), `GET /{type}`, `PUT /{type}[?force=true]` and
+`DELETE /{type}`. The body is the definition without `id` (`entityDefinitionInputSchema`; unknown keys
+are rejected). It is gated on the `entityStore:dynamicDefinitionsEnabled` ui setting (API-only, off
+by default) and on the neutral **Entity definitions** Kibana feature (`read_entity_definitions` /
+`manage_entity_definitions`), not on the Security Solution privilege or on the store being installed
+in the space. Registering a type never creates an engine, component template, extraction task or
+install step; those remain driven by `getMaterialisedEntityTypes()` over the built-ins.
+
 ## Entity AI Summary — index privileges
 
 The Entity AI Summary is persisted to the entity **metadata** datastream

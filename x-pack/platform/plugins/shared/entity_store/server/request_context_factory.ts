@@ -25,6 +25,13 @@ import { ResolutionClient } from './domain/resolution';
 import { ResolutionRulesClient } from './domain/resolution/rules';
 import type { TelemetryReporter } from './telemetry/events';
 import { createWorkflowTriggerEmitter } from './workflow/create_workflow_trigger_emitter';
+import {
+  EntityDefinitionRegistry,
+  EntityDefinitionsClient,
+  EntityDefinitionsRepository,
+  type CodeDefinitionsRegistry,
+  type EntityDefinitionsCache,
+} from './domain/definitions';
 
 interface EntityStoreApiRequestHandlerContextDeps {
   coreSetup: EntityStoreCoreSetup;
@@ -33,6 +40,8 @@ interface EntityStoreApiRequestHandlerContextDeps {
   request: KibanaRequest;
   isServerless: boolean;
   analytics: TelemetryReporter;
+  definitionsCache: EntityDefinitionsCache;
+  codeDefinitions: CodeDefinitionsRegistry;
 }
 
 export async function createRequestHandlerContext({
@@ -42,6 +51,8 @@ export async function createRequestHandlerContext({
   request,
   isServerless,
   analytics,
+  definitionsCache,
+  codeDefinitions,
 }: EntityStoreApiRequestHandlerContextDeps): Promise<EntityStoreApiRequestHandlerContext> {
   const core = await context.core;
   const [coreStart, startPlugins] = await coreSetup.getStartServices();
@@ -104,6 +115,18 @@ export async function createRequestHandlerContext({
     globalStateClient,
   });
 
+  // Request-scoped saved objects client: saved-object authorization and the request space apply.
+  const definitionsRepository = new EntityDefinitionsRepository(
+    core.savedObjects.client,
+    namespace
+  );
+  const definitionsDeps = {
+    repository: definitionsRepository,
+    cache: definitionsCache,
+    codeDefinitions,
+    namespace,
+  };
+
   return {
     core,
     logger,
@@ -152,6 +175,8 @@ export async function createRequestHandlerContext({
     logsExtractionClient,
     historySnapshotClient,
     security: startPlugins.security,
+    entityDefinitionRegistry: new EntityDefinitionRegistry(definitionsDeps),
+    entityDefinitionsClient: new EntityDefinitionsClient({ ...definitionsDeps, logger }),
     namespace,
     analytics,
   };

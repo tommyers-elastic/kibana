@@ -33,6 +33,7 @@ import {
   registerCheckPrivileges,
 } from './apis';
 import type { EntityStorePluginRouter } from '../types';
+import { registerDefinitionsRoutes } from './apis/definitions';
 
 export function registerRoutes(router: EntityStorePluginRouter) {
   registerInstall(router);
@@ -60,4 +61,5 @@ export function registerRoutes(router: EntityStorePluginRouter) {
   registerGetMaintainers(router);
   registerInitMaintainers(router);
   registerRunMaintainer(router);
+  registerDefinitionsRoutes(router);
 }

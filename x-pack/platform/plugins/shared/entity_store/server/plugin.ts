@@ -42,6 +42,14 @@ import { registerTelemetry, createReportEvent } from './telemetry/events';
 import { registerEntityStoreUsageCollector } from './telemetry/usage_collector';
 import { automatedResolutionMaintainerConfig } from './domain/resolution/rules/maintainers/automated_resolution';
 import { createWorkflowTriggerEmitter } from './workflow/create_workflow_trigger_emitter';
+import {
+  CodeDefinitionsRegistry,
+  EntityDefinitionRegistry,
+  EntityDefinitionSavedObjectType,
+  EntityDefinitionsCache,
+  EntityDefinitionsRepository,
+} from './domain/definitions';
+import { registerEntityDefinitionsFeature } from './features';
 
 export class EntityStorePlugin
   implements
@@ -54,6 +62,8 @@ export class EntityStorePlugin
 {
   private readonly logger: Logger;
   private readonly isServerless: boolean;
+  private readonly definitionsCache = new EntityDefinitionsCache();
+  private readonly codeDefinitions = new CodeDefinitionsRegistry();
 
   constructor(initializerContext: PluginInitializerContext) {
     this.logger = initializerContext.logger.get();
@@ -83,6 +93,8 @@ export class EntityStorePlugin
           request,
           isServerless: this.isServerless,
           analytics: createReportEvent(core.analytics),
+          definitionsCache: this.definitionsCache,
+          codeDefinitions: this.codeDefinitions,
         })
     );
 
@@ -102,6 +114,10 @@ export class EntityStorePlugin
     core.savedObjects.registerType(LegacyRemoteLogExtractionStateType);
     core.savedObjects.registerType(LegacyCcsLogExtractionStateType);
     core.savedObjects.registerType(EntityResolutionRuleType);
+    core.savedObjects.registerType(EntityDefinitionSavedObjectType);
+
+    this.logger.debug('Registering the entity definitions feature');
+    registerEntityDefinitionsFeature(plugins.features);
 
     registerEntityMaintainerTask({
       taskManager: plugins.taskManager,
@@ -120,6 +136,7 @@ export class EntityStorePlugin
           core,
           analytics: createReportEvent(core.analytics),
         }),
+      registerEntityDefinition: (definition) => this.codeDefinitions.register(definition),
     };
   }
 
@@ -147,7 +164,16 @@ export class EntityStorePlugin
     });
 
     const logger = this.logger;
+    // Reads only use `find` with explicit namespaces, which the internal repository supports.
+    const internalSavedObjectsRepository = core.savedObjects.createInternalRepository();
     return {
+      getEntityDefinitionRegistry: (namespace) =>
+        new EntityDefinitionRegistry({
+          repository: new EntityDefinitionsRepository(internalSavedObjectsRepository, namespace),
+          cache: this.definitionsCache,
+          codeDefinitions: this.codeDefinitions,
+          namespace,
+        }),
       createCRUDClient: (esClient, namespace, getWorkflowsClient) => {
         const emitWorkflowTriggerEvent = getWorkflowsClient
           ? createWorkflowTriggerEmitter({
