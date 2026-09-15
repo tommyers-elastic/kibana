@@ -2,6 +2,69 @@
 
 Central place for Entities management and logs extraction.
 
+## Entity definitions: identity core and extensions
+
+An entity definition (`common/domain/definitions/entity_schema.ts`) is a **shared identity core**
+plus optional, independently validated **solution extensions**. The core is what the EUID compiler
+(`common/domain/euid/*`) consumes; each extension is read only by the code path that owns it.
+
+```ts
+{
+  type: 'k8s.deployment',                 // string; the built-in registry narrows it to the EntityType enum
+  name: '...',
+  identityField: { ... },                 // singleField | { euidRanking, documentsFilter, fieldEvaluations? }
+  materialisation?: { mode: 'extraction', fields, ... } | { mode: 'none' },
+  inventory?: { identity, sources, ... },
+}
+```
+
+| Part | File | Read by |
+| --- | --- | --- |
+| Identity core (`type`, `name`, `identityField`) | `identity_core_schema.ts` | EUID compiler (all five backends), extraction, CRUD |
+| Materialisation extension | `materialisation_schema.ts` | Logs extraction, component templates, CRUD field validation, single-document creation |
+| Inventory extension | `inventory_schema.ts` | Inventory query generation (later stage) |
+
+### Materialisation modes
+
+- `mode: 'extraction'` — the behaviour of the four built-in Security types (`host`, `user`,
+  `service`, `generic`). The extension carries `fields` (with retention), `fieldEvaluations`,
+  `postAggFilter`, `whenConditionTrueSetFieldsPreAgg` / `whenConditionTrueSetFieldsAfterStats`,
+  `entityTypeFallback` and `creatableFromSingleDocument`. The type gets a component template, an
+  entry in the latest/history index templates, an extraction task and install/start/stop steps, and
+  accepts CRUD writes.
+- `mode: 'none'` (or no `materialisation` at all) — the definition is never extracted into the
+  store. Nothing is installed or scheduled for it and the CRUD API rejects writes with a 400. The EUID
+  compiler still works fully for it (ids, filters, Painless, in-memory), given the definition object.
+
+`getMaterialisedEntityTypes()` in `registry.ts` is the list every install/template/task code path
+iterates; accessors such as `getMaterialisation()`, `getEntityFields()` and `getPostAggFilter()` in
+`entity_schema.ts` read the extension safely for either mode.
+
+### Identity tuple authoring form (inventory definitions)
+
+Observability definitions author identity as an ordered list of **literal, mapped field paths**:
+
+```ts
+inventory: { identity: ['kubernetes.namespace', 'kubernetes.deployment.name'], ... }
+```
+
+`identityTupleToIdentityField()` (`identity_tuple.ts`) normalises this into the store's identity
+form so the compiler needs no changes: one field becomes `{ singleField }`; several fields become one
+ranking composition joined by `/` plus a `documentsFilter` requiring every field. The resulting id is
+`<type>:<v1>/<v2>` (e.g. `k8s.deployment:payments/checkout-api`); values are not escaped, so a value
+containing `/` is ambiguous, exactly as `@` already is for `user`. Expressions, wildcards, quoting and
+whitespace are rejected: identity must push down to the index. The raw list is kept on
+`inventory.identity` because the query generator groups `BY` these fields, and `entitySchema` checks
+that `identityField` and `inventory.identity` agree. `buildInventoryEntityDefinition()` assembles a
+complete non-materialised definition from the authoring form.
+
+### Compiling a definition object
+
+Every EUID compiler entry point has a `*FromDefinition` variant that takes a definition object instead
+of a registered type name (e.g. `getEuidEsqlEvaluationFromDefinition`, `getEuidFromDefinition`,
+`getEuidDslFilterBasedOnDocumentFromDefinition`, `getEuidSourceFieldsFromDefinition`). The type-name
+variants delegate to them via the built-in registry.
+
 ## Entity AI Summary — index privileges
 
 The Entity AI Summary is persisted to the entity **metadata** datastream

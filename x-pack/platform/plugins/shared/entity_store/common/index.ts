@@ -118,6 +118,17 @@ export const ALL_ENTITY_TYPES = Object.values(EntityType.enum);
 
 export { ExtractionMode } from './domain/definitions/entity_schema';
 
+// Definition schema types (identity core + extensions). Type-only: the zod schemas live in
+// `common/domain/definitions/entity_schema` and must not be pulled into this page-load barrel.
+export type {
+  EntityIdentityCore,
+  EntityDefinition,
+  EntityDefinitionWithoutId,
+  MaterialisedEntityDefinition,
+  MaterialisationMode,
+  InventoryExtension,
+} from './domain/definitions/entity_schema';
+
 export type {
   Entity,
   HostEntity,
