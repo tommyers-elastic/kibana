@@ -47,7 +47,7 @@ function buildPreAggEvaluatedVarOverridesPreamble(
   whenRules: SetFieldsByCondition[],
   evaluatedVars: Map<string, string>
 ): string {
-  if (!whenRules?.length) {
+  if (whenRules.length === 0) {
     return '';
   }
   const parts: string[] = [];
