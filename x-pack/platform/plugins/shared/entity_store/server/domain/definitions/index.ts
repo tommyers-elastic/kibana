@@ -5,8 +5,13 @@
  * 2.0.
  */
 
-export { EntityDefinitionSavedObjectType, getEntityDefinitionSavedObjectId } from './saved_object';
-export type { StoredEntityDefinitionAttributes } from './saved_object';
+export {
+  createEntityDefinitionSavedObjectType,
+  getEntityDefinitionSavedObjectId,
+  getEntityDefinitionImportWarnings,
+  validateStoredEntityDefinition,
+} from './saved_object';
+export type { StoredEntityDefinitionAttributes, ReservedTypes } from './saved_object';
 export { EntityDefinitionsCache, DEFINITIONS_CACHE_TTL_MS } from './definitions_cache';
 export {
   EntityDefinitionsRepository,

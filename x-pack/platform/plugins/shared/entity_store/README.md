@@ -104,7 +104,11 @@ built-ins, `registered_<type>_<space>` otherwise), `source`, `version`, `created
 Readers that derive ids should report the `version` they used: replacing a definition bumps it, and a
 replace that changes the identity (rejected with 409 unless `?force=true`) makes ids derived under the
 previous version incomparable. API definitions are cached per space in each Kibana node for 30s and
-invalidated immediately by writes on that node.
+invalidated immediately by writes on that node. The saved objects are visible, importable and
+exportable in Saved Objects management (the generic saved objects HTTP API stays closed). Import
+bypasses the definitions API, so the registration rules are re-applied when a space's definitions are
+loaded: an imported object that names a reserved type, is materialised or fails the schema is imported
+with a warning and then ignored (logged) rather than served.
 
 The HTTP API (`/internal/entity_store/definitions`, `elastic-api-version: 2`) offers `GET` (list,
 `?mode=none|extraction`), `POST` (create, 201), `GET /{type}`, `PUT /{type}[?force=true]` and

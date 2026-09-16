@@ -5,6 +5,7 @@
  * 2.0.
  */
 
+import type { Logger } from '@kbn/logging';
 import type {
   EntityDefinition,
   EntityDefinitionWithoutId,
@@ -23,7 +24,10 @@ import type { EntityDefinitionRecord } from '../../../common/domain/definitions/
 import type { CodeDefinitionsRegistry } from './code_definitions_registry';
 import type { EntityDefinitionsCache } from './definitions_cache';
 import type { EntityDefinitionsRepository } from './definitions_repository';
-import type { StoredEntityDefinitionAttributes } from './saved_object';
+import {
+  validateStoredEntityDefinition,
+  type StoredEntityDefinitionAttributes,
+} from './saved_object';
 
 export interface GetDefinitionsOptions {
   /** Only definitions whose materialisation mode matches. */
@@ -39,6 +43,7 @@ interface EntityDefinitionRegistryDeps {
   cache: EntityDefinitionsCache;
   codeDefinitions: CodeDefinitionsRegistry;
   namespace: string;
+  logger?: Logger;
 }
 
 /**
@@ -51,12 +56,20 @@ export class EntityDefinitionRegistry {
   private readonly cache: EntityDefinitionsCache;
   private readonly codeDefinitions: CodeDefinitionsRegistry;
   private readonly namespace: string;
+  private readonly logger: Logger | undefined;
 
-  constructor({ repository, cache, codeDefinitions, namespace }: EntityDefinitionRegistryDeps) {
+  constructor({
+    repository,
+    cache,
+    codeDefinitions,
+    namespace,
+    logger,
+  }: EntityDefinitionRegistryDeps) {
     this.repository = repository;
     this.cache = cache;
     this.codeDefinitions = codeDefinitions;
     this.namespace = namespace;
+    this.logger = logger;
   }
 
   /** Whether `type` is one of the four static Security types. */
@@ -99,7 +112,18 @@ export class EntityDefinitionRegistry {
     if (cached) {
       return cached;
     }
-    const all = (await this.repository.findAll()).map(({ attributes }) => attributes);
+    // Objects may have been imported rather than written through the API, so the registration
+    // rules are re-applied on read; anything that fails them is ignored, not served.
+    const all = (await this.repository.findAll()).flatMap(({ id, attributes }) => {
+      const reason = validateStoredEntityDefinition(attributes, this.codeDefinitions);
+      if (reason === undefined) {
+        return [attributes];
+      }
+      this.logger?.warn(
+        `Ignoring stored entity definition "${attributes.type}" (saved object ${id}) in space "${this.namespace}": ${reason}`
+      );
+      return [];
+    });
     this.cache.set(this.namespace, all);
     return new Map(all.map((stored) => [stored.type, stored]));
   }

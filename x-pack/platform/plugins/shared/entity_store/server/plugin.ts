@@ -45,8 +45,8 @@ import { createWorkflowTriggerEmitter } from './workflow/create_workflow_trigger
 import {
   CodeDefinitionsRegistry,
   EntityDefinitionRegistry,
-  EntityDefinitionSavedObjectType,
   EntityDefinitionsCache,
+  createEntityDefinitionSavedObjectType,
   EntityDefinitionsRepository,
 } from './domain/definitions';
 import { registerEntityDefinitionsFeature } from './features';
@@ -114,7 +114,7 @@ export class EntityStorePlugin
     core.savedObjects.registerType(LegacyRemoteLogExtractionStateType);
     core.savedObjects.registerType(LegacyCcsLogExtractionStateType);
     core.savedObjects.registerType(EntityResolutionRuleType);
-    core.savedObjects.registerType(EntityDefinitionSavedObjectType);
+    core.savedObjects.registerType(createEntityDefinitionSavedObjectType(this.codeDefinitions));
 
     this.logger.debug('Registering the entity definitions feature');
     registerEntityDefinitionsFeature(plugins.features);
@@ -173,6 +173,7 @@ export class EntityStorePlugin
           cache: this.definitionsCache,
           codeDefinitions: this.codeDefinitions,
           namespace,
+          logger,
         }),
       createCRUDClient: (esClient, namespace, getWorkflowsClient) => {
         const emitWorkflowTriggerEvent = getWorkflowsClient

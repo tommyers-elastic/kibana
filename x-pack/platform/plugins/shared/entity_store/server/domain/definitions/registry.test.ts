@@ -7,6 +7,7 @@
 
 import type { SavedObjectsFindResponse } from '@kbn/core-saved-objects-api-server';
 import { savedObjectsClientMock } from '@kbn/core/server/mocks';
+import { loggerMock } from '@kbn/logging-mocks';
 import {
   k8sDeploymentInventoryDefinition,
   k8sNodeInventoryDefinition,
@@ -205,5 +206,46 @@ describe('EntityDefinitionRegistry', () => {
     now += 30_001;
     await registry.getDefinition('k8s.deployment');
     expect(soClient.find).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('EntityDefinitionRegistry with imported objects', () => {
+  it('ignores stored definitions that fail the registration rules and logs why', async () => {
+    const soClient = savedObjectsClientMock.create();
+    const logger = loggerMock.create();
+    const codeDefinitions = new CodeDefinitionsRegistry();
+    codeDefinitions.register(k8sNodeInventoryDefinition);
+    const valid = stored(k8sDeploymentInventoryDefinition);
+    const shadowsCode = stored(k8sNodeInventoryDefinition);
+    const materialised = stored({ ...hostEntityDefinition, type: 'host.copy' });
+    soClient.find.mockResolvedValue({
+      total: 3,
+      per_page: 500,
+      page: 1,
+      saved_objects: [valid, shadowsCode, materialised].map((attributes) => ({
+        id: `imported-${attributes.type}`,
+        type: ENTITY_DEFINITION_SAVED_OBJECT_TYPE,
+        attributes,
+        references: [],
+        score: 0,
+      })),
+    } as SavedObjectsFindResponse<StoredEntityDefinitionAttributes>);
+
+    const registry = new EntityDefinitionRegistry({
+      repository: new EntityDefinitionsRepository(soClient, NAMESPACE),
+      cache: new EntityDefinitionsCache(),
+      codeDefinitions,
+      namespace: NAMESPACE,
+      logger,
+    });
+
+    const live = await registry.getDefinitions({ mode: 'none' });
+    expect(live.map(({ definition, source }) => [definition.type, source])).toEqual([
+      ['k8s.node', 'code'],
+      ['k8s.deployment', 'api'],
+    ]);
+    expect(await registry.getDefinition('host.copy')).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('imported-host.copy'));
   });
 });

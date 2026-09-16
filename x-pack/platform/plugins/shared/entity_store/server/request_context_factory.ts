@@ -175,7 +175,7 @@ export async function createRequestHandlerContext({
     logsExtractionClient,
     historySnapshotClient,
     security: startPlugins.security,
-    entityDefinitionRegistry: new EntityDefinitionRegistry(definitionsDeps),
+    entityDefinitionRegistry: new EntityDefinitionRegistry({ ...definitionsDeps, logger }),
     entityDefinitionsClient: new EntityDefinitionsClient({ ...definitionsDeps, logger }),
     namespace,
     analytics,
