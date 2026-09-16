@@ -1,0 +1,340 @@
+# Writing entity inventory definitions
+
+## Tools
+
+Use the tools in this order; never guess field names or skip the preview.
+
+- `platform.core.execute_esql` (with `platform.core.list_indices`, `platform.core.get_index_mapping` and `platform.core.index_explorer` to find streams and fields): inspect the data first (§0) and quote what you found.
+- `observability.entity_inventory.list_types`: what types exist already, with identity, sources, metrics and attributes, and whether each is editable (`api`) or not (`built_in`, `code`).
+- `observability.entity_inventory.get_definition`: the full current document of one type, in the exact shape `save_definition` accepts.
+- `observability.entity_inventory.save_definition`: persist a definition (`type`) or an extension (`extends`) after the user has confirmed; `replace: true` to update an existing one, `force: true` only when the user accepts that a changed identity renames every entity id.
+- `observability.entity_inventory.preview_inventory`: always run it right after saving (§8) and read `queries[]`, `errors[]`, `unavailableColumns[]` and `provenance` back to the user.
+- `observability.entity_inventory.delete_definition`: remove a definition or a built-in's API extension, only on an explicit request.
+
+The HTTP routes mentioned below are what these tools call; use the tools, not the routes.
+
+A definition declares *what* identifies an entity and *what* to show for it. Kibana generates and
+runs the ES|QL; nothing is materialised. Every rule below comes from a measured behaviour of
+Elasticsearch and is enforced by the schema where it can be. Follow them exactly.
+
+## 0. Look at the data before writing anything
+
+Never author from field names you assume exist. You can run ES|QL: use it to establish the facts
+every later choice depends on, and quote what you found when you propose a definition.
+
+```esql
+-- 1. Which streams hold candidate documents, and do they carry the identity field?
+FROM logs-*, metrics-* METADATA _index
+| WHERE @timestamp > NOW() - 1 hour
+| STATS docs = COUNT(*), with_identity = COUNT(service.name), entities = COUNT_DISTINCT(service.name) BY _index
+| SORT docs DESC
+
+-- 2. What do the documents look like? Sample a few from each candidate stream. Documents have
+--    hundreds of fields: KEEP the ones you are investigating (identity, candidate metrics and
+--    attributes), or the sample is unreadable.
+FROM metrics-kubernetes.pod-* | SAMPLE 0.001 | KEEP @timestamp, kubernetes.pod.uid, kubernetes.pod.name, kubernetes.pod.cpu.usage.*, kubernetes.pod.memory.usage.* | LIMIT 5
+FROM logs-generic.otel-default | WHERE service.name IS NOT NULL | SAMPLE 0.01 | KEEP @timestamp, service.name, service.environment, log.level, kubernetes.namespace, body.text | LIMIT 5
+
+-- 3. Which fields are present on which documents (sparsity), and what values do they take?
+FROM metrics-kubernetes.pod-*,metrics-kubernetes.state_pod-* METADATA _index
+| WHERE @timestamp > NOW() - 1 hour
+| STATS docs = COUNT(*), cpu = COUNT(kubernetes.pod.cpu.usage.nanocores), phase = COUNT(kubernetes.pod.status.phase),
+        phases = VALUES(kubernetes.pod.status.phase) BY _index
+
+-- 4. Do two candidate sources describe the same entities? (overlap of identity values)
+FROM metrics-kubeletstatsreceiver.otel-default, metrics-kubernetes.pod-* METADATA _index
+| WHERE @timestamp > NOW() - 1 hour AND kubernetes.pod.uid IS NOT NULL
+| EVAL src = CASE(_index LIKE ".ds-metrics-kubernetes*", "ecs", "otel")
+| STATS sources = COUNT_DISTINCT(src) BY kubernetes.pod.uid
+| STATS entities = COUNT(*), in_both = COUNT(*) WHERE sources == 2
+
+-- 5. Do two pipelines report the same measurement in the same unit? Compare per entity.
+FROM metrics-kubeletstatsreceiver.otel-default, metrics-kubernetes.pod-*
+| WHERE @timestamp > NOW() - 1 hour AND kubernetes.pod.uid IS NOT NULL
+| STATS otel = AVG(k8s.pod.cpu.usage), ecs = AVG(kubernetes.pod.cpu.usage.nanocores) BY kubernetes.pod.uid
+| WHERE otel IS NOT NULL AND ecs IS NOT NULL | LIMIT 5
+```
+
+What to establish with these:
+
+- Which streams carry the identity field, on what share of their documents, and how many distinct
+  entities each contributes. This decides the index pattern (see §3).
+- Whether a field is on every document of a stream or only on one family (sparsity). This decides
+  whether a family needs its own source (§3, existence) and whether an attribute belongs at the
+  top level or per source (§5).
+- The value space of attribute fields (numbers vs keywords, enumerations) for `valueLabels` (§5).
+- Units and scale of metric fields across pipelines, by comparing values for the same entity (§4).
+- Whether a numeric field is a gauge, a counter or a histogram (counters and histograms are not
+  usable; see §4). `SAMPLE` plus the field names (`*.time`, `*.io`, `*.count` are typically
+  counters) and the values (monotonically increasing) tell you.
+
+Whether a pattern is served by the `TS` or the `FROM` engine is decided by Kibana from the index
+modes; the inventory preview (`_list`) reports the engine per source in `queries[]`, so run it once
+after registering and read it back rather than guessing. When you cannot see the data (no access,
+empty window), say so and mark the definition as unverified rather than inventing fields.
+
+## 1. Two kinds of document
+
+**A definition** creates a new entity type:
+
+```json
+{
+  "type": "k8s.pod",
+  "name": "Observability 'k8s.pod' inventory definition",
+  "identityField": { "singleField": "kubernetes.pod.uid" },
+  "materialisation": { "mode": "none" },
+  "inventory": {
+    "label": "K8s Pod",
+    "identity": ["kubernetes.pod.uid"],
+    "attributes": ["kubernetes.pod.name", "kubernetes.namespace", "kubernetes.node.name"],
+    "sources": [ ... ]
+  }
+}
+```
+
+- `type`: lowercase, dot/underscore/dash separated (`^[a-z0-9]+([._-][a-z0-9]+)*$`), max 128. It is
+  the entity id prefix (`k8s.pod:<uid>`). Never reuse the built-in names `host`, `user`, `service`,
+  `generic`.
+- `identityField` must agree with `inventory.identity`: one field gives `{ "singleField": f }`; a
+  tuple gives a ranking with one composition joined by `/` plus a `documentsFilter` requiring every
+  field (copy the shape from an existing composite definition such as `k8s.deployment`).
+- `materialisation` is always `{ "mode": "none" }` for inventory types.
+
+**An extension** attaches an inventory to one of the built-in Security types, keeping its identity
+and ids untouched:
+
+```json
+{ "extends": "service", "inventory": { "label": "Service", "attributes": [...], "sources": [...] } }
+```
+
+- Only `extends` and `inventory`; no `type`, no `identity`, no materialisation.
+- Identity comes from the built-in definition: `host` ranks `host.id`, then `host.name`, then
+  `host.hostname`; `service` is `service.name`; `user` ranks `user.id`, `user.name`... Attributes
+  may not be those fields.
+- A built-in type can never be redefined or duplicated: there is exactly one host type and one
+  service type. To show hosts or services in the inventory, always write an extension.
+
+Send either document to `POST /internal/entity_store/definitions` (create) or
+`PUT /internal/entity_store/definitions/{type}?force=true` (replace); `DELETE .../{type}` removes a
+definition or a built-in's extension. Validation errors come back as 400 with the exact problem.
+
+## 2. Identity
+
+- `identity` is an ordered list of **literal, mapped field paths** (no expressions, wildcards or
+  whitespace), 1 to 8 fields. Rows are grouped `BY` these raw fields and the entity id is built
+  from the grouped values afterwards. Never propose computing an id per document or from an
+  expression: it is 200x slower and does not push down.
+- Prefer a stable, unique key (`kubernetes.pod.uid`, `service.name`), not a display name. Use a
+  tuple only when the key is genuinely composite (`kubernetes.namespace` +
+  `kubernetes.deployment.name`).
+- Use canonical ECS names for structural fields (`kubernetes.pod.uid`, `kubernetes.node.name`,
+  `host.name`, `service.name`): the ECS<->OTel alias layer resolves them on OTel data streams, so
+  one definition spans both pipelines. Metric fields do **not** alias.
+- Every source must carry the identity fields on its documents. Logs carry `service.name`,
+  `kubernetes.pod.uid` and `host.name` when the collector adds resource attributes; check with a
+  quick query before declaring the source.
+- Different identifying keys are different types. Do not fold two identity schemes into one type.
+- For ranked built-in identities, every source should carry the top-ranked field (`host.id`),
+  otherwise the same machine gets one id per pipeline (`host:<id>` from ECS, `host:<name>` from
+  OTel). Fix that in ingest (OTel resource detection `host.id`), not in the definition.
+
+## 3. Sources: any telemetry data stream
+
+Each entry in `sources` binds the type to one index pattern. Sources can be metrics streams
+(`metrics-kubernetes.pod-*`, `metrics-service_transaction.1m.otel-default`), log streams
+(`logs-kubernetes.container_logs-default`), event streams (`logs-k8seventsreceiver.otel-default`)
+or any other stream whose documents carry the identity fields.
+
+```json
+{
+  "index": "metrics-kubernetes.pod-*",
+  "filter": "metricset.name == \"pod\"",
+  "metrics": [ { "name": "cpu_cores", "field": "kubernetes.pod.cpu.usage.nanocores", "agg": "avg", "scale": 1e-9, "unit": "cores" } ],
+  "attributes": [ { "name": "phase", "field": "kubernetes.pod.status.phase", "valueLabels": { "Running": "running" } } ]
+}
+```
+
+- `index`: one pattern per source, letters, digits, `. _ - * ? :` only. Choosing between a wide
+  pattern (`logs-*`) and a specific stream (`logs-kubernetes.container_logs-default`) is a trade
+  between coverage and cost, and the cost model is:
+  - A source reads the documents in the window that pass its **pushed-down predicates**: the
+    identity presence check (`service.name IS NOT NULL`), the `filter`, and under `TS` the presence
+    of the declared value-metric fields. Streams that match the pattern but whose documents fail
+    those predicates cost almost nothing.
+  - So a wide pattern is cheap when the identity field is **sparse** across the matched streams
+    (most log streams carry no `service.name`: measured `logs-*` at 5 ms against 3 ms for one
+    stream, while finding services the single stream never sees) and expensive when it is
+    **dense** (every metric document carries `kubernetes.pod.uid`, so `metrics-*` would read every
+    metric document in the window rather than the one family you want).
+  - Coverage argues for wide when the entity's documents can land in several streams you cannot
+    enumerate (services logging through different receivers); specificity argues for the exact
+    stream when the family is known and the identity is dense, or when other streams would add
+    documents you do not want counted (a `count` over `logs-*` includes every stream's lines).
+  Run query 1 from §0, look at `with_identity` per stream, and choose per source; state the
+  reason in the definition's `name` or in your answer.
+- `filter`: the only ES|QL an author writes: a single boolean expression narrowing the source to
+  the documents of this type (`k8s.pod.phase IS NOT NULL`, `metricset.name == "pod"`,
+  `stream == "stderr"`). No pipes, comments or semicolons. It is the biggest performance lever when
+  a stream mixes families, and the way to build "error volume" style metrics (a second source on
+  the same stream with a narrower filter and its own `count`).
+- Engine is chosen per source from the indices behind the pattern: all `time_series` gives `TS`
+  (cheap: it only reads documents carrying the declared value metrics); anything else, including
+  `logsdb` log streams, gives `FROM` (cost proportional to every matching document in the window).
+  Keep TSDB and non-TSDB data in separate sources.
+- The same pattern may appear in several sources with different filters (`logs-*` once for
+  volume, once with `stream == "stderr"` for stderr volume); each source contributes its own
+  columns and they merge by name.
+- 1 to 16 sources.
+
+### Existence: the most important rule
+
+Existence is decided **per source**, and the type's entity set is the **union**:
+
+- A source that declares **value metrics** (`avg`, `min`, `max`, `sum`, `last`) lists only the
+  entities that reported at least one of those metric fields in the window. This is how the `TS`
+  engine works (it only reads documents carrying the referenced metric fields) and Kibana writes
+  the same rule into the query so `FROM` and the count agree. `count`, `count_distinct`, attributes
+  and `last_seen` never widen a source's view.
+- A source **without value metrics** (attribute-only, `count`-only, or `count_distinct`-only) lists
+  every entity that has any document in the window. Log sources are usually this kind: "the
+  service logged something" is existence.
+
+Consequences when authoring:
+
+- An entity that exists but reports no metrics (a pending or finished pod, a service that only
+  logs) only appears through a source without value metrics. Declare the family that knows about
+  it as its **own metric-less source** (`metrics-kubernetes.state_pod-*` with the phase attribute;
+  the container log stream with a `count`), never merged into a metrics source's filter.
+- Metrics live in **one document per metric group** on OTel streams (cpu in one document, memory
+  in another, all with the resource attributes). Declaring cpu and memory means "reported cpu or
+  memory"; an entity with only volume documents is not listed by that source.
+- A type whose sources all declare value metrics shows only reporting entities. That is often what
+  a metrics inventory wants, but say so explicitly, and add a log or state source when silent
+  entities matter.
+
+## 4. Metrics
+
+```json
+{ "name": "cpu_cores", "field": "k8s.pod.cpu.usage", "agg": "avg", "unit": "cores" }
+{ "name": "log_lines", "field": "@timestamp", "agg": "count", "unit": "count" }
+{ "name": "latency_avg_us", "field": "transaction.duration.summary", "agg": "avg", "unit": "us" }
+```
+
+- `name`: lowercase identifier (`^[a-z][a-z0-9_]*$`, max 64); it becomes the output column. Unique
+  within a source across metrics and attributes, and never equal to an identity field, a top-level
+  attribute or an attribute name of another source.
+- `field`: a literal, mapped field. Value aggregations need a numeric or `aggregate_metric_double`
+  field (APM `transaction.duration.summary`, `event.success_count` work with `avg`/`sum`).
+  Counters (`*.cpu.time`, `network.io`) are **not supported** (they need rate functions); use
+  gauges. Histogram fields are not supported.
+- `agg`:
+  - `avg`, `min`, `max`, `sum`: window aggregates, identical under both engines.
+  - `count`: documents carrying the field per entity in the window. Use `@timestamp` for "all
+    documents" (log lines, events). Combine with a source `filter` for a subset (stderr lines,
+    warning events).
+  - `count_distinct`: distinct values of the field per entity (`kubernetes.pod.name` per
+    deployment or service).
+  - `last`: the newest sample in the window ("current value").
+- **Same name = same measurement in the same unit.** When two sources report the same thing from
+  different pipelines, give the metric the **same `name`** so it merges into one column, the same
+  `agg`, and the same `unit`. Use `scale` (a multiplier applied after aggregation) to normalise:
+  ECS `kubernetes.pod.cpu.usage.nanocores` with `"scale": 1e-9` next to OTel `k8s.pod.cpu.usage` in
+  cores; ECS `kubernetes.pod.memory.usage.bytes` next to OTel `k8s.pod.memory.usage`, both bytes.
+  The schema rejects shared names with different `agg` or `unit`. Do not share a name for genuinely
+  different measurements (`cpu.usage.node.pct` is a fraction of the node, not cores).
+- Always declare `unit` (`cores`, `bytes`, `percent`, `count`, `ms`, `us`); it is shown in the UI
+  and enables the consistency check. `scale` does not apply to `count` or `count_distinct`.
+- When several sources supply the same metric for one entity, the **first source in definition
+  order** wins. Order sources by trust (the primary pipeline first). A null never masks a value
+  from a later source, and the response's `provenance` says which source each value came from.
+- `count` and `count_distinct` do not make an entity exist in a source that also has value metrics
+  (see §3); on their own they make the source list every identity occurrence.
+
+## 5. Attributes
+
+- Top-level `attributes`: literal field paths whose canonical name resolves on every source
+  (`kubernetes.pod.name`, `kubernetes.namespace`, `host.os.name`, `service.environment`). The
+  column is named after the field. Resolved to the newest observed value; the newest source wins
+  when several have one. A field mapped nowhere in a source is reported as unavailable for that
+  source and is null there; that is fine when other sources carry it.
+- Per-source `attributes: [{ name, field, valueLabels? }]` for fields whose name or value space
+  differs per pipeline, or that only one source has (namespace from container logs on a service).
+  The same `name` across sources merges into one column: OTel `k8s.pod.phase` is a number
+  (1 pending, 2 running, 3 succeeded, 4 failed, 5 unknown), ECS `kubernetes.pod.status.phase` is a
+  keyword (`Running`); map both with `valueLabels` to the same labels (`"2": "running"`,
+  `"Running": "running"`). Unlabelled raw values pass through as strings; nothing is hidden.
+- Attributes are always fetched as the newest non-null value (`LAST(f, @timestamp) WHERE f IS NOT
+  NULL`); a field missing from an entity's newest document is fine. Each attribute costs roughly
+  3 ms per million scanned documents at scale: keep lists to what the table needs (up to 64).
+- Never list an identity field as an attribute.
+
+## 6. Performance rules that shape a definition
+
+- Lists are **liveness queries** over short windows (the UI defaults to 15 minutes, a few times
+  the collection interval). Detail views may use long windows because identity equality pushes
+  down. Do not design a type that only makes sense over days of data.
+- ES|QL returns at most 10,000 rows per source query. Keep the live set of a type under that with
+  short windows and the right identity granularity; the count stays exact regardless.
+- `TS` sources cost in proportion to the documents that carry the declared value metrics; every
+  extra value metric adds its documents to the scan. `FROM` sources (logs and other non-TSDB
+  streams) cost in proportion to every document in the window that carries the identity field and
+  passes the filter, regardless of how many streams the pattern matches; a filter that only some
+  streams can satisfy is fine (unmapped fields nullify). Declare the metrics the table shows, not
+  every field available.
+- One definition per identity scheme; per-pipeline differences belong in per-source `metrics` and
+  `attributes`, not in separate types.
+
+## 7. Worked example: a service inventory from APM metrics and container logs
+
+```json
+{
+  "extends": "service",
+  "inventory": {
+    "label": "Service",
+    "attributes": ["service.environment", "service.language.name"],
+    "sources": [
+      { "index": "metrics-service_transaction.1m.otel-default",
+        "metrics": [
+          { "name": "latency_avg_us", "field": "transaction.duration.summary", "agg": "avg", "unit": "us" },
+          { "name": "transactions", "field": "event.success_count", "agg": "sum", "unit": "count" } ] },
+      { "index": "logs-*",
+        "metrics": [
+          { "name": "log_lines", "field": "@timestamp", "agg": "count", "unit": "count" },
+          { "name": "pods", "field": "kubernetes.pod.name", "agg": "count_distinct", "unit": "count" } ],
+        "attributes": [ { "name": "namespace", "field": "kubernetes.namespace" } ] },
+      { "index": "logs-*", "filter": "stream == \"stderr\"",
+        "metrics": [ { "name": "stderr_lines", "field": "@timestamp", "agg": "count", "unit": "count" } ] }
+    ]
+  }
+}
+```
+
+A service exists if APM saw a transaction **or** it logged a line anywhere: the APM source lists
+services that reported latency, the two `logs-*` sources list every service that logged, whichever
+stream the log landed in (`stream` and `kubernetes.namespace` only exist on container logs and
+nullify elsewhere, which is fine). `logs-*` was chosen here because §0 showed `service.name` on
+two of seven log streams (sparse identity, cheap to go wide) and one service present only in the
+filelog stream (coverage); a type whose logs are known to live in one stream would name it. Services present only
+in logs get null latency; services present only in APM get null log volume. Provenance shows
+which source supplied each value.
+
+## 8. Checklist before saving
+
+0. You looked at the data (§0) and every field below appears in what you saw.
+1. `type` is new, lowercase and not a built-in name, or the document is an `extends` extension.
+2. `identity` fields are literal, mapped, stable, present on every source, and `identityField`
+   mirrors them.
+3. Every source names one pattern chosen on the identity's density and the coverage needed (§3),
+   with the evidence from §0; filters are single boolean expressions.
+4. Every family that should make an entity exist without metrics (state, logs, events) has its own
+   source without value metrics.
+5. Metrics: value fields are gauges or APM summaries, `agg` and `unit` set; document volumes use
+   `count` on `@timestamp`; shared names across sources share `agg` and `unit` and use `scale`
+   where units differ; sources are ordered by trust.
+6. Attributes: canonical ECS names at top level; per-source variants share a `name` and use
+   `valueLabels` to unify value spaces.
+7. No name collisions between identity, attributes and metrics.
+8. Register with `POST /internal/entity_store/definitions`, then check
+   `POST /internal/entity_inventory/entities/{type}/_list` over the last 15 minutes: expect rows
+   from every source in `queries[]`, no `errors[]`, `unavailableColumns[]` only where a pipeline
+   genuinely lacks a field, and `provenance` showing values coming from the intended sources.

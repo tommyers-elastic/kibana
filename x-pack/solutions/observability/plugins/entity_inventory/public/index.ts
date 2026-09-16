@@ -7,9 +7,17 @@
 
 import type { PluginInitializer } from '@kbn/core/public';
 import { EntityInventoryPlugin } from './plugin';
-import type { EntityInventoryPublicSetup, EntityInventoryPublicStart } from './plugin';
+import type {
+  EntityInventoryPublicSetup,
+  EntityInventoryPublicStart,
+  EntityInventoryPublicStartDependencies,
+} from './plugin';
 
-export type { EntityInventoryPublicSetup, EntityInventoryPublicStart };
+export type {
+  EntityInventoryPublicSetup,
+  EntityInventoryPublicStart,
+  EntityInventoryPublicStartDependencies,
+};
 
 export const plugin: PluginInitializer<
   EntityInventoryPublicSetup,

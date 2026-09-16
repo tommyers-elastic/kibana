@@ -6,8 +6,9 @@
  */
 
 import React from 'react';
-import { EuiPageTemplate } from '@elastic/eui';
+import { EuiButtonEmpty, EuiPageTemplate } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
+import type { EntityDefinitionRecord } from '@kbn/entity-store/common';
 import type { DefinitionDocument } from '../lib/editable_document';
 import type { InventoryApi } from '../lib/inventory_api';
 import { getRecordKind } from '../lib/record_summary';
@@ -27,6 +28,8 @@ interface DefinitionDetailProps {
   onSave: (document: DefinitionDocument) => Promise<void>;
   onDelete: (type: string) => Promise<void>;
   onAddExtension: (type: string) => void;
+  /** Opens the AI conversation about this record; absent when Agent Builder is unavailable. */
+  onAskAi?: (record: EntityDefinitionRecord) => void;
 }
 
 const definitionsCrumb = i18n.translate('xpack.entityInventory.detail.breadcrumb', {
@@ -54,6 +57,7 @@ export const DefinitionDetail = ({
   onSave,
   onDelete,
   onAddExtension,
+  onAskAi,
 }: DefinitionDetailProps) => {
   const record = mode.kind === 'edit' ? mode.record : undefined;
   const title = mode.kind === 'new' ? newTitle(mode) : mode.record.definition.type;
@@ -86,7 +90,26 @@ export const DefinitionDetail = ({
         breadcrumbs={[{ text: definitionsCrumb, onClick: onBack }, { text: title }]}
         pageTitle={title}
         description={record?.definition.name}
-        rightSideItems={record !== undefined ? [<KindBadge kind={getRecordKind(record)} />] : []}
+        rightSideItems={
+          record !== undefined
+            ? [
+                ...(onAskAi !== undefined
+                  ? [
+                      <EuiButtonEmpty
+                        data-test-subj="entityInventoryDefinitionDetailAskAiButton"
+                        iconType="sparkles"
+                        onClick={() => onAskAi(record)}
+                      >
+                        {i18n.translate('xpack.entityInventory.detail.askAiButton', {
+                          defaultMessage: 'Ask AI about this definition',
+                        })}
+                      </EuiButtonEmpty>,
+                    ]
+                  : []),
+                <KindBadge kind={getRecordKind(record)} />,
+              ]
+            : []
+        }
         tabs={tabs}
       />
       <EuiPageTemplate.Section paddingSize="l">

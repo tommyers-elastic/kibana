@@ -22,6 +22,61 @@ an API extension and code-registered records are read-only. A preview section ru
 `POST /internal/entity_inventory/entities/{type}/_list` over a 15m / 1h / 6h window for any type
 returned by `GET /internal/entity_inventory/types` and shows the rows, timings and generated ES|QL.
 
+## AI-assisted authoring
+
+When the `agentBuilder` plugin is present (it is an optional dependency), the plugin wires a
+dedicated authoring assistant into Agent Builder. Everything lives under `server/agent_builder/`.
+
+- **Skill** `observability.entity-inventory-definitions` (`skills/observability/entity-inventory-definitions`):
+  the authoring rules from `entity_inventory_definition_authoring_skill.md` at the repository root
+  (`skills/definition_authoring/skill.md.text`, with a "Tools" section mapping each step to a tool;
+  the frontmatter description is `description.text`). It exposes the tools below plus the platform
+  data exploration tools (`platform.core.execute_esql`, `list_indices`, `get_index_mapping`,
+  `index_explorer`).
+- **Tools** (`tools/`, ids prefixed `observability.entity_inventory.`, all allow-listed in
+  `@kbn/agent-builder-server/allow_lists`):
+
+  | tool | purpose |
+  | --- | --- |
+  | `list_types` | inventory types of the space: label, source, editability, identity, sources, metric and attribute names (`includeWithoutInventory` adds bare built-ins) |
+  | `get_definition` | the record of one type as the document `save_definition` accepts back (API definition without `id`, or `{ extends, inventory }`), or a not-found error |
+  | `preview_inventory` | runs the list for `[now - minutes, now]` and returns total, rows, columns, per-query engine / took / documents / ES\|QL, errors, unavailable columns and provenance; a clear error when the inventory ui setting is off |
+  | `save_definition` | validates with the store's `entityDefinitionsApiBodySchema` (issues come back as a result, nothing is written), then `create` or `replace` (with `force` for identity changes) through the store's request-scoped `EntityDefinitionsClient`; asks the user to confirm with a summary of type, sources and metrics |
+  | `delete_definition` | deletes a definition or a built-in's API extension; destructive, always confirmed |
+
+  Store errors are mapped to `{ kind, message, hint }` (`validation`, `not_found`, `conflict`,
+  `disabled` for the `entityStore:dynamicDefinitionsEnabled` setting, `forbidden` for the
+  `entityInventory:enabled` setting) so the agent knows what to do next.
+- **Agent** `observability.entity-inventory-definitions` ("Entity definition author") of the type
+  `observability.entity-inventory-definitions-type`. The type carries the configuration
+  (instructions, the tools above, the skill, no Elastic capabilities), so changes ship with code;
+  the persisted agent is an empty delta ensured in the `default` space at start
+  (`agents.ensure`, create-if-absent, failures are logged and skipped).
+- **Entry points** in `/app/entityInventoryDefinitions`: "Create with AI" on the definitions list
+  and "Ask AI about this definition" on a definition's detail page, both opening an `EuiFlyout`
+  with `agentBuilder.EmbeddableConversation` (agent above, session tag
+  `entity-inventory-definitions`; the detail action starts a new conversation seeded with the
+  current document). The list reloads when the flyout closes. Both are hidden when the
+  `agentBuilder` browser plugin is absent.
+- **Model management**: when `searchInferenceEndpoints` is present, the plugin registers the
+  Stack Management > Model Management > Feature Settings cards "Entity inventory"
+  (`observability_entity_inventory`) and "Definition authoring"
+  (`observability_entity_inventory_definition_authoring`, `chat_completion`, Agent Builder's
+  recommended endpoints; feature ids may not contain dots).
+
+### Known gaps
+
+- **The model selected under "Definition authoring" is not used yet.** Agent Builder resolves the
+  model of a conversation from the connector the user picks in the UI, the Gen AI default connector
+  settings, and its own `agent_builder` feature (`resolveSelectedConnectorId`); an agent's
+  configuration has no model or connector binding (`connector_ids` scopes data source connectors
+  for SML search, not the LLM), and agent types cannot contribute one. The feature exists so the
+  card is there; binding it needs an Agent Builder change (per-agent connector resolution).
+- The agent is ensured in the `default` space only.
+- Prototype: the store's `getEntityDefinitionsClient(request)` checks the dynamic definitions
+  setting and saved-object authorization but not the `manage_entity_definitions` Kibana privilege;
+  Agent Builder's own authorization applies to the tool user.
+
 ## Routes (internal, unversioned; send `x-elastic-internal-origin: kibana`)
 
 | route | purpose |

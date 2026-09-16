@@ -9,6 +9,7 @@ import { forbidden } from '@hapi/boom';
 import type { KibanaRequest, Logger, Plugin, PluginInitializerContext } from '@kbn/core/server';
 import { registerRoutes } from '@kbn/server-route-repository';
 import { ENTITY_INVENTORY_ENABLED_SETTING } from '../common';
+import { ensureAgentSafe, registerAgentBuilder, registerInferenceFeatures } from './agent_builder';
 import type { EntityInventoryConfig } from './config';
 import { InventoryService, SourceMetadataResolver } from './inventory/executor';
 import { entityInventoryRouteRepository } from './routes';
@@ -22,6 +23,9 @@ import { registerUiSettings } from './ui_settings';
 
 export const INVENTORY_DISABLED_MESSAGE = `The entity inventory API is not enabled (ui setting "${ENTITY_INVENTORY_ENABLED_SETTING}" is off)`;
 
+/** The agent is installed in the default space for the prototype; other spaces get it on first use of the UI. */
+const AGENT_SPACE_ID = 'default';
+
 export class EntityInventoryPlugin
   implements Plugin<void, void, EntityInventorySetupDependencies, EntityInventoryStartDependencies>
 {
@@ -34,11 +38,11 @@ export class EntityInventoryPlugin
     this.metadata = new SourceMetadataResolver(sourceMetadataCacheTtlSeconds * 1000);
   }
 
-  public setup(core: EntityInventoryCoreSetup, _plugins: EntityInventorySetupDependencies) {
+  public setup(core: EntityInventoryCoreSetup, plugins: EntityInventorySetupDependencies) {
     registerUiSettings(core.uiSettings);
 
     const getInventoryService = async (request: KibanaRequest): Promise<InventoryService> => {
-      const [coreStart, plugins] = await core.getStartServices();
+      const [coreStart, startPlugins] = await core.getStartServices();
       const soClient = coreStart.savedObjects.getScopedClient(request);
       const enabled = await coreStart.uiSettings
         .asScopedToClient(soClient)
@@ -46,10 +50,10 @@ export class EntityInventoryPlugin
       if (!enabled) {
         throw forbidden(INVENTORY_DISABLED_MESSAGE);
       }
-      const spaceId = plugins.spaces?.spacesService.getSpaceId(request) ?? 'default';
+      const spaceId = startPlugins.spaces?.spacesService.getSpaceId(request) ?? 'default';
       return new InventoryService({
         esClient: coreStart.elasticsearch.client.asScoped(request).asCurrentUser,
-        registry: plugins.entityStore.getEntityDefinitionRegistry(spaceId),
+        registry: startPlugins.entityStore.getEntityDefinitionRegistry(spaceId),
         metadata: this.metadata,
         logger: this.logger,
       });
@@ -62,9 +66,43 @@ export class EntityInventoryPlugin
       logger: this.logger,
       runDevModeChecks: false,
     });
+
+    if (plugins.agentBuilder) {
+      registerAgentBuilder({
+        agentBuilder: plugins.agentBuilder,
+        logger: this.logger,
+        deps: {
+          logger: this.logger,
+          getInventoryService,
+          getDefinitionRegistry: async (spaceId) => {
+            const [, startPlugins] = await core.getStartServices();
+            return startPlugins.entityStore.getEntityDefinitionRegistry(spaceId);
+          },
+          getDefinitionsClient: async (request) => {
+            const [, startPlugins] = await core.getStartServices();
+            return startPlugins.entityStore.getEntityDefinitionsClient(request);
+          },
+        },
+      });
+    }
+
+    if (plugins.searchInferenceEndpoints) {
+      registerInferenceFeatures({
+        searchInferenceEndpoints: plugins.searchInferenceEndpoints,
+        logger: this.logger,
+      });
+    }
   }
 
-  public start(_core: EntityInventoryCoreStart, _plugins: EntityInventoryStartDependencies) {}
+  public start(_core: EntityInventoryCoreStart, plugins: EntityInventoryStartDependencies) {
+    if (plugins.agentBuilder) {
+      void ensureAgentSafe({
+        agentBuilder: plugins.agentBuilder,
+        spaceId: AGENT_SPACE_ID,
+        logger: this.logger,
+      });
+    }
+  }
 
   public stop() {
     this.metadata.clear();

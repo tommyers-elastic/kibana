@@ -47,6 +47,12 @@ export const AGENT_BUILDER_BUILTIN_TOOLS = [
   `${internalNamespaces.observability}.get_runtime_metrics`,
   `${internalNamespaces.observability}.get_logs`,
   `${internalNamespaces.observability}.get_apm_correlations`,
+  // Observability – Entity inventory (definition authoring)
+  `${internalNamespaces.observability}.entity_inventory.list_types`,
+  `${internalNamespaces.observability}.entity_inventory.get_definition`,
+  `${internalNamespaces.observability}.entity_inventory.preview_inventory`,
+  `${internalNamespaces.observability}.entity_inventory.save_definition`,
+  `${internalNamespaces.observability}.entity_inventory.delete_definition`,
 
   // ML anomaly detection (Agent Builder skill tools)
   `${internalNamespaces.ml}.ad_get_job_info`,
@@ -164,6 +170,7 @@ export const AGENT_BUILDER_AGENT_TYPES = [
   `${internalNamespaces.platformSignificantEvents}.discovery-type`,
   `${internalNamespaces.security}.alertzero-type`,
   `${internalNamespaces.platformSignificantEvents}.feature-identification-type`,
+  `${internalNamespaces.observability}.entity-inventory-definitions-type`,
 ] as const;
 
 export type AgentBuilderAgentType = (typeof AGENT_BUILDER_AGENT_TYPES)[number];
@@ -258,6 +265,7 @@ export const AGENT_BUILDER_BUILTIN_SKILLS = [
   'observability.investigation',
   'observability.service-map',
   'observability.investigate-service-map',
+  'observability.entity-inventory-definitions',
 
   // ML
   `${internalNamespaces.ml}.anomaly-detection`,

@@ -15,9 +15,11 @@ import {
   useGeneratedHtmlId,
 } from '@elastic/eui';
 import type { CoreStart } from '@kbn/core/public';
+import type { AgentBuilderPluginStart } from '@kbn/agent-builder-browser';
 import type { EntityDefinitionRecord } from '@kbn/entity-store/common';
 import { i18n } from '@kbn/i18n';
 import { KbnDangerCallout } from '@kbn/ui-callout';
+import { buildAskAiMessage } from '../lib/ask_ai_message';
 import { createDefinitionsApi } from '../lib/definitions_api';
 import {
   getDocumentType,
@@ -27,12 +29,17 @@ import {
 } from '../lib/editable_document';
 import { describeHttpError, type DescribedError } from '../lib/http_error';
 import { createInventoryApi } from '../lib/inventory_api';
+import {
+  AuthoringConversationFlyout,
+  type AuthoringConversation,
+} from './authoring_conversation_flyout';
 import { DefinitionDetail, type DetailTab } from './definition_detail';
 import type { EditorMode } from './definition_editor';
 import { DefinitionsTable } from './definitions_table';
 
 interface DefinitionsAppProps {
   core: CoreStart;
+  agentBuilder?: AgentBuilderPluginStart;
 }
 
 type View =
@@ -42,7 +49,7 @@ type View =
 
 const LIST_VIEW: View = { name: 'list' };
 
-export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
+export const DefinitionsApp = ({ core, agentBuilder }: DefinitionsAppProps) => {
   const { http, notifications } = core;
   const definitionsApi = useMemo(() => createDefinitionsApi(http), [http]);
   const inventoryApi = useMemo(() => createInventoryApi(http), [http]);
@@ -54,6 +61,7 @@ export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
   const [view, setView] = useState<View>(LIST_VIEW);
   const [pendingDelete, setPendingDelete] = useState<EntityDefinitionRecord | undefined>();
   const [isDeleting, setIsDeleting] = useState(false);
+  const [conversation, setConversation] = useState<AuthoringConversation | undefined>();
   const confirmTitleId = useGeneratedHtmlId({ prefix: 'entityInventoryDeleteFromList' });
 
   const refresh = useCallback(async () => {
@@ -81,6 +89,28 @@ export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
 
   const openDetail = (type: string, tab: DetailTab = 'definition') =>
     setView({ name: 'detail', type, tab });
+
+  // The agent may have created or changed definitions; reload once the conversation closes.
+  const closeConversation = async () => {
+    setConversation(undefined);
+    await refresh();
+  };
+  const askAiAbout = (record: EntityDefinitionRecord) => {
+    const { type } = record.definition;
+    setConversation({
+      kind: 'ask',
+      type,
+      initialMessage: buildAskAiMessage(type, getEditability(record).document),
+    });
+  };
+  const conversationFlyout =
+    agentBuilder !== undefined && conversation !== undefined ? (
+      <AuthoringConversationFlyout
+        agentBuilder={agentBuilder}
+        conversation={conversation}
+        onClose={closeConversation}
+      />
+    ) : null;
   const startNew = (template: TemplateKind, extendsType?: string) =>
     setView({ name: 'create', template, extendsType });
 
@@ -167,22 +197,26 @@ export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
         ? `new:${detailMode.template}:${detailMode.extendsType ?? ''}`
         : `edit:${detailMode.record.definition.type}:${detailMode.record.updatedAt ?? ''}`;
     return (
-      <DefinitionDetail
-        key={key}
-        mode={detailMode}
-        tab={view.name === 'detail' ? view.tab : 'definition'}
-        isPreviewAvailable={
-          detailRecord !== undefined && previewTypes.includes(detailRecord.definition.type)
-        }
-        inventoryApi={inventoryApi}
-        onTabChange={(tab) =>
-          detailRecord !== undefined && openDetail(detailRecord.definition.type, tab)
-        }
-        onBack={() => setView(LIST_VIEW)}
-        onSave={handleSave}
-        onDelete={handleDeleteFromDetail}
-        onAddExtension={(type) => startNew('extension', type)}
-      />
+      <>
+        <DefinitionDetail
+          key={key}
+          mode={detailMode}
+          tab={view.name === 'detail' ? view.tab : 'definition'}
+          isPreviewAvailable={
+            detailRecord !== undefined && previewTypes.includes(detailRecord.definition.type)
+          }
+          inventoryApi={inventoryApi}
+          onTabChange={(tab) =>
+            detailRecord !== undefined && openDetail(detailRecord.definition.type, tab)
+          }
+          onBack={() => setView(LIST_VIEW)}
+          onSave={handleSave}
+          onDelete={handleDeleteFromDetail}
+          onAddExtension={(type) => startNew('extension', type)}
+          onAskAi={agentBuilder !== undefined ? askAiAbout : undefined}
+        />
+        {conversationFlyout}
+      </>
     );
   }
 
@@ -197,9 +231,23 @@ export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
             'Entity definitions and built-in inventory extensions registered in this space. Open one to edit its JSON or preview what the inventory returns.',
         })}
         rightSideItems={[
+          ...(agentBuilder !== undefined
+            ? [
+                <EuiButton
+                  data-test-subj="entityInventoryDefinitionsAppCreateWithAiButton"
+                  fill
+                  iconType="sparkles"
+                  onClick={() => setConversation({ kind: 'create' })}
+                >
+                  {i18n.translate('xpack.entityInventory.app.createWithAiButton', {
+                    defaultMessage: 'Create with AI',
+                  })}
+                </EuiButton>,
+              ]
+            : []),
           <EuiButton
             data-test-subj="entityInventoryDefinitionsAppNewDefinitionButton"
-            fill
+            fill={agentBuilder === undefined}
             iconType="plus"
             onClick={() => startNew('definition')}
           >
@@ -286,6 +334,7 @@ export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
           </p>
         </EuiConfirmModal>
       )}
+      {conversationFlyout}
     </EuiPageTemplate>
   );
 };

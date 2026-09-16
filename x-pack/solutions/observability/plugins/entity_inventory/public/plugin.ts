@@ -7,6 +7,7 @@
 
 import type { AppMountParameters, CoreSetup, CoreStart, Plugin } from '@kbn/core/public';
 import { DEFAULT_APP_CATEGORIES } from '@kbn/core/public';
+import type { AgentBuilderPluginStart } from '@kbn/agent-builder-browser';
 import { i18n } from '@kbn/i18n';
 
 /** Reachable at `/app/entityInventoryDefinitions`; hidden from navigation (dev management UI). */
@@ -15,10 +16,23 @@ export const ENTITY_INVENTORY_DEFINITIONS_APP_ID = 'entityInventoryDefinitions';
 export type EntityInventoryPublicSetup = void;
 export type EntityInventoryPublicStart = void;
 
+export interface EntityInventoryPublicStartDependencies {
+  /** Enables the AI-assisted authoring entry points when the Agent Builder plugin is present. */
+  agentBuilder?: AgentBuilderPluginStart;
+}
+
 export class EntityInventoryPlugin
-  implements Plugin<EntityInventoryPublicSetup, EntityInventoryPublicStart>
+  implements
+    Plugin<
+      EntityInventoryPublicSetup,
+      EntityInventoryPublicStart,
+      {},
+      EntityInventoryPublicStartDependencies
+    >
 {
-  public setup(core: CoreSetup): EntityInventoryPublicSetup {
+  public setup(
+    core: CoreSetup<EntityInventoryPublicStartDependencies>
+  ): EntityInventoryPublicSetup {
     core.application.register({
       id: ENTITY_INVENTORY_DEFINITIONS_APP_ID,
       title: i18n.translate('xpack.entityInventory.definitionsApp.title', {
@@ -28,11 +42,11 @@ export class EntityInventoryPlugin
       euiIconType: 'indexManagementApp',
       visibleIn: [],
       mount: async ({ element }: AppMountParameters) => {
-        const [[coreStart], { renderApp }] = await Promise.all([
+        const [[coreStart, { agentBuilder }], { renderApp }] = await Promise.all([
           core.getStartServices(),
           import('./application/render_app'),
         ]);
-        return renderApp({ coreStart, element });
+        return renderApp({ coreStart, agentBuilder, element });
       },
     });
   }

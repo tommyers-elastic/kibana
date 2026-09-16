@@ -8,6 +8,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import type { CoreStart } from '@kbn/core/public';
+import type { AgentBuilderPluginStart } from '@kbn/agent-builder-browser';
 import { KibanaRenderContextProvider } from '@kbn/react-kibana-context-render';
 import { ENTITY_INVENTORY_ENABLED_SETTING } from '../../common';
 import { DefinitionsApp } from './definitions_app';
@@ -15,16 +16,21 @@ import { DisabledCallout } from './disabled_callout';
 
 interface RenderAppParams {
   coreStart: CoreStart;
+  agentBuilder?: AgentBuilderPluginStart;
   element: HTMLElement;
 }
 
 /** Mounts the definitions management app, or a callout when the inventory ui setting is off. */
-export const renderApp = ({ coreStart, element }: RenderAppParams): (() => void) => {
+export const renderApp = ({ coreStart, agentBuilder, element }: RenderAppParams): (() => void) => {
   const isEnabled = coreStart.uiSettings.get<boolean>(ENTITY_INVENTORY_ENABLED_SETTING, false);
 
   ReactDOM.render(
     <KibanaRenderContextProvider {...coreStart}>
-      {isEnabled ? <DefinitionsApp core={coreStart} /> : <DisabledCallout />}
+      {isEnabled ? (
+        <DefinitionsApp core={coreStart} agentBuilder={agentBuilder} />
+      ) : (
+        <DisabledCallout />
+      )}
     </KibanaRenderContextProvider>,
     element
   );
