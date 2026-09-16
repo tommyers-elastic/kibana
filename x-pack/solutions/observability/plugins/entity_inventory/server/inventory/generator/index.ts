@@ -7,7 +7,12 @@
 
 export { resolveIdentityPlan, type IdentityPlan } from './identity';
 export { buildColumns, sourceColumnNames, getInventory, InventoryDefinitionError } from './columns';
-export { buildSourceQuery, metricExpression, metricPresenceFilter } from './source_query';
+export {
+  buildSourceQuery,
+  metricExpression,
+  metricPresenceFilter,
+  assertSafeIndexPattern,
+} from './source_query';
 export { buildCountQuery, COUNT_COLUMN } from './count_query';
 export { validateSourceFilter } from './filters';
 export { quoteIdentifier, isSafeIndexPattern } from './esql_syntax';

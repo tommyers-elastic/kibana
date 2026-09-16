@@ -30,6 +30,7 @@ returned by `GET /internal/entity_inventory/types` and shows the rows, timings a
 | `POST /internal/entity_inventory/entities/{type}/_list` | `{ from, to, limit?, sort?, filter? }` → rows, exact `total`, `truncated`, timings, generated queries |
 | `POST /internal/entity_inventory/entities/{type}/_detail` | `{ from, to, identity: { field: value } }` → the same shape for one entity |
 | `POST /internal/entity_inventory/entities/{type}/_count` | `{ from, to, filter? }` → exact distinct count |
+| `POST /internal/entity_inventory/entities/{type}/_document_counts` | `{ from, to }` → documents in the window per source pattern, before any predicate (the denominator for a list query's `documentsFound`; kept out of the list's timings) |
 
 `from`/`to` are absolute ISO instants (the generator never uses `NOW()`); `limit` is 1 to 10,000;
 `sort` names any output column; `filter` is one query DSL clause applied as the ES|QL request

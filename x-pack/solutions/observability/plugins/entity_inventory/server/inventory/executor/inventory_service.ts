@@ -21,6 +21,7 @@ import {
   LAST_SEEN_COLUMN,
   type InventoryColumn,
   type InventoryCountResponse,
+  type InventoryDocumentCountsResponse,
   type InventoryListResponse,
   type InventoryProvenance,
   type InventoryQueryInfo,
@@ -33,6 +34,7 @@ import {
 } from '../../../common';
 import {
   COUNT_COLUMN,
+  assertSafeIndexPattern,
   buildColumns,
   buildCountQuery,
   buildSourceQuery,
@@ -275,6 +277,47 @@ export class InventoryService {
       queries: [result.info],
       errors: [...resolution.errors, ...(result.error ? [result.error] : [])],
     };
+  }
+
+  /**
+   * Documents in the window per distinct source pattern, with no predicates: what a source's
+   * `documentsFound` is measured against. One `FROM ... | STATS COUNT(*)` per pattern, run
+   * concurrently; failures are reported per pattern.
+   */
+  async documentCounts(type: string, range: TimeRange): Promise<InventoryDocumentCountsResponse> {
+    const record = await this.deps.registry.getDefinition(type);
+    if (!record || !record.definition.inventory) {
+      throw new InventoryTypeNotFoundError(type);
+    }
+    const patterns = [
+      ...new Set(getInventory(record.definition).sources.map(({ index }) => index)),
+    ];
+    const counts = await Promise.all(
+      patterns.map(async (index) => {
+        try {
+          assertSafeIndexPattern(index);
+          const query: GeneratedQuery = {
+            esql: `FROM ${index}\n| WHERE @timestamp >= ?from AND @timestamp < ?to\n| STATS \`count\` = COUNT(*)`,
+            params: [{ from: range.from }, { to: range.to }],
+          };
+          const { response } = await executeEsql(
+            this.deps.esClient,
+            query,
+            undefined,
+            this.deps.signal
+          );
+          const value = response.values[0]?.[0];
+          return {
+            index,
+            documentsInWindow: typeof value === 'number' ? value : 0,
+            tookMs: response.took,
+          };
+        } catch (error) {
+          return { index, documentsInWindow: null, error: toSourceError(index, error).message };
+        }
+      })
+    );
+    return { type, from: range.from, to: range.to, counts };
   }
 
   private describe(record: EntityDefinitionRecord): InventoryTypeDescriptor {

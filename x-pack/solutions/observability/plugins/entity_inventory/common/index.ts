@@ -15,6 +15,7 @@ export const ENTITY_INVENTORY_ROUTES = {
   LIST: `${ENTITY_INVENTORY_API_BASE}/entities/{type}/_list`,
   DETAIL: `${ENTITY_INVENTORY_API_BASE}/entities/{type}/_detail`,
   COUNT: `${ENTITY_INVENTORY_API_BASE}/entities/{type}/_count`,
+  DOCUMENT_COUNTS: `${ENTITY_INVENTORY_API_BASE}/entities/{type}/_document_counts`,
 } as const;
 
 /** ES|QL returns at most this many rows per query; the caller's `limit` is capped to it. */
@@ -119,6 +120,25 @@ export interface InventoryListResponse {
   queries: InventoryQueryInfo[];
   unavailableColumns: InventoryUnavailableColumn[];
   errors: InventorySourceError[];
+}
+
+/**
+ * Documents in the window per source pattern, before any of the source's predicates: the
+ * denominator for the `documentsFound` a list query reports. Diagnostic; served by its own route
+ * so it never enters the list's timings.
+ */
+export interface InventoryDocumentCount {
+  index: string;
+  documentsInWindow: number | null;
+  tookMs?: number;
+  error?: string;
+}
+
+export interface InventoryDocumentCountsResponse {
+  type: string;
+  from: string;
+  to: string;
+  counts: InventoryDocumentCount[];
 }
 
 export interface InventoryCountResponse {

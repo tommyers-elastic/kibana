@@ -408,6 +408,37 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
     expect(filteredBody.total).toBe(3);
   });
 
+  apiTest(
+    'counts the documents in the window per source pattern, before any predicate',
+    async ({ apiClient }) => {
+      const response = await apiClient.post(
+        `${INVENTORY_PATH}/entities/invtest.pod/_document_counts`,
+        {
+          headers,
+          responseType: 'json',
+          body: WINDOW_15M,
+        }
+      );
+      expect(response.statusCode).toBe(200);
+      const counts = (
+        response.body as {
+          counts: Array<{ index: string; documentsInWindow: number | null; error?: string }>;
+        }
+      ).counts;
+      // Pods 1-5 report 14 metric documents each in the window (70 per metrics copy); pods 1-4 and 7 have one
+      // state document each; the missing index reports an error instead of a number.
+      expect(
+        counts.map(({ index, documentsInWindow }) => [index, documentsInWindow])
+      ).toStrictEqual([
+        [METRICS_INDEX, 70],
+        [STANDARD_INDEX, 70],
+        [STATE_INDEX, 5],
+        [MISSING_INDEX, null],
+      ]);
+      expect(counts[3].error).toBeDefined();
+    }
+  );
+
   apiTest('rejects bad requests and unknown types', async ({ apiClient }) => {
     const unknownType = await apiClient.post(list('invtest.nope'), {
       headers,

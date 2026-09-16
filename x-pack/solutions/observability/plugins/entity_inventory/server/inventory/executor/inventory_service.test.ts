@@ -367,6 +367,33 @@ describe('InventoryService', () => {
     expect(requests[1].query).not.toContain('_OVER_TIME');
   });
 
+  it('counts documents in the window per distinct source pattern, isolating failures', async () => {
+    const { es, esql } = fakeEs(
+      (query) =>
+        query.includes('FROM metrics-k8sclusterreceiver')
+          ? new Error('boom')
+          : table([{ count: 1234 }], 3),
+      podModes,
+      POD_FIELDS
+    );
+    const response = await service(es).documentCounts('k8s.pod', RANGE);
+    expect(response.counts).toEqual([
+      { index: 'metrics-kubeletstatsreceiver.otel-default', documentsInWindow: 1234, tookMs: 3 },
+      { index: 'metrics-kubernetes.pod-*', documentsInWindow: 1234, tookMs: 3 },
+      { index: 'metrics-kubernetes.state_pod-*', documentsInWindow: 1234, tookMs: 3 },
+      { index: 'metrics-k8sclusterreceiver.otel-default', documentsInWindow: null, error: 'boom' },
+    ]);
+    // Four patterns, four count queries, no predicates beyond the window.
+    expect(esql.query).toHaveBeenCalledTimes(4);
+    const [[first]] = esql.query.mock.calls as unknown as Array<
+      [{ query: string; params: unknown }]
+    >;
+    expect(first.query).toBe(
+      'FROM metrics-kubeletstatsreceiver.otel-default\n| WHERE @timestamp >= ?from AND @timestamp < ?to\n| STATS `count` = COUNT(*)'
+    );
+    expect(first.params).toEqual([{ from: RANGE.from }, { to: RANGE.to }]);
+  });
+
   it('counts with the caller filter passed as the request filter', async () => {
     const { es, esql } = fakeEs(() => table([{ count: 42 }]), podModes, POD_FIELDS);
     const response = await service(es).count('k8s.pod', {

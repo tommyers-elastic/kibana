@@ -73,6 +73,8 @@ export const detailBodySchema = z
   })
   .superRefine(assertRange);
 
+export const rangeBodySchema = z.strictObject(rangeShape).superRefine(assertRange);
+
 export const countBodySchema = z
   .strictObject({
     ...rangeShape,
