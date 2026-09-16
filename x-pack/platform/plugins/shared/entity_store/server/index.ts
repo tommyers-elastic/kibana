@@ -37,6 +37,7 @@ export type {
   EntityStoreStartContract,
   EntityStoreCRUDClient,
 } from './types';
+export type { EntityDefinitionRegistry } from './domain/definitions';
 export type { RegisterEntityMaintainerConfig } from './tasks/entity_maintainers/types';
 export { EntityMaintainerTaskStatus } from './tasks/entity_maintainers/types';
 export type {

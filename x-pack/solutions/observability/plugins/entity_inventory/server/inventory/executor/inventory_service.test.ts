@@ -1,0 +1,368 @@
+/*
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License
+ * 2.0; you may not use this file except in compliance with the Elastic License
+ * 2.0.
+ */
+
+import type { ElasticsearchClient } from '@kbn/core/server';
+import type { Logger } from '@kbn/logging';
+import type { EntityDefinitionRegistry } from '@kbn/entity-store/server';
+import type { ESQLSearchResponse } from '@kbn/es-types';
+import { RANGE, hostDefinition, podDefinition } from '../__fixtures__/definitions';
+import { InventoryService } from './inventory_service';
+import { InventoryRequestError, InventoryTypeNotFoundError } from './errors';
+import { SourceMetadataResolver } from './source_metadata';
+
+const logger = { warn: jest.fn(), debug: jest.fn() } as unknown as Logger;
+
+type Responder = (query: string) => ESQLSearchResponse | Error;
+
+const table = (
+  rows: Array<Record<string, unknown>>,
+  took = 5,
+  documentsFound = 100
+): ESQLSearchResponse => {
+  const names = [...new Set(rows.flatMap((row) => Object.keys(row)))];
+  return {
+    took,
+    documents_found: documentsFound,
+    columns: names.map((name) => ({
+      name,
+      type: typeof rows[0]?.[name] === 'number' ? 'double' : 'keyword',
+    })),
+    values: rows.map((row) => names.map((name) => row[name] ?? null)),
+  } as ESQLSearchResponse;
+};
+
+const fakeEs = (respond: Responder, modes: Record<string, string>, mapped: string[]) => {
+  const esql = {
+    query: jest.fn(async ({ query }: { query: string }) => {
+      const result = respond(query);
+      if (result instanceof Error) {
+        throw result;
+      }
+      return result;
+    }),
+  };
+  const indices = {
+    getSettings: jest.fn(async ({ index }: { index: string }) =>
+      modes[index]
+        ? {
+            [`.ds-${index}-1`]:
+              modes[index] === 'standard'
+                ? { settings: {}, defaults: { index: { mode: 'standard' } } }
+                : { settings: { index: { mode: modes[index] } } },
+          }
+        : {}
+    ),
+  };
+  const fieldCaps = jest.fn(async ({ fields }: { fields: string[] }) => ({
+    indices: [],
+    fields: Object.fromEntries(
+      fields.filter((f) => mapped.includes(f)).map((f) => [f, { keyword: { type: 'keyword' } }])
+    ),
+  }));
+  return { es: { esql, indices, fieldCaps } as unknown as ElasticsearchClient, esql };
+};
+
+const registryFor = (definitions: Array<typeof podDefinition>): EntityDefinitionRegistry =>
+  ({
+    getDefinition: async (type: string) => {
+      const definition = definitions.find((d) => d.type === type);
+      return definition ? { definition, source: 'api' } : undefined;
+    },
+    getDefinitions: async () => definitions.map((definition) => ({ definition, source: 'api' })),
+  } as unknown as EntityDefinitionRegistry);
+
+const POD_FIELDS = [
+  'kubernetes.pod.uid',
+  'kubernetes.pod.name',
+  'kubernetes.namespace',
+  'kubernetes.node.name',
+  'k8s.pod.cpu.usage',
+  'k8s.pod.memory.usage',
+  'kubernetes.pod.cpu.usage.node.pct',
+  'kubernetes.pod.memory.usage.bytes',
+  'kubernetes.pod.status.phase',
+  'k8s.pod.phase',
+];
+
+const service = (es: ElasticsearchClient, definitions = [podDefinition, hostDefinition]) =>
+  new InventoryService({
+    esClient: es,
+    registry: registryFor(definitions),
+    metadata: new SourceMetadataResolver(0),
+    logger,
+  });
+
+describe('InventoryService', () => {
+  const podModes = {
+    'metrics-kubeletstatsreceiver.otel-default': 'time_series',
+    'metrics-kubernetes.pod-*': 'time_series',
+    'metrics-kubernetes.state_pod-*': 'time_series',
+    'metrics-k8sclusterreceiver.otel-default': 'time_series',
+  };
+
+  it('lists types with identity, columns and sources', async () => {
+    const { es } = fakeEs(() => table([]), {}, []);
+    const { types } = await service(es).listTypes();
+    expect(types.map((t) => [t.type, t.identity.kind, t.identity.fields])).toEqual([
+      ['k8s.pod', 'tuple', ['kubernetes.pod.uid']],
+      ['host', 'ranking', ['host.id', 'host.name', 'host.hostname']],
+    ]);
+    expect(types[0].columns.map((c) => c.name)).toEqual([
+      'entity.id',
+      'kubernetes.pod.uid',
+      'kubernetes.pod.name',
+      'kubernetes.namespace',
+      'kubernetes.node.name',
+      'phase',
+      'cpu_cores',
+      'mem_bytes',
+      'cpu_node_pct',
+      'mem_usage_bytes',
+      'last_seen',
+    ]);
+  });
+
+  it('merges per-source rows by entity id, labels values, sorts, counts exactly and isolates a failing source', async () => {
+    const respond: Responder = (query) => {
+      if (query.includes('METADATA _index')) {
+        return table([{ count: 3 }], 8);
+      }
+      if (query.includes('TS metrics-kubeletstatsreceiver')) {
+        return table(
+          [
+            {
+              'entity.id': 'k8s.pod:a',
+              'kubernetes.pod.uid': 'a',
+              'kubernetes.pod.name': 'pod-a',
+              cpu_cores: 0.5,
+              mem_bytes: 100,
+              last_seen: '2026-09-16T08:44:00.000Z',
+            },
+            {
+              'entity.id': 'k8s.pod:b',
+              'kubernetes.pod.uid': 'b',
+              'kubernetes.pod.name': 'pod-b',
+              cpu_cores: 0.1,
+              mem_bytes: 50,
+              last_seen: '2026-09-16T08:43:00.000Z',
+            },
+          ],
+          14,
+          810
+        );
+      }
+      if (query.includes('TS metrics-kubernetes.pod-*')) {
+        return new Error('shard failure');
+      }
+      if (query.includes('TS metrics-kubernetes.state_pod-*')) {
+        return table(
+          [
+            {
+              'entity.id': 'k8s.pod:a',
+              'kubernetes.pod.uid': 'a',
+              'kubernetes.pod.name': 'pod-a',
+              phase: 'Running',
+              last_seen: '2026-09-16T08:44:30.000Z',
+            },
+          ],
+          3
+        );
+      }
+      if (query.includes('TS metrics-k8sclusterreceiver')) {
+        return table(
+          [
+            {
+              'entity.id': 'k8s.pod:c',
+              'kubernetes.pod.uid': 'c',
+              'kubernetes.pod.name': 'pod-c',
+              phase: 3,
+              last_seen: '2026-09-16T08:30:00.000Z',
+            },
+          ],
+          4
+        );
+      }
+      throw new Error(`unexpected query ${query}`);
+    };
+    const { es, esql } = fakeEs(respond, podModes, POD_FIELDS);
+    const response = await service(es).list('k8s.pod', {
+      ...RANGE,
+      limit: 10,
+      sort: { column: 'cpu_cores', direction: 'desc' },
+    });
+
+    // Every row carries every output column, null where no source produced a value.
+    const empty = {
+      'kubernetes.namespace': null,
+      'kubernetes.node.name': null,
+      cpu_node_pct: null,
+      mem_usage_bytes: null,
+    };
+    expect(response.rows).toStrictEqual([
+      {
+        ...empty,
+        'entity.id': 'k8s.pod:a',
+        'kubernetes.pod.uid': 'a',
+        'kubernetes.pod.name': 'pod-a',
+        cpu_cores: 0.5,
+        mem_bytes: 100,
+        phase: 'running',
+        last_seen: '2026-09-16T08:44:30.000Z',
+      },
+      {
+        ...empty,
+        'entity.id': 'k8s.pod:b',
+        'kubernetes.pod.uid': 'b',
+        'kubernetes.pod.name': 'pod-b',
+        cpu_cores: 0.1,
+        mem_bytes: 50,
+        phase: null,
+        last_seen: '2026-09-16T08:43:00.000Z',
+      },
+      {
+        ...empty,
+        'entity.id': 'k8s.pod:c',
+        'kubernetes.pod.uid': 'c',
+        'kubernetes.pod.name': 'pod-c',
+        cpu_cores: null,
+        mem_bytes: null,
+        phase: 'succeeded',
+        last_seen: '2026-09-16T08:30:00.000Z',
+      },
+    ]);
+    expect(response.total).toBe(3);
+    expect(response.truncated).toBe(false);
+    expect(response.errors).toEqual([
+      { index: 'metrics-kubernetes.pod-*', message: 'shard failure' },
+    ]);
+    expect(
+      response.queries.map((q) => [q.index, q.engine, q.rows ?? null, q.tookMs ?? null])
+    ).toEqual([
+      ['metrics-kubeletstatsreceiver.otel-default', 'TS', 2, 14],
+      ['metrics-kubernetes.pod-*', 'TS', null, null],
+      ['metrics-kubernetes.state_pod-*', 'TS', 1, 3],
+      ['metrics-k8sclusterreceiver.otel-default', 'TS', 1, 4],
+      ['*', 'COUNT', null, 8],
+    ]);
+    expect(response.esTookMs).toBe(29);
+    expect(response.unavailableColumns).toEqual([]);
+    // Five queries ran concurrently: four sources plus the count.
+    expect(esql.query).toHaveBeenCalledTimes(5);
+    const [, [request]] = esql.query.mock.calls as unknown as Array<[{ params: unknown }]>;
+    expect(request.params).toEqual([{ from: RANGE.from }, { to: RANGE.to }]);
+    expect(response.columns.find((c) => c.name === 'cpu_cores')?.esType).toBe('double');
+  });
+
+  it('marks truncation from the exact count and reports capped sources', async () => {
+    const many = Array.from({ length: 10_000 }, (_, i) => ({
+      'entity.id': `k8s.pod:${i}`,
+      'kubernetes.pod.uid': `${i}`,
+      cpu_cores: i,
+      last_seen: '2026-09-16T08:44:00.000Z',
+    }));
+    const respond: Responder = (query) =>
+      query.includes('METADATA _index')
+        ? table([{ count: 12_345 }])
+        : query.includes('kubeletstats')
+        ? table(many)
+        : table([]);
+    const { es } = fakeEs(respond, podModes, POD_FIELDS);
+    const response = await service(es).list('k8s.pod', { ...RANGE, limit: 50 });
+    expect(response.rows).toHaveLength(50);
+    expect(response.total).toBe(12_345);
+    expect(response.truncated).toBe(true);
+    expect(response.queries[0].capped).toBe(true);
+  });
+
+  it('reports unmapped declared fields per source and excludes sources whose identity is unmapped or missing', async () => {
+    const modes = { ...podModes };
+    delete (modes as Record<string, string>)['metrics-k8sclusterreceiver.otel-default'];
+    const { es, esql } = fakeEs(
+      (query) => (query.includes('METADATA') ? table([{ count: 0 }]) : table([])),
+      modes,
+      ['kubernetes.pod.uid', 'k8s.pod.cpu.usage']
+    );
+    const response = await service(es).list('k8s.pod', RANGE);
+    expect(response.errors).toEqual([
+      {
+        index: 'metrics-k8sclusterreceiver.otel-default',
+        message: 'no index matches "metrics-k8sclusterreceiver.otel-default"',
+      },
+    ]);
+    expect(response.unavailableColumns).toContainEqual({
+      index: 'metrics-kubeletstatsreceiver.otel-default',
+      column: 'mem_bytes',
+      field: 'k8s.pod.memory.usage',
+    });
+    expect(response.unavailableColumns).toContainEqual({
+      index: 'metrics-kubernetes.state_pod-*',
+      column: 'phase',
+      field: 'kubernetes.pod.status.phase',
+    });
+    // Three sources resolved plus the count.
+    expect(esql.query).toHaveBeenCalledTimes(4);
+  });
+
+  it('rejects an unknown type, an unknown sort column and unknown detail identity fields', async () => {
+    const { es } = fakeEs(() => table([]), podModes, POD_FIELDS);
+    await expect(service(es).list('nope', RANGE)).rejects.toBeInstanceOf(
+      InventoryTypeNotFoundError
+    );
+    await expect(
+      service(es).list('k8s.pod', { ...RANGE, sort: { column: 'ghost', direction: 'asc' } })
+    ).rejects.toBeInstanceOf(InventoryRequestError);
+    await expect(
+      service(es).detail('k8s.pod', { ...RANGE, identity: { 'kubernetes.pod.name': 'x' } })
+    ).rejects.toBeInstanceOf(InventoryRequestError);
+  });
+
+  it('details by identity values and falls back to FROM for a mixed pattern', async () => {
+    const { es, esql } = fakeEs(
+      (query) =>
+        table([
+          {
+            'entity.id': 'host:kind-worker',
+            'host.id': null,
+            'host.name': 'kind-worker',
+            'host.hostname': null,
+            cpu_pct: 0.1,
+            last_seen: '2026-09-16T08:44:00.000Z',
+          },
+        ]),
+      { 'metrics-hostmetricsreceiver.otel-default': 'time_series', 'metrics-system.*': 'standard' },
+      ['host.name', 'system.cpu.utilization', 'system.cpu.total.norm.pct']
+    );
+    const response = await service(es).detail('host', {
+      ...RANGE,
+      identity: { 'host.name': 'kind-worker' },
+    });
+    expect(response.rows).toHaveLength(1);
+    expect(response.queries.map((q) => q.engine)).toEqual(['TS', 'FROM']);
+    const requests = esql.query.mock.calls.map(
+      ([request]) => request as { query: string; params: unknown[] }
+    );
+    expect(requests[0].query).toContain('`host.name` == ?id_0');
+    expect(requests[0].params).toEqual([
+      { from: RANGE.from },
+      { to: RANGE.to },
+      { id_0: 'kind-worker' },
+    ]);
+    expect(requests[1].query).not.toContain('_OVER_TIME');
+  });
+
+  it('counts with the caller filter passed as the request filter', async () => {
+    const { es, esql } = fakeEs(() => table([{ count: 42 }]), podModes, POD_FIELDS);
+    const response = await service(es).count('k8s.pod', {
+      ...RANGE,
+      filter: { term: { 'kubernetes.namespace': 'payments' } },
+    });
+    expect(response.count).toBe(42);
+    expect(esql.query).toHaveBeenCalledTimes(1);
+    const [[countRequest]] = esql.query.mock.calls as unknown as Array<[{ filter: unknown }]>;
+    expect(countRequest.filter).toEqual({ term: { 'kubernetes.namespace': 'payments' } });
+  });
+});

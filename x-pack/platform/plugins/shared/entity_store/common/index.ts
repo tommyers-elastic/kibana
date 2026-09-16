@@ -138,7 +138,18 @@ export type {
   InventoryExtension,
   BuiltInInventoryExtension,
   BuiltInInventoryExtensionDocument,
+  InventorySource,
+  InventoryMetric,
+  InventoryMetricAggregation,
+  InventorySourceAttribute,
+  InventoryValueLabels,
 } from './domain/definitions/entity_schema';
+export { getInventoryIdentity } from './domain/definitions/entity_schema';
+export {
+  buildInventoryEntityDefinition,
+  type InventoryEntityDefinition,
+  type InventoryEntityDefinitionInput,
+} from './domain/definitions/inventory_definition';
 
 export type {
   Entity,

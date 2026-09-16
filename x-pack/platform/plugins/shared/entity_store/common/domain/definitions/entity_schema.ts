@@ -227,4 +227,6 @@ export type {
   InventorySource,
   InventoryMetric,
   InventoryMetricAggregation,
+  InventorySourceAttribute,
+  InventoryValueLabels,
 } from './inventory_schema';

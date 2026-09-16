@@ -704,6 +704,7 @@
     "@kbn/encrypted-saved-objects-plugin": "workspace:*",
     "@kbn/encrypted-saved-objects-shared": "workspace:*",
     "@kbn/enterprise-search-plugin": "workspace:*",
+    "@kbn/entity-inventory-plugin": "workspace:*",
     "@kbn/entity-store": "workspace:*",
     "@kbn/error-boundary-example-plugin": "workspace:*",
     "@kbn/es-errors": "workspace:*",

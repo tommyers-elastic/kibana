@@ -1,0 +1,17 @@
+{
+  "type": "plugin",
+  "id": "@kbn/entity-inventory-plugin",
+  "owner": ["@elastic/obs-ux-infra_services-team"],
+  "group": "observability",
+  "visibility": "private",
+  "description": "Serves inventory lists, details and counts for registered entity types with ES|QL generated from entity definitions, straight from raw telemetry",
+  "plugin": {
+    "id": "entityInventory",
+    "browser": false,
+    "server": true,
+    "configPath": ["xpack", "entityInventory"],
+    "requiredPlugins": ["entityStore"],
+    "optionalPlugins": ["spaces"],
+    "requiredBundles": []
+  }
+}

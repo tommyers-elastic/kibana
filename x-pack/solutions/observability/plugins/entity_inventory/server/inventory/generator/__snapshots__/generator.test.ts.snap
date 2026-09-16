@@ -1,0 +1,992 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`generator host count query 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-hostmetricsreceiver.otel-default, metrics-system.* METADATA _index
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (((_index LIKE \\"metrics-hostmetricsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-hostmetricsreceiver.otel-default-*\\") AND (\`system.cpu.utilization\` IS NOT NULL OR \`system.cpu.load_average.1m\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-system.*\\" OR _index LIKE \\".ds-metrics-system.*-*\\") AND (metricset.name IN (\\"cpu\\", \\"load\\")) AND (\`system.cpu.total.norm.pct\` IS NOT NULL OR \`system.load.1\` IS NOT NULL)))
+| STATS BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| STATS \`count\` = COUNT(*)",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator host identity plan and columns 1`] = `
+Object {
+  "columns": Array [
+    Object {
+      "kind": "entity_id",
+      "name": "entity.id",
+    },
+    Object {
+      "fields": Array [
+        "host.id",
+      ],
+      "kind": "identity",
+      "name": "host.id",
+    },
+    Object {
+      "fields": Array [
+        "host.name",
+      ],
+      "kind": "identity",
+      "name": "host.name",
+    },
+    Object {
+      "fields": Array [
+        "host.hostname",
+      ],
+      "kind": "identity",
+      "name": "host.hostname",
+    },
+    Object {
+      "fields": Array [
+        "host.os.name",
+      ],
+      "kind": "attribute",
+      "name": "host.os.name",
+    },
+    Object {
+      "fields": Array [
+        "host.os.platform",
+      ],
+      "kind": "attribute",
+      "name": "host.os.platform",
+    },
+    Object {
+      "fields": Array [
+        "host.architecture",
+      ],
+      "kind": "attribute",
+      "name": "host.architecture",
+    },
+    Object {
+      "fields": Array [
+        "system.cpu.utilization",
+        "system.cpu.total.norm.pct",
+      ],
+      "kind": "metric",
+      "name": "cpu_pct",
+    },
+    Object {
+      "fields": Array [
+        "system.cpu.load_average.1m",
+        "system.load.1",
+      ],
+      "kind": "metric",
+      "name": "load_1m",
+    },
+    Object {
+      "kind": "last_seen",
+      "name": "last_seen",
+    },
+  ],
+  "identity": Object {
+    "entityIdEvaluation": "host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))",
+    "fields": Array [
+      "host.id",
+      "host.name",
+      "host.hostname",
+    ],
+    "kind": "ranking",
+    "presenceFilter": "(\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)",
+  },
+}
+`;
+
+exports[`generator host list query for source 0 (metrics-hostmetricsreceiver.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-hostmetricsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (\`system.cpu.utilization\` IS NOT NULL OR \`system.cpu.load_average.1m\` IS NOT NULL)
+| STATS \`cpu_pct\` = AVG(\`system.cpu.utilization\`),
+    \`load_1m\` = AVG(\`system.cpu.load_average.1m\`),
+    \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
+    \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
+    \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`load_1m\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator host list query for source 0 (metrics-hostmetricsreceiver.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-hostmetricsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (\`system.cpu.utilization\` IS NOT NULL OR \`system.cpu.load_average.1m\` IS NOT NULL)
+| STATS \`cpu_pct\` = AVG(AVG_OVER_TIME(\`system.cpu.utilization\`)),
+    \`load_1m\` = AVG(AVG_OVER_TIME(\`system.cpu.load_average.1m\`)),
+    \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
+    \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
+    \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`load_1m\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator host list query for source 1 (metrics-system.*) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-system.*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (metricset.name IN (\\"cpu\\", \\"load\\"))
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (\`system.cpu.total.norm.pct\` IS NOT NULL OR \`system.load.1\` IS NOT NULL)
+| STATS \`cpu_pct\` = AVG(\`system.cpu.total.norm.pct\`),
+    \`load_1m\` = AVG(\`system.load.1\`),
+    \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
+    \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
+    \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`load_1m\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator host list query for source 1 (metrics-system.*) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-system.*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (metricset.name IN (\\"cpu\\", \\"load\\"))
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (\`system.cpu.total.norm.pct\` IS NOT NULL OR \`system.load.1\` IS NOT NULL)
+| STATS \`cpu_pct\` = AVG(AVG_OVER_TIME(\`system.cpu.total.norm.pct\`)),
+    \`load_1m\` = AVG(AVG_OVER_TIME(\`system.load.1\`)),
+    \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
+    \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
+    \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`load_1m\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.deployment count query 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubeletstatsreceiver.otel-default, metrics-kubernetes.state_deployment-* METADATA _index
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.namespace\` IS NOT NULL AND \`kubernetes.deployment.name\` IS NOT NULL
+    AND (((_index LIKE \\"metrics-kubeletstatsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-kubeletstatsreceiver.otel-default-*\\") AND (\`kubernetes.pod.name\` IS NOT NULL OR \`k8s.pod.cpu.usage\` IS NOT NULL OR \`kubernetes.node.name\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-kubernetes.state_deployment-*\\" OR _index LIKE \\".ds-metrics-kubernetes.state_deployment-*-*\\") AND (\`kubernetes.deployment.replicas.desired\` IS NOT NULL OR \`kubernetes.deployment.replicas.available\` IS NOT NULL)))
+| STATS BY \`kubernetes.namespace\`, \`kubernetes.deployment.name\`
+| STATS \`count\` = COUNT(*)",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.deployment identity plan and columns 1`] = `
+Object {
+  "columns": Array [
+    Object {
+      "kind": "entity_id",
+      "name": "entity.id",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.namespace",
+      ],
+      "kind": "identity",
+      "name": "kubernetes.namespace",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.deployment.name",
+      ],
+      "kind": "identity",
+      "name": "kubernetes.deployment.name",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.pod.name",
+      ],
+      "kind": "metric",
+      "name": "pods",
+    },
+    Object {
+      "fields": Array [
+        "k8s.pod.cpu.usage",
+      ],
+      "kind": "metric",
+      "name": "avg_pod_cpu_cores",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.node.name",
+      ],
+      "kind": "metric",
+      "name": "nodes",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.deployment.replicas.desired",
+      ],
+      "kind": "metric",
+      "name": "replicas_desired",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.deployment.replicas.available",
+      ],
+      "kind": "metric",
+      "name": "replicas_available",
+    },
+    Object {
+      "kind": "last_seen",
+      "name": "last_seen",
+    },
+  ],
+  "identity": Object {
+    "entityIdEvaluation": "kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
+ kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
+ kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
+ kubernetes_deployment_name_present_or_null = CASE(kubernetes_deployment_name_present, TO_STRING(kubernetes.deployment.name)),
+ entity.id = CONCAT(\\"k8s.deployment:\\", CONCAT(kubernetes_namespace_present_or_null, \\"/\\", kubernetes_deployment_name_present_or_null))",
+    "fields": Array [
+      "kubernetes.namespace",
+      "kubernetes.deployment.name",
+    ],
+    "kind": "tuple",
+    "presenceFilter": "\`kubernetes.namespace\` IS NOT NULL AND \`kubernetes.deployment.name\` IS NOT NULL",
+  },
+}
+`;
+
+exports[`generator k8s.deployment list query for source 0 (metrics-kubeletstatsreceiver.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubeletstatsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.namespace\` IS NOT NULL AND \`kubernetes.deployment.name\` IS NOT NULL
+    AND (\`kubernetes.pod.name\` IS NOT NULL OR \`k8s.pod.cpu.usage\` IS NOT NULL OR \`kubernetes.node.name\` IS NOT NULL)
+| STATS \`pods\` = COUNT_DISTINCT(\`kubernetes.pod.name\`),
+    \`avg_pod_cpu_cores\` = AVG(\`k8s.pod.cpu.usage\`),
+    \`nodes\` = COUNT_DISTINCT(\`kubernetes.node.name\`),
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.namespace\`, \`kubernetes.deployment.name\`
+| EVAL kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
+ kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
+ kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
+ kubernetes_deployment_name_present_or_null = CASE(kubernetes_deployment_name_present, TO_STRING(kubernetes.deployment.name)),
+ entity.id = CONCAT(\\"k8s.deployment:\\", CONCAT(kubernetes_namespace_present_or_null, \\"/\\", kubernetes_deployment_name_present_or_null))
+| KEEP \`entity.id\`, \`kubernetes.namespace\`, \`kubernetes.deployment.name\`, \`pods\`, \`avg_pod_cpu_cores\`, \`nodes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.deployment list query for source 0 (metrics-kubeletstatsreceiver.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubeletstatsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.namespace\` IS NOT NULL AND \`kubernetes.deployment.name\` IS NOT NULL
+    AND (\`kubernetes.pod.name\` IS NOT NULL OR \`k8s.pod.cpu.usage\` IS NOT NULL OR \`kubernetes.node.name\` IS NOT NULL)
+| STATS \`pods\` = COUNT_DISTINCT(\`kubernetes.pod.name\`),
+    \`avg_pod_cpu_cores\` = AVG(AVG_OVER_TIME(\`k8s.pod.cpu.usage\`)),
+    \`nodes\` = COUNT_DISTINCT(\`kubernetes.node.name\`),
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.namespace\`, \`kubernetes.deployment.name\`
+| EVAL kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
+ kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
+ kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
+ kubernetes_deployment_name_present_or_null = CASE(kubernetes_deployment_name_present, TO_STRING(kubernetes.deployment.name)),
+ entity.id = CONCAT(\\"k8s.deployment:\\", CONCAT(kubernetes_namespace_present_or_null, \\"/\\", kubernetes_deployment_name_present_or_null))
+| KEEP \`entity.id\`, \`kubernetes.namespace\`, \`kubernetes.deployment.name\`, \`pods\`, \`avg_pod_cpu_cores\`, \`nodes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.deployment list query for source 1 (metrics-kubernetes.state_deployment-*) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubernetes.state_deployment-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.namespace\` IS NOT NULL AND \`kubernetes.deployment.name\` IS NOT NULL
+    AND (\`kubernetes.deployment.replicas.desired\` IS NOT NULL OR \`kubernetes.deployment.replicas.available\` IS NOT NULL)
+| STATS \`replicas_desired\` = MAX(\`kubernetes.deployment.replicas.desired\`),
+    \`replicas_available\` = LAST(\`kubernetes.deployment.replicas.available\`, @timestamp) WHERE \`kubernetes.deployment.replicas.available\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.namespace\`, \`kubernetes.deployment.name\`
+| EVAL kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
+ kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
+ kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
+ kubernetes_deployment_name_present_or_null = CASE(kubernetes_deployment_name_present, TO_STRING(kubernetes.deployment.name)),
+ entity.id = CONCAT(\\"k8s.deployment:\\", CONCAT(kubernetes_namespace_present_or_null, \\"/\\", kubernetes_deployment_name_present_or_null))
+| KEEP \`entity.id\`, \`kubernetes.namespace\`, \`kubernetes.deployment.name\`, \`replicas_desired\`, \`replicas_available\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.deployment list query for source 1 (metrics-kubernetes.state_deployment-*) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubernetes.state_deployment-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.namespace\` IS NOT NULL AND \`kubernetes.deployment.name\` IS NOT NULL
+    AND (\`kubernetes.deployment.replicas.desired\` IS NOT NULL OR \`kubernetes.deployment.replicas.available\` IS NOT NULL)
+| STATS \`replicas_desired\` = MAX(MAX_OVER_TIME(\`kubernetes.deployment.replicas.desired\`)),
+    \`replicas_available\` = LAST(\`kubernetes.deployment.replicas.available\`, @timestamp) WHERE \`kubernetes.deployment.replicas.available\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.namespace\`, \`kubernetes.deployment.name\`
+| EVAL kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
+ kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
+ kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
+ kubernetes_deployment_name_present_or_null = CASE(kubernetes_deployment_name_present, TO_STRING(kubernetes.deployment.name)),
+ entity.id = CONCAT(\\"k8s.deployment:\\", CONCAT(kubernetes_namespace_present_or_null, \\"/\\", kubernetes_deployment_name_present_or_null))
+| KEEP \`entity.id\`, \`kubernetes.namespace\`, \`kubernetes.deployment.name\`, \`replicas_desired\`, \`replicas_available\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.node count query 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubeletstatsreceiver.otel-default, metrics-kubernetes.node-* METADATA _index
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.node.name\` IS NOT NULL
+    AND (((_index LIKE \\"metrics-kubeletstatsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-kubeletstatsreceiver.otel-default-*\\") AND (\`k8s.node.cpu.usage\` IS NOT NULL OR \`k8s.node.memory.usage\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-kubernetes.node-*\\" OR _index LIKE \\".ds-metrics-kubernetes.node-*-*\\") AND (\`kubernetes.node.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.node.memory.usage.bytes\` IS NOT NULL)))
+| STATS BY \`kubernetes.node.name\`
+| STATS \`count\` = COUNT(*)",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.node identity plan and columns 1`] = `
+Object {
+  "columns": Array [
+    Object {
+      "kind": "entity_id",
+      "name": "entity.id",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.node.name",
+      ],
+      "kind": "identity",
+      "name": "kubernetes.node.name",
+    },
+    Object {
+      "fields": Array [
+        "k8s.node.cpu.usage",
+      ],
+      "kind": "metric",
+      "name": "cpu_cores",
+    },
+    Object {
+      "fields": Array [
+        "k8s.node.memory.usage",
+      ],
+      "kind": "metric",
+      "name": "mem_bytes",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.node.cpu.usage.nanocores",
+      ],
+      "kind": "metric",
+      "name": "cpu_nanocores",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.node.memory.usage.bytes",
+      ],
+      "kind": "metric",
+      "name": "mem_usage_bytes",
+    },
+    Object {
+      "kind": "last_seen",
+      "name": "last_seen",
+    },
+  ],
+  "identity": Object {
+    "entityIdEvaluation": "entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))",
+    "fields": Array [
+      "kubernetes.node.name",
+    ],
+    "kind": "tuple",
+    "presenceFilter": "\`kubernetes.node.name\` IS NOT NULL",
+  },
+}
+`;
+
+exports[`generator k8s.node list query for source 0 (metrics-kubeletstatsreceiver.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubeletstatsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.node.name\` IS NOT NULL
+    AND (\`k8s.node.cpu.usage\` IS NOT NULL OR \`k8s.node.memory.usage\` IS NOT NULL)
+| STATS \`cpu_cores\` = AVG(\`k8s.node.cpu.usage\`),
+    \`mem_bytes\` = AVG(\`k8s.node.memory.usage\`),
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.node.name\`
+| EVAL entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))
+| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.node list query for source 0 (metrics-kubeletstatsreceiver.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubeletstatsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.node.name\` IS NOT NULL
+    AND (\`k8s.node.cpu.usage\` IS NOT NULL OR \`k8s.node.memory.usage\` IS NOT NULL)
+| STATS \`cpu_cores\` = AVG(AVG_OVER_TIME(\`k8s.node.cpu.usage\`)),
+    \`mem_bytes\` = AVG(AVG_OVER_TIME(\`k8s.node.memory.usage\`)),
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.node.name\`
+| EVAL entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))
+| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.node list query for source 1 (metrics-kubernetes.node-*) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubernetes.node-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.node.name\` IS NOT NULL
+    AND (\`kubernetes.node.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.node.memory.usage.bytes\` IS NOT NULL)
+| STATS \`cpu_nanocores\` = AVG(\`kubernetes.node.cpu.usage.nanocores\`),
+    \`mem_usage_bytes\` = AVG(\`kubernetes.node.memory.usage.bytes\`),
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.node.name\`
+| EVAL entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))
+| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_nanocores\`, \`mem_usage_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.node list query for source 1 (metrics-kubernetes.node-*) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubernetes.node-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.node.name\` IS NOT NULL
+    AND (\`kubernetes.node.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.node.memory.usage.bytes\` IS NOT NULL)
+| STATS \`cpu_nanocores\` = AVG(AVG_OVER_TIME(\`kubernetes.node.cpu.usage.nanocores\`)),
+    \`mem_usage_bytes\` = AVG(AVG_OVER_TIME(\`kubernetes.node.memory.usage.bytes\`)),
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.node.name\`
+| EVAL entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))
+| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_nanocores\`, \`mem_usage_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod count query 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubeletstatsreceiver.otel-default, metrics-kubernetes.pod-*, metrics-kubernetes.state_pod-*, metrics-k8sclusterreceiver.otel-default METADATA _index
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+    AND (((_index LIKE \\"metrics-kubeletstatsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-kubeletstatsreceiver.otel-default-*\\") AND (\`k8s.pod.cpu.usage\` IS NOT NULL OR \`k8s.pod.memory.usage\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-kubernetes.pod-*\\" OR _index LIKE \\".ds-metrics-kubernetes.pod-*-*\\") AND (\`kubernetes.pod.cpu.usage.node.pct\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-kubernetes.state_pod-*\\" OR _index LIKE \\".ds-metrics-kubernetes.state_pod-*-*\\"))
+      OR ((_index LIKE \\"metrics-k8sclusterreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-k8sclusterreceiver.otel-default-*\\") AND (k8s.pod.phase IS NOT NULL)))
+| STATS BY \`kubernetes.pod.uid\`
+| STATS \`count\` = COUNT(*)",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod identity plan and columns 1`] = `
+Object {
+  "columns": Array [
+    Object {
+      "kind": "entity_id",
+      "name": "entity.id",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.pod.uid",
+      ],
+      "kind": "identity",
+      "name": "kubernetes.pod.uid",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.pod.name",
+      ],
+      "kind": "attribute",
+      "name": "kubernetes.pod.name",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.namespace",
+      ],
+      "kind": "attribute",
+      "name": "kubernetes.namespace",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.node.name",
+      ],
+      "kind": "attribute",
+      "name": "kubernetes.node.name",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.pod.status.phase",
+        "k8s.pod.phase",
+      ],
+      "kind": "attribute",
+      "name": "phase",
+    },
+    Object {
+      "fields": Array [
+        "k8s.pod.cpu.usage",
+      ],
+      "kind": "metric",
+      "name": "cpu_cores",
+    },
+    Object {
+      "fields": Array [
+        "k8s.pod.memory.usage",
+      ],
+      "kind": "metric",
+      "name": "mem_bytes",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.pod.cpu.usage.node.pct",
+      ],
+      "kind": "metric",
+      "name": "cpu_node_pct",
+    },
+    Object {
+      "fields": Array [
+        "kubernetes.pod.memory.usage.bytes",
+      ],
+      "kind": "metric",
+      "name": "mem_usage_bytes",
+    },
+    Object {
+      "kind": "last_seen",
+      "name": "last_seen",
+    },
+  ],
+  "identity": Object {
+    "entityIdEvaluation": "entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))",
+    "fields": Array [
+      "kubernetes.pod.uid",
+    ],
+    "kind": "tuple",
+    "presenceFilter": "\`kubernetes.pod.uid\` IS NOT NULL",
+  },
+}
+`;
+
+exports[`generator k8s.pod list query for source 0 (metrics-kubeletstatsreceiver.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubeletstatsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+    AND (\`k8s.pod.cpu.usage\` IS NOT NULL OR \`k8s.pod.memory.usage\` IS NOT NULL)
+| STATS \`cpu_cores\` = AVG(\`k8s.pod.cpu.usage\`),
+    \`mem_bytes\` = AVG(\`k8s.pod.memory.usage\`),
+    \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 0 (metrics-kubeletstatsreceiver.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubeletstatsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+    AND (\`k8s.pod.cpu.usage\` IS NOT NULL OR \`k8s.pod.memory.usage\` IS NOT NULL)
+| STATS \`cpu_cores\` = AVG(AVG_OVER_TIME(\`k8s.pod.cpu.usage\`)),
+    \`mem_bytes\` = AVG(AVG_OVER_TIME(\`k8s.pod.memory.usage\`)),
+    \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 1 (metrics-kubernetes.pod-*) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubernetes.pod-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+    AND (\`kubernetes.pod.cpu.usage.node.pct\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL)
+| STATS \`cpu_node_pct\` = AVG(\`kubernetes.pod.cpu.usage.node.pct\`),
+    \`mem_usage_bytes\` = AVG(\`kubernetes.pod.memory.usage.bytes\`),
+    \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_node_pct\`, \`mem_usage_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 1 (metrics-kubernetes.pod-*) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubernetes.pod-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+    AND (\`kubernetes.pod.cpu.usage.node.pct\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL)
+| STATS \`cpu_node_pct\` = AVG(AVG_OVER_TIME(\`kubernetes.pod.cpu.usage.node.pct\`)),
+    \`mem_usage_bytes\` = AVG(AVG_OVER_TIME(\`kubernetes.pod.memory.usage.bytes\`)),
+    \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_node_pct\`, \`mem_usage_bytes\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 2 (metrics-kubernetes.state_pod-*) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-kubernetes.state_pod-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+| STATS \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`phase\` = LAST(\`kubernetes.pod.status.phase\`, @timestamp) WHERE \`kubernetes.pod.status.phase\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`phase\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 2 (metrics-kubernetes.state_pod-*) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-kubernetes.state_pod-*
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+| STATS \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`phase\` = LAST(\`kubernetes.pod.status.phase\`, @timestamp) WHERE \`kubernetes.pod.status.phase\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`phase\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 3 (metrics-k8sclusterreceiver.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-k8sclusterreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (k8s.pod.phase IS NOT NULL)
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+| STATS \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`phase\` = LAST(\`k8s.pod.phase\`, @timestamp) WHERE \`k8s.pod.phase\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`phase\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator k8s.pod list query for source 3 (metrics-k8sclusterreceiver.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-k8sclusterreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (k8s.pod.phase IS NOT NULL)
+    AND \`kubernetes.pod.uid\` IS NOT NULL
+| STATS \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
+    \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
+    \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
+    \`phase\` = LAST(\`k8s.pod.phase\`, @timestamp) WHERE \`k8s.pod.phase\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`kubernetes.pod.uid\`
+| EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`phase\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
