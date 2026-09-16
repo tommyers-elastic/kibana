@@ -214,10 +214,16 @@ export type {
   MaterialisationMode,
 } from './materialisation_schema';
 
-export { inventoryExtensionSchema, builtInInventoryExtensionSchema } from './inventory_schema';
+export {
+  inventoryExtensionSchema,
+  builtInInventoryExtensionSchema,
+  builtInInventoryExtensionDocumentSchema,
+  isBuiltInInventoryExtensionDocument,
+} from './inventory_schema';
 export type {
   InventoryExtension,
   BuiltInInventoryExtension,
+  BuiltInInventoryExtensionDocument,
   InventorySource,
   InventoryMetric,
   InventoryMetricAggregation,

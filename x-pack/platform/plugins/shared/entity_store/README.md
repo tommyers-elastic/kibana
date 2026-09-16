@@ -122,30 +122,69 @@ install step; those remain driven by `getMaterialisedEntityTypes()` over the bui
 
 #### Inventory extensions for built-in types
 
-Built-in types cannot be registered again, but another plugin can attach an inventory view to one
-(e.g. an Observability `host` inventory that keeps Security's `host:` entity ids) through the
-**setup** contract:
+Built-in types cannot be registered again, but an inventory view can be attached to one (e.g. an
+Observability `host` inventory that keeps Security's `host:` entity ids) with an **extension
+document**: `{ "extends": <built-in type>, "inventory": <BuiltInInventoryExtension> }`
+(`builtInInventoryExtensionDocumentSchema`, strict). A document with `type` is a full definition
+(identity required); a document with `extends` is an extension and carries no `type`, identity or
+materialisation. The inventory part is `builtInInventoryExtensionSchema`: the inventory extension
+without `identity`. The built-in's identity and materialisation are never changed; its
+`identityField` is the identity, so the query generator groups by the fields that ranking
+references and entity ids stay the built-in's. Attributes may not be identity fields of the
+built-in (rejected at registration, as `attributes` repeating `identity` is for authored
+definitions); `getInventoryIdentity(definition)` returns the authored tuple or `undefined` for a
+built-in.
+
+Extensions are registered in two ways, layered code-first:
+
+| Source | How | Scope |
+| --- | --- | --- |
+| `code` | `entityStore.registerInventoryExtension({ extends: 'host', inventory })` on the **setup** contract | global, in memory, one per type (a second registration throws) |
+| `api` | the definitions API with an extension body (below) | per space (saved object `entity-store-inventory-extension`) |
+
+A code extension wins over an API extension of the same type, and the API can neither create,
+replace nor delete an extension for a type that has one in code (409). `EntityDefinitionRegistry`
+serves the built-in record with `definition.inventory` set and `inventorySource: 'code' | 'api'`
+(`createdAt` / `updatedAt` are the extension's for `api`); `definition.source` stays `built_in`.
+`getDefinitions({ inventory: true })` returns only the records that carry an inventory extension
+(built-ins with one and code or API definitions that declare one). The static
+`common/domain/definitions/registry.ts` and everything that extracts or materialises built-ins are
+unaffected.
+
+The **definitions API accepts both document kinds**, discriminated on `type` vs `extends` (a body
+with neither or both is a 400):
 
 ```ts
-plugins.entityStore.registerInventoryExtension('host', {
-  label: 'Hosts',
-  attributes: ['host.os.name', 'cloud.provider'],
-  sources: [{ index: 'metrics-system.cpu-*', metrics: [{ name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' }] }],
+plugins.entityStore.registerInventoryExtension({
+  extends: 'host',
+  inventory: {
+    label: 'Hosts',
+    attributes: ['host.os.name', 'cloud.provider'],
+    sources: [{ index: 'metrics-system.cpu-*', metrics: [{ name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' }] }],
+  },
 });
 ```
 
-The extension is `builtInInventoryExtensionSchema` (`BuiltInInventoryExtension`): the inventory
-extension without `identity`. The built-in's identity and materialisation are never changed; its
-`identityField` is the identity, so the query generator groups by the fields that ranking references
-and entity ids stay the built-in's. Attributes may not be identity fields of the built-in (rejected
-at registration, as `attributes` repeating `identity` is for authored definitions). Extensions are
-global, in memory, one per type (a second registration throws rather than overriding), and exist
-only server-side: `EntityDefinitionRegistry` serves the built-in record with `definition.inventory`
-set, while the static `common/domain/definitions/registry.ts` and everything that extracts or
-materialises built-ins are unaffected. `getDefinitions({ inventory: true })` returns only the
-records that carry an inventory extension (built-ins with a registered extension and code or API
-definitions that declare one); `getInventoryIdentity(definition)` returns the authored tuple or
-`undefined` for a built-in.
+- `POST /internal/entity_store/definitions` with `{ extends, inventory }`: creates the extension
+  for the built-in in the current space (201, the layered built-in record). 409 if the space
+  already has one (use `PUT`) or one is registered in code; 400 if `extends` is not a built-in
+  (register a full definition with `type` instead), on a schema failure or on an identity-field
+  attribute.
+- `PUT /internal/entity_store/definitions/{type}` with `{ extends, inventory }`: creates or
+  replaces the extension (idempotent, `createdAt` kept); 400 if `{type}` differs from `extends`.
+  `force` is irrelevant for extensions (they never carry identity).
+- `GET /internal/entity_store/definitions/{type}`: unchanged; a built-in with an extension returns
+  the layered record. `GET /internal/entity_store/definitions?inventory=true` lists only records
+  with an inventory extension (combinable with `mode`).
+- `DELETE /internal/entity_store/definitions/{type}` on a built-in type: deletes the space's API
+  extension (409 if it is code-registered); a bare built-in keeps today's 400 "built-in ... cannot
+  be deleted".
+
+Stored extensions are cached per space like definitions (30s, invalidated by writes on the node),
+located by the extended `type` attribute (never by a derived id), visible, importable and
+exportable in Saved Objects management, and re-validated on read: an imported object whose
+`extends` is not a built-in, whose attributes clash with the identity, whose `type` disagrees with
+`extends` or whose type has a code extension is imported with a warning and then ignored (logged).
 
 ## Entity AI Summary — index privileges
 

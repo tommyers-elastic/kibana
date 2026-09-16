@@ -48,7 +48,10 @@ import {
   EntityDefinitionRegistry,
   EntityDefinitionsCache,
   createEntityDefinitionSavedObjectType,
+  createInventoryExtensionSavedObjectType,
   EntityDefinitionsRepository,
+  InventoryExtensionsRepository,
+  type StoredInventoryExtensionAttributes,
 } from './domain/definitions';
 import { registerEntityDefinitionsFeature } from './features';
 
@@ -65,6 +68,8 @@ export class EntityStorePlugin
   private readonly isServerless: boolean;
   private readonly definitionsCache = new EntityDefinitionsCache();
   private readonly codeDefinitions = new CodeDefinitionsRegistry();
+  private readonly extensionsCache =
+    new EntityDefinitionsCache<StoredInventoryExtensionAttributes>();
   private readonly builtInInventoryExtensions = new BuiltInInventoryExtensionsRegistry();
 
   constructor(initializerContext: PluginInitializerContext) {
@@ -97,6 +102,7 @@ export class EntityStorePlugin
           analytics: createReportEvent(core.analytics),
           definitionsCache: this.definitionsCache,
           codeDefinitions: this.codeDefinitions,
+          extensionsCache: this.extensionsCache,
           builtInInventoryExtensions: this.builtInInventoryExtensions,
         })
     );
@@ -118,6 +124,9 @@ export class EntityStorePlugin
     core.savedObjects.registerType(LegacyCcsLogExtractionStateType);
     core.savedObjects.registerType(EntityResolutionRuleType);
     core.savedObjects.registerType(createEntityDefinitionSavedObjectType(this.codeDefinitions));
+    core.savedObjects.registerType(
+      createInventoryExtensionSavedObjectType(this.builtInInventoryExtensions)
+    );
 
     this.logger.debug('Registering the entity definitions feature');
     registerEntityDefinitionsFeature(plugins.features);
@@ -140,8 +149,7 @@ export class EntityStorePlugin
           analytics: createReportEvent(core.analytics),
         }),
       registerEntityDefinition: (definition) => this.codeDefinitions.register(definition),
-      registerInventoryExtension: (type, extension) =>
-        this.builtInInventoryExtensions.register(type, extension),
+      registerInventoryExtension: (document) => this.builtInInventoryExtensions.register(document),
     };
   }
 
@@ -177,6 +185,11 @@ export class EntityStorePlugin
           repository: new EntityDefinitionsRepository(internalSavedObjectsRepository, namespace),
           cache: this.definitionsCache,
           codeDefinitions: this.codeDefinitions,
+          extensionsRepository: new InventoryExtensionsRepository(
+            internalSavedObjectsRepository,
+            namespace
+          ),
+          extensionsCache: this.extensionsCache,
           builtInInventoryExtensions: this.builtInInventoryExtensions,
           namespace,
           logger,

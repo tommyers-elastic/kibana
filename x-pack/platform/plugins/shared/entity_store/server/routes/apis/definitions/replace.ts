@@ -25,7 +25,8 @@ export function registerDefinitionsReplace(router: EntityStorePluginRouter) {
       summary: 'Replace an entity definition',
       description:
         'Replaces a registered entity definition. A change of identity is rejected unless `force=true`, ' +
-        'because entity ids derived under the previous identity are no longer comparable.',
+        'because entity ids derived under the previous identity are no longer comparable. With an ' +
+        '`{ extends, inventory }` body, creates or replaces the inventory extension of the built-in type.',
       security: {
         authz: { requiredPrivileges: [ENTITY_DEFINITIONS_API_PRIVILEGES.manage] },
       },

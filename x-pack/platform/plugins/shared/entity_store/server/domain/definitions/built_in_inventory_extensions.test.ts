@@ -21,6 +21,8 @@ const hostInventoryExtension = {
     },
   ],
 };
+const hostExtensionDocument = { extends: 'host', inventory: hostInventoryExtension };
+const minimalSources = [{ index: 'metrics-*' }];
 
 describe('BuiltInInventoryExtensionsRegistry', () => {
   let registry: BuiltInInventoryExtensionsRegistry;
@@ -29,16 +31,16 @@ describe('BuiltInInventoryExtensionsRegistry', () => {
     registry = new BuiltInInventoryExtensionsRegistry();
   });
 
-  it('registers a valid extension for a built-in type', () => {
-    registry.register('host', hostInventoryExtension);
+  it('registers a valid extension document for a built-in type', () => {
+    registry.register(hostExtensionDocument);
     expect(registry.has('host')).toBe(true);
     expect(registry.get('host')).toEqual(hostInventoryExtension);
     expect(registry.types()).toEqual(['host']);
   });
 
   it.each(ALL_BUILT_IN_ENTITY_TYPES)('accepts a sources-only extension for %s', (type) => {
-    registry.register(type, { sources: [{ index: 'metrics-*' }] });
-    expect(registry.get(type)).toEqual({ sources: [{ index: 'metrics-*' }] });
+    registry.register({ extends: type, inventory: { sources: minimalSources } });
+    expect(registry.get(type)).toEqual({ sources: minimalSources });
   });
 
   it('starts empty', () => {
@@ -47,35 +49,46 @@ describe('BuiltInInventoryExtensionsRegistry', () => {
     expect(registry.types()).toEqual([]);
   });
 
-  it('rejects a type that is not built-in', () => {
-    expect(() => registry.register('k8s.pod', hostInventoryExtension)).toThrow(
-      EntityDefinitionValidationError
-    );
-    expect(() => registry.register('k8s.pod', hostInventoryExtension)).toThrow(
-      /"k8s.pod" is not a built-in entity type/
+  it('rejects an extends that is not built-in, pointing at full definitions', () => {
+    const document = { ...hostExtensionDocument, extends: 'k8s.pod' };
+    expect(() => registry.register(document)).toThrow(EntityDefinitionValidationError);
+    expect(() => registry.register(document)).toThrow(
+      /"k8s.pod" is not a built-in entity type and cannot be extended; register a full entity definition with "type"/
     );
     expect(registry.types()).toEqual([]);
   });
 
   it('rejects a second extension for the same type instead of overriding it', () => {
-    registry.register('host', hostInventoryExtension);
-    expect(() => registry.register('host', { sources: [{ index: 'other-*' }] })).toThrow(
-      /already registered for built-in entity type "host"/
-    );
+    registry.register(hostExtensionDocument);
+    expect(() =>
+      registry.register({ extends: 'host', inventory: { sources: [{ index: 'other-*' }] } })
+    ).toThrow(/already registered in code for built-in entity type "host"/);
     expect(registry.get('host')).toEqual(hostInventoryExtension);
   });
 
-  it('rejects an extension that fails the schema, with the zod path and message', () => {
+  it('rejects a document that fails the schema, with the zod path and message', () => {
     expect(() =>
-      registry.register('host', { ...hostInventoryExtension, identity: ['host.name'] })
-    ).toThrow(/Invalid inventory extension: <root>: Unrecognized key: "identity"/);
-    expect(() => registry.register('host', { label: 'Hosts' })).toThrow(
-      /Invalid inventory extension: sources:/
+      registry.register({
+        extends: 'host',
+        inventory: { ...hostInventoryExtension, identity: ['host.name'] },
+      })
+    ).toThrow(/Invalid inventory extension document: inventory: Unrecognized key: "identity"/);
+    expect(() => registry.register({ extends: 'host', inventory: { label: 'Hosts' } })).toThrow(
+      /Invalid inventory extension document: inventory.sources:/
+    );
+    expect(() => registry.register({ type: 'host', inventory: hostInventoryExtension })).toThrow(
+      EntityDefinitionValidationError
+    );
+    expect(() => registry.register({ ...hostExtensionDocument, name: 'x' })).toThrow(
+      /Unrecognized key: "name"/
     );
     expect(() =>
-      registry.register('host', { ...hostInventoryExtension, attributes: ['COUNT(*)'] })
+      registry.register({
+        extends: 'host',
+        inventory: { ...hostInventoryExtension, attributes: ['COUNT(*)'] },
+      })
     ).toThrow(EntityDefinitionValidationError);
-    expect(() => registry.register('host', undefined)).toThrow(EntityDefinitionValidationError);
+    expect(() => registry.register(undefined)).toThrow(EntityDefinitionValidationError);
     expect(registry.has('host')).toBe(false);
   });
 
@@ -88,7 +101,10 @@ describe('BuiltInInventoryExtensionsRegistry', () => {
       expect(identitySourceFields.length).toBeGreaterThan(0);
       for (const field of identitySourceFields) {
         expect(() =>
-          registry.register(type, { sources: [{ index: 'metrics-*' }], attributes: [field] })
+          registry.register({
+            extends: type,
+            inventory: { sources: minimalSources, attributes: [field] },
+          })
         ).toThrow(
           new RegExp(
             `attribute "${field.replace(
@@ -104,9 +120,12 @@ describe('BuiltInInventoryExtensionsRegistry', () => {
 
   it('names every clashing attribute for host', () => {
     expect(() =>
-      registry.register('host', {
-        sources: [{ index: 'metrics-*' }],
-        attributes: ['host.os.name', 'host.id', 'host.name'],
+      registry.register({
+        extends: 'host',
+        inventory: {
+          sources: minimalSources,
+          attributes: ['host.os.name', 'host.id', 'host.name'],
+        },
       })
     ).toThrow(/attribute "host.id" .*; attribute "host.name" /);
   });

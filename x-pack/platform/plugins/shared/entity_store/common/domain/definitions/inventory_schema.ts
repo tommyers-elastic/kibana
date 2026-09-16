@@ -6,6 +6,7 @@
  */
 
 import { z } from '@kbn/zod/v4';
+import { entityTypeNameSchema } from './identity_core_schema';
 
 /**
  * Inventory (Observability) extension of an entity definition.
@@ -174,3 +175,24 @@ export type InventoryExtension = z.infer<typeof inventoryExtensionSchema>;
 export const builtInInventoryExtensionSchema = z.strictObject(inventoryExtensionShape);
 
 export type BuiltInInventoryExtension = z.infer<typeof builtInInventoryExtensionSchema>;
+
+/**
+ * The document that declares a built-in inventory extension, for code (`registerInventoryExtension`)
+ * and the definitions API alike: `extends` names the built-in type, `inventory` is the extension.
+ * No `type`, identity or materialisation: a document with `type` is a full definition. Whether
+ * `extends` is actually a built-in is a registration rule (`assertRegistrableExtension`), so the
+ * error can point at the definitions API.
+ */
+export const builtInInventoryExtensionDocumentSchema = z.strictObject({
+  extends: entityTypeNameSchema,
+  inventory: builtInInventoryExtensionSchema,
+});
+
+export type BuiltInInventoryExtensionDocument = z.infer<
+  typeof builtInInventoryExtensionDocumentSchema
+>;
+
+/** Discriminates an API body / registration input: `extends` means extension, `type` means definition. */
+export const isBuiltInInventoryExtensionDocument = (
+  document: object
+): document is BuiltInInventoryExtensionDocument => 'extends' in document;

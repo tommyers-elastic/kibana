@@ -23,7 +23,7 @@ export function registerDefinitionsList(router: EntityStorePluginRouter) {
       access: 'internal',
       summary: 'List entity definitions',
       description:
-        'Lists every entity definition resolvable in the current space (built-in, code-registered and API-registered), optionally filtered by materialisation mode.',
+        'Lists every entity definition resolvable in the current space (built-in, code-registered and API-registered), optionally filtered by materialisation mode or to those with an inventory extension.',
       security: {
         authz: { requiredPrivileges: [ENTITY_DEFINITIONS_API_PRIVILEGES.read] },
       },
@@ -43,6 +43,7 @@ export function registerDefinitionsList(router: EntityStorePluginRouter) {
           const { entityDefinitionRegistry } = await ctx.entityStore;
           const definitions = await entityDefinitionRegistry.getDefinitions({
             mode: req.query.mode,
+            inventory: req.query.inventory,
           });
           return res.ok({ body: { definitions } });
         }

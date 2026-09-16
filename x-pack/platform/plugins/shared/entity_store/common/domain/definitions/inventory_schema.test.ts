@@ -7,8 +7,10 @@
 
 import { INVENTORY_DEFINITION_FIXTURES } from './__fixtures__/inventory_definitions';
 import {
+  builtInInventoryExtensionDocumentSchema,
   builtInInventoryExtensionSchema,
   inventoryExtensionSchema,
+  isBuiltInInventoryExtensionDocument,
   inventorySourceSchema,
   isLiteralFieldPath,
 } from './inventory_schema';
@@ -170,6 +172,48 @@ describe('builtInInventoryExtensionSchema', () => {
     expect(
       builtInInventoryExtensionSchema.safeParse({ ...minimalBuiltInExtension, [key]: value })
         .success
+    ).toBe(false);
+  });
+});
+
+describe('builtInInventoryExtensionDocumentSchema', () => {
+  const document = { extends: 'host', inventory: { sources: [{ index: 'metrics-system.cpu-*' }] } };
+
+  it('accepts an extends plus inventory document', () => {
+    const result = builtInInventoryExtensionDocumentSchema.safeParse(document);
+    expect(result.error?.issues).toBeUndefined();
+    expect(result.success).toBe(true);
+    expect(isBuiltInInventoryExtensionDocument(document)).toBe(true);
+    expect(isBuiltInInventoryExtensionDocument({ type: 'k8s.pod' })).toBe(false);
+  });
+
+  it('validates extends as a type name but leaves "is it built-in" to the registration rules', () => {
+    expect(
+      builtInInventoryExtensionDocumentSchema.safeParse({ ...document, extends: 'k8s.pod' }).success
+    ).toBe(true);
+    expect(
+      builtInInventoryExtensionDocumentSchema.safeParse({ ...document, extends: 'Host Type' })
+        .success
+    ).toBe(false);
+  });
+
+  it.each([
+    ['type', 'host'],
+    ['name', 'Hosts'],
+    ['identityField', { singleField: 'host.name' }],
+    ['materialisation', { mode: 'none' }],
+  ])('rejects the definition key %s on an extension document', (key, value) => {
+    expect(
+      builtInInventoryExtensionDocumentSchema.safeParse({ ...document, [key]: value }).success
+    ).toBe(false);
+  });
+
+  it('requires both extends and inventory', () => {
+    expect(builtInInventoryExtensionDocumentSchema.safeParse({ extends: 'host' }).success).toBe(
+      false
+    );
+    expect(
+      builtInInventoryExtensionDocumentSchema.safeParse({ inventory: document.inventory }).success
     ).toBe(false);
   });
 });

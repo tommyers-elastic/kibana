@@ -16,12 +16,24 @@ import type { EntityDefinition } from './entity_schema';
 export type EntityDefinitionSource = 'built_in' | 'code' | 'api';
 
 /**
+ * Where the inventory extension of a built-in definition comes from:
+ * - `code`: attached at setup through `registerInventoryExtension` (global, wins over `api`).
+ * - `api`: an extension document (`{ extends, inventory }`) registered per space through the API.
+ */
+export type EntityDefinitionInventorySource = 'code' | 'api';
+
+/**
  * A resolved definition plus where it came from and, for `api` definitions, when it was written.
  * Versioning is the author's: a definition may carry its own `version` in the core schema.
  */
 export interface EntityDefinitionRecord {
   definition: EntityDefinition;
   source: EntityDefinitionSource;
+  /**
+   * Set only on a built-in whose `definition.inventory` is a registered extension; the definition
+   * itself is still `built_in`. `createdAt` / `updatedAt` are then the extension's (`api` only).
+   */
+  inventorySource?: EntityDefinitionInventorySource;
   createdAt?: string;
   updatedAt?: string;
 }

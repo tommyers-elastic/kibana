@@ -11,6 +11,8 @@ import {
   EntityDefinitionIdentityChangedError,
   EntityDefinitionNotFoundError,
   EntityDefinitionValidationError,
+  InventoryExtensionAlreadyExistsError,
+  InventoryExtensionCodeRegisteredError,
 } from '../../../domain/definitions';
 
 /** Maps definition domain errors to HTTP responses; returns `undefined` for anything else so the caller rethrows. */
@@ -26,7 +28,9 @@ export function mapDefinitionError(
   }
   if (
     error instanceof EntityDefinitionAlreadyExistsError ||
-    error instanceof EntityDefinitionIdentityChangedError
+    error instanceof EntityDefinitionIdentityChangedError ||
+    error instanceof InventoryExtensionAlreadyExistsError ||
+    error instanceof InventoryExtensionCodeRegisteredError
   ) {
     return res.conflict({ body: { message: error.message } });
   }

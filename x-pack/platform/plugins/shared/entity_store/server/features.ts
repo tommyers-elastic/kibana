@@ -12,7 +12,13 @@ import {
   ENTITY_DEFINITIONS_API_PRIVILEGES,
   ENTITY_DEFINITIONS_FEATURE_ID,
   ENTITY_DEFINITION_SAVED_OBJECT_TYPE,
+  ENTITY_INVENTORY_EXTENSION_SAVED_OBJECT_TYPE,
 } from '../common';
+
+const DEFINITIONS_SAVED_OBJECT_TYPES = [
+  ENTITY_DEFINITION_SAVED_OBJECT_TYPE,
+  ENTITY_INVENTORY_EXTENSION_SAVED_OBJECT_TYPE,
+];
 
 /**
  * Neutral Kibana feature gating the entity definitions API. It deliberately does not reuse the
@@ -36,7 +42,7 @@ export function registerEntityDefinitionsFeature(features: FeaturesPluginSetup):
       all: {
         app: [],
         savedObject: {
-          all: [ENTITY_DEFINITION_SAVED_OBJECT_TYPE],
+          all: DEFINITIONS_SAVED_OBJECT_TYPES,
           read: [],
         },
         api: [ENTITY_DEFINITIONS_API_PRIVILEGES.read, ENTITY_DEFINITIONS_API_PRIVILEGES.manage],
@@ -46,7 +52,7 @@ export function registerEntityDefinitionsFeature(features: FeaturesPluginSetup):
         app: [],
         savedObject: {
           all: [],
-          read: [ENTITY_DEFINITION_SAVED_OBJECT_TYPE],
+          read: DEFINITIONS_SAVED_OBJECT_TYPES,
         },
         api: [ENTITY_DEFINITIONS_API_PRIVILEGES.read],
         ui: [],

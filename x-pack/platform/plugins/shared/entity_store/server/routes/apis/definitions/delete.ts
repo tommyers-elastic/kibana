@@ -24,7 +24,8 @@ export function registerDefinitionsDelete(router: EntityStorePluginRouter) {
       access: 'internal',
       summary: 'Delete an entity definition',
       description:
-        'Deletes an API-registered entity definition. Built-in and code-registered types cannot be deleted.',
+        'Deletes an API-registered entity definition or, for a built-in type, its API-registered inventory extension. ' +
+        'Built-in and code-registered types themselves cannot be deleted.',
       security: {
         authz: { requiredPrivileges: [ENTITY_DEFINITIONS_API_PRIVILEGES.manage] },
       },

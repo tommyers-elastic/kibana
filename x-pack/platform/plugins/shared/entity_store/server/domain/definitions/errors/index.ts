@@ -9,3 +9,5 @@ export { EntityDefinitionValidationError } from './entity_definition_validation_
 export { EntityDefinitionNotFoundError } from './entity_definition_not_found_error';
 export { EntityDefinitionAlreadyExistsError } from './entity_definition_already_exists_error';
 export { EntityDefinitionIdentityChangedError } from './entity_definition_identity_changed_error';
+export { InventoryExtensionAlreadyExistsError } from './inventory_extension_already_exists_error';
+export { InventoryExtensionCodeRegisteredError } from './inventory_extension_code_registered_error';

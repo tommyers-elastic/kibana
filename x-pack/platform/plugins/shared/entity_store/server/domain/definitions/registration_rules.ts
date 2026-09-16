@@ -5,25 +5,89 @@
  * 2.0.
  */
 
-import type { EntityDefinitionWithoutId } from '../../../common/domain/definitions/entity_schema';
+import type { ZodSafeParseResult } from '@kbn/zod/v4';
+import type {
+  BuiltInInventoryExtensionDocument,
+  EntityDefinitionWithoutId,
+} from '../../../common/domain/definitions/entity_schema';
 import {
+  builtInInventoryExtensionDocumentSchema,
   entityDefinitionInputSchema,
   getMaterialisationMode,
 } from '../../../common/domain/definitions/entity_schema';
-import { isBuiltInEntityType } from '../../../common/domain/definitions/built_in_entity_types';
+import {
+  entityDefinitionsApiBodySchema,
+  type EntityDefinitionsApiBody,
+} from '../../../common/domain/definitions/definitions_api_body';
+import {
+  isBuiltInEntityType,
+  type BuiltInEntityType,
+} from '../../../common/domain/definitions/built_in_entity_types';
+import { getEntityDefinitionWithoutId } from '../../../common/domain/definitions/registry';
+import { getEuidSourceFieldsFromDefinition } from '../../../common/domain/euid';
 import { EntityDefinitionValidationError } from './errors';
 
-/** Validates a candidate against the definition schema, throwing a validation error with zod's message. */
-export function parseDefinitionInput(candidate: unknown): EntityDefinitionWithoutId {
-  const result = entityDefinitionInputSchema.safeParse(candidate);
+const unwrap = <T>(result: ZodSafeParseResult<T>, subject: string): T => {
   if (!result.success) {
     throw new EntityDefinitionValidationError(
-      `Invalid entity definition: ${result.error.issues
+      `Invalid ${subject}: ${result.error.issues
         .map((issue) => `${issue.path.join('.') || '<root>'}: ${issue.message}`)
         .join('; ')}`
     );
   }
   return result.data;
+};
+
+/** Validates a candidate against the definition schema, throwing a validation error with zod's message. */
+export function parseDefinitionInput(candidate: unknown): EntityDefinitionWithoutId {
+  return unwrap(entityDefinitionInputSchema.safeParse(candidate), 'entity definition');
+}
+
+/** Validates a candidate `{ extends, inventory }` document, throwing a validation error with zod's message. */
+export function parseExtensionDocument(candidate: unknown): BuiltInInventoryExtensionDocument {
+  return unwrap(
+    builtInInventoryExtensionDocumentSchema.safeParse(candidate),
+    'inventory extension document'
+  );
+}
+
+/** Validates a definitions API body of either kind (full definition or extension document). */
+export function parseDefinitionsApiBody(candidate: unknown): EntityDefinitionsApiBody {
+  return unwrap(entityDefinitionsApiBodySchema.safeParse(candidate), 'entity definition document');
+}
+
+/**
+ * Registration rules shared by code and API registration of built-in inventory extensions: the
+ * extended type must be a built-in (anything else is a full definition, registered with `type`),
+ * and attributes may not be identity fields of the built-in (the authored form's "attributes may
+ * not repeat identity" rule, applied against the fields the built-in ranking references). Returns
+ * the extended type narrowed to `BuiltInEntityType`.
+ */
+export function assertRegistrableExtension({
+  extends: type,
+  inventory,
+}: BuiltInInventoryExtensionDocument): BuiltInEntityType {
+  if (!isBuiltInEntityType(type)) {
+    throw new EntityDefinitionValidationError(
+      `"${type}" is not a built-in entity type and cannot be extended; register a full entity definition with "type" instead`
+    );
+  }
+  const attributes = inventory.attributes ?? [];
+  if (attributes.length > 0) {
+    const { identitySourceFields } = getEuidSourceFieldsFromDefinition(
+      getEntityDefinitionWithoutId(type)
+    );
+    const identity = new Set(identitySourceFields);
+    const clashes = attributes.filter((field) => identity.has(field));
+    if (clashes.length > 0) {
+      throw new EntityDefinitionValidationError(
+        `Invalid inventory extension for "${type}": ${clashes
+          .map((field) => `attribute "${field}" is an identity field of the built-in definition`)
+          .join('; ')}`
+      );
+    }
+  }
+  return type;
 }
 
 /**

@@ -137,6 +137,7 @@ export type {
   MaterialisationMode,
   InventoryExtension,
   BuiltInInventoryExtension,
+  BuiltInInventoryExtensionDocument,
 } from './domain/definitions/entity_schema';
 
 export type {
@@ -231,6 +232,7 @@ export type {
 export type {
   EntityDefinitionRecord,
   EntityDefinitionSource,
+  EntityDefinitionInventorySource,
 } from './domain/definitions/definition_record';
 
 /** UI setting (API-only, hidden from the advanced settings UI) gating the definitions API. */
@@ -238,6 +240,9 @@ export const FF_ENABLE_DYNAMIC_DEFINITIONS = 'entityStore:dynamicDefinitionsEnab
 
 /** Saved object type holding API-registered definitions. */
 export const ENTITY_DEFINITION_SAVED_OBJECT_TYPE = 'entity-store-definition';
+
+/** Saved object type holding API-registered inventory extensions of built-in types. */
+export const ENTITY_INVENTORY_EXTENSION_SAVED_OBJECT_TYPE = 'entity-store-inventory-extension';
 
 /** Kibana feature that grants the definitions API privileges; neutral, not tied to Security. */
 export const ENTITY_DEFINITIONS_FEATURE_ID = 'entityDefinitions';

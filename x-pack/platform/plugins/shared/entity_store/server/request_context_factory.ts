@@ -29,9 +29,12 @@ import {
   EntityDefinitionRegistry,
   EntityDefinitionsClient,
   EntityDefinitionsRepository,
+  InventoryExtensionsRepository,
   type BuiltInInventoryExtensionsRegistry,
   type CodeDefinitionsRegistry,
   type EntityDefinitionsCache,
+  type EntityDefinitionsDeps,
+  type StoredInventoryExtensionAttributes,
 } from './domain/definitions';
 
 interface EntityStoreApiRequestHandlerContextDeps {
@@ -43,6 +46,7 @@ interface EntityStoreApiRequestHandlerContextDeps {
   analytics: TelemetryReporter;
   definitionsCache: EntityDefinitionsCache;
   codeDefinitions: CodeDefinitionsRegistry;
+  extensionsCache: EntityDefinitionsCache<StoredInventoryExtensionAttributes>;
   builtInInventoryExtensions: BuiltInInventoryExtensionsRegistry;
 }
 
@@ -55,6 +59,7 @@ export async function createRequestHandlerContext({
   analytics,
   definitionsCache,
   codeDefinitions,
+  extensionsCache,
   builtInInventoryExtensions,
 }: EntityStoreApiRequestHandlerContextDeps): Promise<EntityStoreApiRequestHandlerContext> {
   const core = await context.core;
@@ -123,10 +128,13 @@ export async function createRequestHandlerContext({
     core.savedObjects.client,
     namespace
   );
-  const definitionsDeps = {
+  const definitionsDeps: EntityDefinitionsDeps = {
     repository: definitionsRepository,
     cache: definitionsCache,
     codeDefinitions,
+    extensionsRepository: new InventoryExtensionsRepository(core.savedObjects.client, namespace),
+    extensionsCache,
+    builtInInventoryExtensions,
     namespace,
   };
 
@@ -178,11 +186,7 @@ export async function createRequestHandlerContext({
     logsExtractionClient,
     historySnapshotClient,
     security: startPlugins.security,
-    entityDefinitionRegistry: new EntityDefinitionRegistry({
-      ...definitionsDeps,
-      builtInInventoryExtensions,
-      logger,
-    }),
+    entityDefinitionRegistry: new EntityDefinitionRegistry({ ...definitionsDeps, logger }),
     entityDefinitionsClient: new EntityDefinitionsClient({ ...definitionsDeps, logger }),
     namespace,
     analytics,

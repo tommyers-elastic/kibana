@@ -24,7 +24,8 @@ export function registerDefinitionsCreate(router: EntityStorePluginRouter) {
       access: 'internal',
       summary: 'Register an entity definition',
       description:
-        'Registers a non-materialised entity definition in the current space. Built-in type names are reserved.',
+        'Registers a non-materialised entity definition (`type`) or an inventory extension of a built-in type ' +
+        '(`{ extends, inventory }`) in the current space. Built-in type names are reserved for extensions.',
       security: {
         authz: { requiredPrivileges: [ENTITY_DEFINITIONS_API_PRIVILEGES.manage] },
       },
