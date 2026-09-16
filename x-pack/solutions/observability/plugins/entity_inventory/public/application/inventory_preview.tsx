@@ -526,7 +526,7 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
                 description={i18n.translate(
                   'xpack.entityInventory.preview.stat.documentsProcessed',
                   {
-                    defaultMessage: 'Processed by queries',
+                    defaultMessage: 'Reads by queries',
                   }
                 )}
               />
@@ -546,7 +546,7 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
           <EuiText size="xs" color="subdued">
             {i18n.translate('xpack.entityInventory.preview.documentsHint', {
               defaultMessage:
-                'Processed is what Elasticsearch read after pushing filters down (under TS only documents carrying the declared metrics); in window is every document of the sources’ indices in the range. Counted by a separate query, not included in the timings.',
+                'Reads is the sum of what each source query read after pushing filters down (under TS only documents carrying the declared metrics); sources that share an index pattern read the same documents again, so reads can exceed the documents in window. In window counts every document of the distinct source patterns in the range once, by a separate query that is not included in the timings.',
             })}
           </EuiText>
           <EuiSpacer size="l" />
