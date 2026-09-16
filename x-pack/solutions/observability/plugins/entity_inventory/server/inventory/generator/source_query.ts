@@ -57,10 +57,18 @@ const attributeExpression = (field: string): string => {
 /**
  * A source that declares metrics lists the entities that reported at least one of them: explicit
  * in `WHERE` so `TS` (which only scans metric-carrying documents anyway) and `FROM` agree and
- * `FROM` gets the same pushdown.
+ * `FROM` gets the same pushdown. Only value metrics count as "reported": a `count_distinct` is
+ * usually over a dimension present on every document (pod names, node names), which would make
+ * the predicate true everywhere and turn the `FROM` count into a full scan (measured: 43M
+ * documents instead of 5.9M at 6 h). Sources with only `count_distinct` metrics fall back to
+ * those fields so presence is still required.
  */
 export const metricPresenceFilter = (source: InventorySource): string | undefined => {
-  const fields = [...new Set((source.metrics ?? []).map(({ field }) => field))];
+  const metrics = source.metrics ?? [];
+  const valueMetrics = metrics.filter(({ agg }) => agg !== 'count_distinct');
+  const fields = [
+    ...new Set((valueMetrics.length > 0 ? valueMetrics : metrics).map(({ field }) => field)),
+  ];
   if (fields.length === 0) {
     return undefined;
   }

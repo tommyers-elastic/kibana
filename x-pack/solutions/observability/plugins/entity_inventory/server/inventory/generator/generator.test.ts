@@ -18,6 +18,7 @@ import {
   buildSourceQuery,
   getInventory,
   metricExpression,
+  metricPresenceFilter,
   resolveIdentityPlan,
   validateSourceFilter,
   quoteIdentifier,
@@ -157,6 +158,22 @@ describe('generator', () => {
     expect(esql).toContain('CONCAT("host:"');
     // A numeric path segment is quoted, otherwise `.1` parses as a number.
     expect(esql).toContain('`system.load.1`');
+  });
+
+  it('builds the metric presence filter from value metrics only', () => {
+    expect(metricPresenceFilter(getInventory(deploymentDefinition).sources[0])).toBe(
+      '(`k8s.pod.cpu.usage` IS NOT NULL)'
+    );
+    expect(
+      metricPresenceFilter({
+        index: 'x',
+        metrics: [
+          { name: 'pods', field: 'kubernetes.pod.name', agg: 'count_distinct' },
+          { name: 'nodes', field: 'kubernetes.node.name', agg: 'count_distinct' },
+        ],
+      })
+    ).toBe('(`kubernetes.pod.name` IS NOT NULL OR `kubernetes.node.name` IS NOT NULL)');
+    expect(metricPresenceFilter({ index: 'x' })).toBeUndefined();
   });
 
   it('maps metric aggregations per engine', () => {
