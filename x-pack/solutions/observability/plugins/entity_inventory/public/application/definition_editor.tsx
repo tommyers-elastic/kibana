@@ -7,15 +7,12 @@
 
 import React, { useMemo, useState } from 'react';
 import {
-  EuiBadge,
   EuiButton,
   EuiButtonEmpty,
-  EuiButtonGroup,
   EuiConfirmModal,
   EuiFlexGroup,
   EuiFlexItem,
   EuiSpacer,
-  EuiTitle,
   useGeneratedHtmlId,
 } from '@elastic/eui';
 import { CodeEditor } from '@kbn/code-editor';
@@ -41,10 +38,11 @@ interface DefinitionEditorProps {
   mode: EditorMode;
   onSave: (document: DefinitionDocument) => Promise<void>;
   onDelete: (type: string) => Promise<void>;
+  onCancel: () => void;
   onAddExtension: (type: string) => void;
 }
 
-const EDITOR_HEIGHT = 480;
+const EDITOR_HEIGHT = '60vh';
 
 const readOnlyExplanation: Record<ReadOnlyReason, string> = {
   code: i18n.translate('xpack.entityInventory.editor.readOnly.code', {
@@ -67,21 +65,6 @@ const readOnlyExplanation: Record<ReadOnlyReason, string> = {
   ),
 };
 
-const templateOptions = [
-  {
-    id: 'definition' satisfies TemplateKind,
-    label: i18n.translate('xpack.entityInventory.editor.template.definition', {
-      defaultMessage: 'Definition',
-    }),
-  },
-  {
-    id: 'extension' satisfies TemplateKind,
-    label: i18n.translate('xpack.entityInventory.editor.template.extension', {
-      defaultMessage: 'Built-in extension',
-    }),
-  },
-];
-
 const initialText = (mode: EditorMode): string =>
   stringifyDocument(
     mode.kind === 'new'
@@ -90,19 +73,17 @@ const initialText = (mode: EditorMode): string =>
   );
 
 /**
- * JSON editor for one definition or extension document. The parent re-keys this component per
- * selection, so local state (text, errors) resets when another record is selected.
+ * JSON editor for one definition or extension document with its Save / Cancel / Delete bar. The
+ * parent re-keys this component per record, so local state (text, errors) resets on navigation.
  */
 export const DefinitionEditor = ({
   mode,
   onSave,
   onDelete,
+  onCancel,
   onAddExtension,
 }: DefinitionEditorProps) => {
   const [text, setText] = useState<string>(() => initialText(mode));
-  const [templateKind, setTemplateKind] = useState<TemplateKind>(
-    mode.kind === 'new' ? mode.template : 'definition'
-  );
   const [serverError, setServerError] = useState<DescribedError | undefined>();
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -115,15 +96,6 @@ export const DefinitionEditor = ({
   );
   const isReadOnly = editability?.kind === 'read_only';
   const recordType = mode.kind === 'edit' ? mode.record.definition.type : undefined;
-
-  const handleTemplateChange = (id: string) => {
-    const kind = id as TemplateKind;
-    setTemplateKind(kind);
-    setText(
-      stringifyDocument(getTemplate(kind, mode.kind === 'new' ? mode.extendsType : undefined))
-    );
-    setServerError(undefined);
-  };
 
   const handleSave = async () => {
     const parsed = parseDocument(text);
@@ -158,56 +130,8 @@ export const DefinitionEditor = ({
     }
   };
 
-  const title =
-    mode.kind === 'new'
-      ? i18n.translate('xpack.entityInventory.editor.newTitle', {
-          defaultMessage: 'New document',
-        })
-      : mode.record.definition.type;
-
   return (
     <>
-      <EuiFlexGroup alignItems="center" gutterSize="s" responsive={false}>
-        <EuiFlexItem grow={false}>
-          <EuiTitle size="s">
-            <h2>{title}</h2>
-          </EuiTitle>
-        </EuiFlexItem>
-        {mode.kind === 'edit' && (
-          <>
-            <EuiFlexItem grow={false}>
-              <EuiBadge color="hollow">{mode.record.source}</EuiBadge>
-            </EuiFlexItem>
-            {mode.record.inventorySource && (
-              <EuiFlexItem grow={false}>
-                <EuiBadge color="hollow">
-                  {i18n.translate('xpack.entityInventory.editor.inventorySourceBadge', {
-                    defaultMessage: 'inventory: {source}',
-                    values: { source: mode.record.inventorySource },
-                  })}
-                </EuiBadge>
-              </EuiFlexItem>
-            )}
-          </>
-        )}
-      </EuiFlexGroup>
-      <EuiSpacer size="s" />
-
-      {mode.kind === 'new' && (
-        <>
-          <EuiButtonGroup
-            legend={i18n.translate('xpack.entityInventory.editor.template.legend', {
-              defaultMessage: 'Template',
-            })}
-            options={templateOptions}
-            idSelected={templateKind}
-            onChange={handleTemplateChange}
-            buttonSize="compressed"
-          />
-          <EuiSpacer size="s" />
-        </>
-      )}
-
       {editability?.kind === 'read_only' && (
         <>
           <KbnInfoCallout
@@ -230,7 +154,7 @@ export const DefinitionEditor = ({
               </EuiButton>
             )}
           </KbnInfoCallout>
-          <EuiSpacer size="s" />
+          <EuiSpacer size="m" />
         </>
       )}
 
@@ -244,7 +168,7 @@ export const DefinitionEditor = ({
               values: { type: recordType },
             })}
           />
-          <EuiSpacer size="s" />
+          <EuiSpacer size="m" />
         </>
       )}
 
@@ -264,7 +188,7 @@ export const DefinitionEditor = ({
           >
             <p>{serverError.message}</p>
           </KbnDangerCallout>
-          <EuiSpacer size="s" />
+          <EuiSpacer size="m" />
         </>
       )}
 
@@ -275,31 +199,45 @@ export const DefinitionEditor = ({
         height={EDITOR_HEIGHT}
         options={{ readOnly: isReadOnly, minimap: { enabled: false }, tabSize: 2 }}
       />
-      <EuiSpacer size="s" />
+      <EuiSpacer size="m" />
 
-      <EuiFlexGroup gutterSize="s" responsive={false}>
+      <EuiFlexGroup justifyContent="spaceBetween" gutterSize="s" responsive={false}>
         <EuiFlexItem grow={false}>
-          <EuiButton
-            data-test-subj="entityInventoryDefinitionEditorButton"
-            fill
-            iconType="save"
-            onClick={handleSave}
-            isLoading={isSaving}
-            isDisabled={isReadOnly}
-          >
-            {mode.kind === 'new'
-              ? i18n.translate('xpack.entityInventory.editor.createButton', {
-                  defaultMessage: 'Create',
-                })
-              : i18n.translate('xpack.entityInventory.editor.saveButton', {
-                  defaultMessage: 'Save',
+          <EuiFlexGroup gutterSize="s" responsive={false}>
+            <EuiFlexItem grow={false}>
+              <EuiButton
+                data-test-subj="entityInventoryDefinitionEditorSaveButton"
+                fill
+                iconType="save"
+                onClick={handleSave}
+                isLoading={isSaving}
+                isDisabled={isReadOnly}
+              >
+                {mode.kind === 'new'
+                  ? i18n.translate('xpack.entityInventory.editor.createButton', {
+                      defaultMessage: 'Create',
+                    })
+                  : i18n.translate('xpack.entityInventory.editor.saveButton', {
+                      defaultMessage: 'Save',
+                    })}
+              </EuiButton>
+            </EuiFlexItem>
+            <EuiFlexItem grow={false}>
+              <EuiButtonEmpty
+                data-test-subj="entityInventoryDefinitionEditorCancelButton"
+                onClick={onCancel}
+              >
+                {i18n.translate('xpack.entityInventory.editor.cancelButton', {
+                  defaultMessage: 'Cancel',
                 })}
-          </EuiButton>
+              </EuiButtonEmpty>
+            </EuiFlexItem>
+          </EuiFlexGroup>
         </EuiFlexItem>
         {mode.kind === 'edit' && !isReadOnly && (
           <EuiFlexItem grow={false}>
             <EuiButtonEmpty
-              data-test-subj="entityInventoryDefinitionEditorButton"
+              data-test-subj="entityInventoryDefinitionEditorDeleteButton"
               color="danger"
               iconType="trash"
               onClick={() => setIsConfirmingDelete(true)}

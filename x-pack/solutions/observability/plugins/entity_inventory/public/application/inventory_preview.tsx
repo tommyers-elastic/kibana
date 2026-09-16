@@ -19,6 +19,7 @@ import {
   EuiFlexItem,
   EuiFormRow,
   EuiSpacer,
+  EuiStat,
   EuiText,
   EuiTextColor,
   EuiTitle,
@@ -27,7 +28,7 @@ import {
   type EuiBasicTableColumn,
 } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
-import { KbnDangerCallout, KbnInfoCallout } from '@kbn/ui-callout';
+import { KbnDangerCallout, KbnInfoCallout, KbnWarningCallout } from '@kbn/ui-callout';
 import type {
   InventoryColumn,
   InventoryListResponse,
@@ -69,36 +70,12 @@ const NUMERIC_ES_TYPES = new Set([
 const isNumericColumn = ({ kind, esType }: InventoryColumn): boolean =>
   kind === 'metric' || (esType !== undefined && NUMERIC_ES_TYPES.has(esType));
 
-const EMPTY_CELL = '\u2014';
+const EMPTY_CELL = '—';
 
-const summaryItems = (result: InventoryListResponse) => [
-  { title: 'total', description: result.total === null ? 'null' : String(result.total) },
-  { title: 'truncated', description: String(result.truncated) },
-  { title: 'tookMs', description: String(result.tookMs) },
-  { title: 'esTookMs', description: String(result.esTookMs) },
-  {
-    title: 'errors',
-    description:
-      result.errors.length === 0
-        ? '-'
-        : result.errors
-            .map(({ index, statusCode, message }) =>
-              statusCode !== undefined
-                ? `${index}: [${statusCode}] ${message}`
-                : `${index}: ${message}`
-            )
-            .join('; '),
-  },
-  {
-    title: 'unavailableColumns',
-    description:
-      result.unavailableColumns.length === 0
-        ? '-'
-        : result.unavailableColumns
-            .map(({ index, column, field }) => `${column} (${field}) in ${index}`)
-            .join('; '),
-  },
-];
+const yesNo = (value: boolean): string =>
+  value
+    ? i18n.translate('xpack.entityInventory.preview.yes', { defaultMessage: 'yes' })
+    : i18n.translate('xpack.entityInventory.preview.no', { defaultMessage: 'no' });
 
 const queryItems = (query: InventoryQueryInfo) => [
   { title: 'engine', description: query.engine },
@@ -160,158 +137,250 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
       },
     })) ?? [];
 
-  return (
-    <>
-      <EuiTitle size="xs">
-        <h3>
-          {i18n.translate('xpack.entityInventory.preview.title', { defaultMessage: 'Preview' })}
-        </h3>
-      </EuiTitle>
-      <EuiSpacer size="s" />
-
-      {!isAvailable ? (
-        <KbnInfoCallout
-          size="s"
-          title={i18n.translate('xpack.entityInventory.preview.unavailable', {
+  if (!isAvailable) {
+    return (
+      <KbnInfoCallout
+        title={i18n.translate('xpack.entityInventory.preview.unavailableTitle', {
+          defaultMessage: 'No inventory preview for this type',
+        })}
+      >
+        <p>
+          {i18n.translate('xpack.entityInventory.preview.unavailable', {
             defaultMessage:
-              'No preview: this type is not returned by {route}, so it has no inventory extension.',
+              'The type is not returned by {route}: it has no inventory extension, so there are no sources to query.',
             values: { route: `GET ${ENTITY_INVENTORY_ROUTES.TYPES}` },
           })}
-        />
-      ) : (
+        </p>
+      </KbnInfoCallout>
+    );
+  }
+
+  return (
+    <>
+      <EuiFlexGroup alignItems="flexEnd" gutterSize="m" responsive={false}>
+        <EuiFlexItem grow={false}>
+          <EuiFormRow
+            label={i18n.translate('xpack.entityInventory.preview.rangeLabel', {
+              defaultMessage: 'Window',
+            })}
+          >
+            <EuiButtonGroup
+              legend={i18n.translate('xpack.entityInventory.preview.rangeLegend', {
+                defaultMessage: 'Time window relative to now',
+              })}
+              options={rangeOptions}
+              idSelected={range}
+              onChange={(id) => setRange(id as RelativeRange)}
+              buttonSize="compressed"
+            />
+          </EuiFormRow>
+        </EuiFlexItem>
+        <EuiFlexItem grow={false}>
+          <EuiFormRow
+            label={i18n.translate('xpack.entityInventory.preview.limitLabel', {
+              defaultMessage: 'Limit',
+            })}
+          >
+            <EuiFieldNumber
+              data-test-subj="entityInventoryInventoryPreviewFieldNumber"
+              compressed
+              min={1}
+              max={ESQL_MAX_ROWS}
+              value={limit}
+              onChange={(event) => setLimit(Number(event.target.value))}
+            />
+          </EuiFormRow>
+        </EuiFlexItem>
+        <EuiFlexItem grow={false}>
+          <EuiFormRow hasEmptyLabelSpace>
+            <EuiButton
+              data-test-subj="entityInventoryInventoryPreviewRunButton"
+              fill
+              iconType="play"
+              onClick={run}
+              isLoading={isRunning}
+              size="s"
+            >
+              {i18n.translate('xpack.entityInventory.preview.runButton', {
+                defaultMessage: 'Run',
+              })}
+            </EuiButton>
+          </EuiFormRow>
+        </EuiFlexItem>
+      </EuiFlexGroup>
+      <EuiSpacer size="l" />
+
+      {error && (
         <>
-          <EuiFlexGroup alignItems="flexEnd" gutterSize="m" responsive={false}>
-            <EuiFlexItem grow={false}>
-              <EuiFormRow
-                label={i18n.translate('xpack.entityInventory.preview.rangeLabel', {
-                  defaultMessage: 'Time range',
+          <KbnDangerCallout
+            title={i18n.translate('xpack.entityInventory.preview.error', {
+              defaultMessage: 'Preview failed',
+            })}
+          >
+            <p>
+              {error.statusCode !== undefined
+                ? `[${error.statusCode}] ${error.message}`
+                : error.message}
+            </p>
+          </KbnDangerCallout>
+          <EuiSpacer size="l" />
+        </>
+      )}
+
+      {result && (
+        <>
+          <EuiFlexGroup
+            gutterSize="l"
+            responsive={false}
+            data-test-subj="entityInventoryPreviewSummary"
+          >
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={result.total === null ? EMPTY_CELL : formatCellValue(result.total)}
+                description={i18n.translate('xpack.entityInventory.preview.stat.total', {
+                  defaultMessage: 'Total entities',
                 })}
-              >
-                <EuiButtonGroup
-                  legend={i18n.translate('xpack.entityInventory.preview.rangeLegend', {
-                    defaultMessage: 'Time range relative to now',
-                  })}
-                  options={rangeOptions}
-                  idSelected={range}
-                  onChange={(id) => setRange(id as RelativeRange)}
-                  buttonSize="compressed"
-                />
-              </EuiFormRow>
+              />
             </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiFormRow
-                label={i18n.translate('xpack.entityInventory.preview.limitLabel', {
-                  defaultMessage: 'Limit',
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={formatCellValue(result.rows.length)}
+                description={i18n.translate('xpack.entityInventory.preview.stat.rows', {
+                  defaultMessage: 'Rows returned',
                 })}
-              >
-                <EuiFieldNumber
-                  data-test-subj="entityInventoryInventoryPreviewFieldNumber"
-                  compressed
-                  min={1}
-                  max={ESQL_MAX_ROWS}
-                  value={limit}
-                  onChange={(event) => setLimit(Number(event.target.value))}
-                />
-              </EuiFormRow>
+              />
             </EuiFlexItem>
-            <EuiFlexItem grow={false}>
-              <EuiButton
-                data-test-subj="entityInventoryInventoryPreviewRunButton"
-                iconType="play"
-                onClick={run}
-                isLoading={isRunning}
-                size="s"
-              >
-                {i18n.translate('xpack.entityInventory.preview.runButton', {
-                  defaultMessage: 'Run',
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={yesNo(result.truncated)}
+                titleColor={result.truncated ? 'warning' : 'default'}
+                description={i18n.translate('xpack.entityInventory.preview.stat.truncated', {
+                  defaultMessage: 'Truncated',
                 })}
-              </EuiButton>
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={formatCellValue(result.tookMs)}
+                description={i18n.translate('xpack.entityInventory.preview.stat.took', {
+                  defaultMessage: 'Took (ms)',
+                })}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={formatCellValue(result.esTookMs)}
+                description={i18n.translate('xpack.entityInventory.preview.stat.esTook', {
+                  defaultMessage: 'ES took (ms)',
+                })}
+              />
             </EuiFlexItem>
           </EuiFlexGroup>
-          <EuiSpacer size="m" />
+          <EuiSpacer size="l" />
 
-          {error && (
+          {result.errors.length > 0 && (
             <>
-              <KbnDangerCallout
-                title={i18n.translate('xpack.entityInventory.preview.error', {
-                  defaultMessage: 'Preview failed',
+              <KbnWarningCallout
+                size="s"
+                title={i18n.translate('xpack.entityInventory.preview.sourceErrors', {
+                  defaultMessage:
+                    '{count, plural, one {One source failed} other {# sources failed}}',
+                  values: { count: result.errors.length },
                 })}
               >
-                <p>
-                  {error.statusCode !== undefined
-                    ? `[${error.statusCode}] ${error.message}`
-                    : error.message}
-                </p>
-              </KbnDangerCallout>
+                <ul>
+                  {result.errors.map(({ index, statusCode, message }) => (
+                    <li key={index}>
+                      {statusCode !== undefined
+                        ? `${index}: [${statusCode}] ${message}`
+                        : `${index}: ${message}`}
+                    </li>
+                  ))}
+                </ul>
+              </KbnWarningCallout>
               <EuiSpacer size="m" />
             </>
           )}
 
-          {result && (
+          {result.unavailableColumns.length > 0 && (
             <>
-              <EuiDescriptionList
-                type="inline"
-                compressed
-                listItems={summaryItems(result)}
-                data-test-subj="entityInventoryPreviewSummary"
-              />
+              <KbnWarningCallout
+                size="s"
+                title={i18n.translate('xpack.entityInventory.preview.unavailableColumns', {
+                  defaultMessage:
+                    '{count, plural, one {One column is unmapped in a source} other {# columns are unmapped in their source}}',
+                  values: { count: result.unavailableColumns.length },
+                })}
+              >
+                <ul>
+                  {result.unavailableColumns.map(({ index, column, field }) => (
+                    <li key={`${index}:${column}`}>{`${column} (${field}) in ${index}`}</li>
+                  ))}
+                </ul>
+              </KbnWarningCallout>
               <EuiSpacer size="m" />
-              <EuiText size="xs" color="subdued">
-                <p>
-                  {i18n.translate('xpack.entityInventory.preview.rowsSummary', {
-                    defaultMessage:
-                      '{rows} of {total} rows, truncated: {truncated, select, true {yes} other {no}}',
-                    values: {
-                      rows: result.rows.length,
-                      total: result.total === null ? '?' : result.total,
-                      truncated: String(result.truncated),
-                    },
-                  })}
-                </p>
-              </EuiText>
-              <EuiSpacer size="xs" />
-              <div css={scrollableTable}>
-                <EuiBasicTable
-                  tableCaption={i18n.translate('xpack.entityInventory.preview.rowsCaption', {
-                    defaultMessage: 'Entities of type {type}',
-                    values: { type },
-                  })}
-                  items={result.rows}
-                  columns={rowColumns}
-                  tableLayout="auto"
-                  compressed
-                  stickyHeader
-                  responsiveBreakpoint={false}
-                  noItemsMessage={i18n.translate('xpack.entityInventory.preview.noRows', {
-                    defaultMessage: 'No entities in the window',
-                  })}
-                />
-              </div>
-              <EuiSpacer size="m" />
-              <EuiText size="s">
-                <h4>
-                  {i18n.translate('xpack.entityInventory.preview.queriesTitle', {
-                    defaultMessage: 'Queries',
-                  })}
-                </h4>
-              </EuiText>
-              <EuiSpacer size="s" />
-              {result.queries.map((query, index) => (
-                <EuiAccordion
-                  key={`${query.engine}-${query.index}-${index}`}
-                  id={`${accordionBaseId}-${index}`}
-                  buttonContent={`${query.engine} ${query.index}`}
-                  paddingSize="s"
-                >
-                  <EuiDescriptionList type="inline" compressed listItems={queryItems(query)} />
-                  <EuiSpacer size="s" />
-                  <EuiCodeBlock language="sql" fontSize="s" paddingSize="s" isCopyable>
-                    {query.esql}
-                  </EuiCodeBlock>
-                </EuiAccordion>
-              ))}
             </>
           )}
+
+          <EuiText size="xs" color="subdued">
+            <p>
+              {i18n.translate('xpack.entityInventory.preview.rowsSummary', {
+                defaultMessage: '{rows} of {total} rows, truncated: {truncated}',
+                values: {
+                  rows: result.rows.length,
+                  total: result.total === null ? '?' : result.total,
+                  truncated: yesNo(result.truncated),
+                },
+              })}
+            </p>
+          </EuiText>
+          <EuiSpacer size="xs" />
+          <div css={scrollableTable}>
+            <EuiBasicTable
+              tableCaption={i18n.translate('xpack.entityInventory.preview.rowsCaption', {
+                defaultMessage: 'Entities of type {type}',
+                values: { type },
+              })}
+              items={result.rows}
+              columns={rowColumns}
+              tableLayout="auto"
+              compressed
+              stickyHeader
+              responsiveBreakpoint={false}
+              noItemsMessage={i18n.translate('xpack.entityInventory.preview.noRows', {
+                defaultMessage: 'No entities in the window',
+              })}
+            />
+          </div>
+          <EuiSpacer size="l" />
+
+          <EuiTitle size="xs">
+            <h3>
+              {i18n.translate('xpack.entityInventory.preview.queriesTitle', {
+                defaultMessage: 'Queries',
+              })}
+            </h3>
+          </EuiTitle>
+          <EuiSpacer size="s" />
+          {result.queries.map((query, index) => (
+            <EuiAccordion
+              key={`${query.engine}-${query.index}-${index}`}
+              id={`${accordionBaseId}-${index}`}
+              buttonContent={`${query.engine} ${query.index}`}
+              paddingSize="s"
+            >
+              <EuiDescriptionList type="inline" compressed listItems={queryItems(query)} />
+              <EuiSpacer size="s" />
+              <EuiCodeBlock language="sql" fontSize="s" paddingSize="s" isCopyable>
+                {query.esql}
+              </EuiCodeBlock>
+            </EuiAccordion>
+          ))}
         </>
       )}
     </>
