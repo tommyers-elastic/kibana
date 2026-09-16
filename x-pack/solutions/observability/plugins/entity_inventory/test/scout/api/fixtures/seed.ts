@@ -153,7 +153,7 @@ export async function createInventoryTestIndices(esClient: Client): Promise<void
     'kubernetes.node.name': { type: 'keyword' },
     'k8s.pod.cpu.usage': { type: 'double' },
     'k8s.pod.memory.usage': { type: 'long' },
-    'k8s.pod.memory.usage.kb': { type: 'double' },
+    'k8s.pod.memory_kb': { type: 'double' },
   };
   await esClient.indices.create({
     index: STANDARD_INDEX,
@@ -172,7 +172,7 @@ export async function createInventoryTestIndices(esClient: Client): Promise<void
       operations.push({ index: { _index: METRICS_INDEX } }, doc);
       operations.push(
         { index: { _index: STANDARD_INDEX } },
-        { ...doc, 'k8s.pod.memory.usage.kb': pod.mem / 1024 }
+        { ...doc, 'k8s.pod.memory_kb': pod.mem / 1024 }
       );
     }
     if (pod.state) {
@@ -228,7 +228,7 @@ export const POD_DEFINITION = {
           { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg', unit: 'cores' },
           {
             name: 'mem_bytes',
-            field: 'k8s.pod.memory.usage.kb',
+            field: 'k8s.pod.memory_kb',
             agg: 'avg',
             scale: 1024,
             unit: 'bytes',
