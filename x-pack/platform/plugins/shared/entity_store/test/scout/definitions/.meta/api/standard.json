@@ -1,0 +1,248 @@
+{
+  "sha1": "92a51ad5eace57f07c0d0b12c4b9d1375c643ec6",
+  "testChannels": [
+    "ci-on-commit"
+  ],
+  "tests": [
+    {
+      "id": "fb1143a13cdb1fc-4d3fffe76b956f8",
+      "title": "Entity definitions API is gated on the dynamic definitions ui setting",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 89,
+        "column": 82
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-dc0237594b9ccaa",
+      "title": "Entity definitions API lists the four built-ins as materialised in a fresh space",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 99,
+        "column": 23
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-1a36ef65e1c9d0a",
+      "title": "Entity definitions API registers the ported k8s definitions, reads them back and compiles ids from the returned objects",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 116,
+        "column": 21
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-6ad7c5c118328fa",
+      "title": "Entity definitions API rejects a built-in type name with 400",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 169,
+        "column": 14
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-1c16259c8e33cbe",
+      "title": "Entity definitions API rejects a materialised dynamic definition with 400",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 190,
+        "column": 14
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-7695dd48060ee1a",
+      "title": "Entity definitions API rejects unknown keys and schema violations with 400",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 197,
+        "column": 22
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-5d521d1770a35ae",
+      "title": "Entity definitions API replaces definitions and protects identity changes behind force",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 225,
+        "column": 21
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-1d8e4833e60976e",
+      "title": "Entity definitions API creates no engine, template or task for a registered type and leaves the store install unchanged",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 314,
+        "column": 23
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-07e842236883b52",
+      "title": "Entity definitions API scopes registered definitions to their space",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 360,
+        "column": 24
+      }
+    },
+    {
+      "id": "fb1143a13cdb1fc-d067efabb8a0881",
+      "title": "Entity definitions API requires the manage privilege to write and the read privilege to read",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/definitions.spec.ts",
+        "line": 407,
+        "column": 9
+      }
+    },
+    {
+      "id": "f2575e7d171c140-f110fed83542f04",
+      "title": "Entity definitions API: inventory extensions of built-in types creates an extension for host and serves the layered built-in in get and list",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/inventory_extensions.spec.ts",
+        "line": 79,
+        "column": 25
+      }
+    },
+    {
+      "id": "f2575e7d171c140-d5ba9b32328dbdf",
+      "title": "Entity definitions API: inventory extensions of built-in types PUT creates or replaces idempotently, POST rejects a duplicate and DELETE removes it",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/inventory_extensions.spec.ts",
+        "line": 130,
+        "column": 6
+      }
+    },
+    {
+      "id": "f2575e7d171c140-90907b326cd1826",
+      "title": "Entity definitions API: inventory extensions of built-in types rejects invalid extension documents with 400",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/inventory_extensions.spec.ts",
+        "line": 192,
+        "column": 11
+      }
+    },
+    {
+      "id": "f2575e7d171c140-3d5f5b9953859e6",
+      "title": "Entity definitions API: inventory extensions of built-in types scopes extensions to their space",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/inventory_extensions.spec.ts",
+        "line": 254,
+        "column": 14
+      }
+    },
+    {
+      "id": "f2575e7d171c140-2323742c4167ebb",
+      "title": "Entity definitions API: inventory extensions of built-in types requires the manage privilege to write extensions and the read privilege to read them",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-security_complete",
+        "@cloud-serverless-security_complete"
+      ],
+      "location": {
+        "file": "x-pack/platform/plugins/shared/entity_store/test/scout/definitions/api/tests/inventory_extensions.spec.ts",
+        "line": 297,
+        "column": 11
+      }
+    }
+  ]
+}

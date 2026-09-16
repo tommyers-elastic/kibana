@@ -1,0 +1,168 @@
+{
+  "sha1": "84760078ffc33158174093fce4cbecce39edf6a0",
+  "testChannels": [
+    "ci-on-commit"
+  ],
+  "tests": [
+    {
+      "id": "127864118d4c3d6-345769f9bc33383",
+      "title": "Entity inventory API lists the registered types with identity, columns and sources",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 91,
+        "column": 11
+      }
+    },
+    {
+      "id": "127864118d4c3d6-090023d370ca187",
+      "title": "Entity inventory API lists the live pods of a 15 m window across sources: merged by identity, labelled phase, exact total, isolated failures",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 141,
+        "column": 16
+      }
+    },
+    {
+      "id": "127864118d4c3d6-177076b2854ff1c",
+      "title": "Entity inventory API sorts in Kibana across sources with nulls last and truncates at the limit against the exact total",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 199,
+        "column": 55
+      }
+    },
+    {
+      "id": "127864118d4c3d6-d229f475758558a",
+      "title": "Entity inventory API pushes sort and limit into ES|QL for a single-source type",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 241,
+        "column": 13
+      }
+    },
+    {
+      "id": "127864118d4c3d6-e7c9c03275f5d07",
+      "title": "Entity inventory API falls back to FROM for a standard index and returns the same entities and averages",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 263,
+        "column": 38
+      }
+    },
+    {
+      "id": "127864118d4c3d6-d652bf193bf8b9d",
+      "title": "Entity inventory API details one entity over a wide window, none over a narrow one",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 290,
+        "column": 15
+      }
+    },
+    {
+      "id": "127864118d4c3d6-da7d547c37a9e2a",
+      "title": "Entity inventory API groups a composite identity and computes composite entity ids after STATS",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 312,
+        "column": 5
+      }
+    },
+    {
+      "id": "127864118d4c3d6-6ce088fd4ad09b2",
+      "title": "Entity inventory API counts exactly across sources and honours a query DSL filter",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 343,
+        "column": 9
+      }
+    },
+    {
+      "id": "127864118d4c3d6-5271c30f35b3f11",
+      "title": "Entity inventory API rejects bad requests and unknown types",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 386,
+        "column": 12
+      }
+    },
+    {
+      "id": "127864118d4c3d6-7b668e03d7a100a",
+      "title": "Entity inventory API is gated by the ui setting and readable with the read privilege",
+      "expectedStatus": "passed",
+      "tags": [
+        "@local-stateful-classic",
+        "@cloud-stateful-classic",
+        "@local-serverless-observability_complete",
+        "@cloud-serverless-observability_complete"
+      ],
+      "location": {
+        "file": "x-pack/solutions/observability/plugins/entity_inventory/test/scout/api/tests/inventory.spec.ts",
+        "line": 421,
+        "column": 62
+      }
+    }
+  ]
+}
