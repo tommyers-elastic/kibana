@@ -100,10 +100,11 @@ euid.fromDefinition.getEuid(record.definition, doc); // 'k8s.deployment:payments
 ```
 
 `EntityDefinitionRecord` carries `definition` (with a per-space `id`: `security_<type>_<space>` for
-built-ins, `registered_<type>_<space>` otherwise), `source`, `version`, `createdAt` and `updatedAt`.
-Readers that derive ids should report the `version` they used: replacing a definition bumps it, and a
-replace that changes the identity (rejected with 409 unless `?force=true`) makes ids derived under the
-previous version incomparable. API definitions are cached per space in each Kibana node for 30s and
+built-ins, `registered_<type>_<space>` otherwise), `source`, and for API definitions `createdAt` and
+`updatedAt`. The store does not version definitions; an author may declare an optional integer
+`version` in the definition itself and bump it when the identity changes, because a replace that
+changes the identity (rejected with 409 unless `?force=true`) makes previously derived ids
+incomparable. API definitions are cached per space in each Kibana node for 30s and
 invalidated immediately by writes on that node. The saved objects are visible, importable and
 exportable in Saved Objects management (the generic saved objects HTTP API stays closed). Import
 bypasses the definitions API, so the registration rules are re-applied when a space's definitions are

@@ -26,11 +26,9 @@ import type { StoredEntityDefinitionAttributes } from './saved_object';
 const NAMESPACE = 'space-a';
 
 const stored = (
-  definition: StoredEntityDefinitionAttributes['definition'],
-  version = 1
+  definition: StoredEntityDefinitionAttributes['definition']
 ): StoredEntityDefinitionAttributes => ({
   type: definition.type,
-  version,
   createdAt: '2026-09-15T00:00:00.000Z',
   updatedAt: '2026-09-15T00:00:00.000Z',
   definition,
@@ -119,7 +117,6 @@ describe('EntityDefinitionRegistry', () => {
     const record = await createRegistry().getDefinition('host');
     expect(record).toMatchObject({
       source: 'built_in',
-      version: 1,
       definition: { type: 'host', id: 'security_host_space-a' },
     });
     expect(soClient.find).not.toHaveBeenCalled();
@@ -136,7 +133,6 @@ describe('EntityDefinitionRegistry', () => {
     const record = await registry.getDefinition('k8s.node');
     expect(record).toMatchObject({
       source: 'code',
-      version: 1,
       definition: { type: 'k8s.node', id: 'registered_k8s.node_space-a' },
     });
     expect((await createRegistry('space-b').getDefinition('k8s.node'))?.definition.id).toBe(
@@ -145,12 +141,11 @@ describe('EntityDefinitionRegistry', () => {
     expect(soClient.find).not.toHaveBeenCalled();
   });
 
-  it('resolves API-registered definitions from the space, with their version', async () => {
-    mockStored(stored(k8sDeploymentInventoryDefinition, 3));
+  it('resolves API-registered definitions from the space, with their timestamps', async () => {
+    mockStored(stored(k8sDeploymentInventoryDefinition));
     const record = await createRegistry().getDefinition('k8s.deployment');
     expect(record).toMatchObject({
       source: 'api',
-      version: 3,
       createdAt: '2026-09-15T00:00:00.000Z',
       definition: { type: 'k8s.deployment', id: 'registered_k8s.deployment_space-a' },
     });

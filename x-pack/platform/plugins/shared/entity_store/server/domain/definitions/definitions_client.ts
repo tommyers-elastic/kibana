@@ -83,13 +83,12 @@ export class EntityDefinitionsClient {
     const timestamp = this.now().toISOString();
     const stored = await this.repository.create({
       type: definition.type,
-      version: 1,
       createdAt: timestamp,
       updatedAt: timestamp,
       definition,
     });
     this.cache.invalidate(this.namespace);
-    this.logger.debug(`Registered entity definition "${definition.type}" (version 1)`);
+    this.logger.debug(`Registered entity definition "${definition.type}"`);
     return apiRecord(stored, this.namespace);
   }
 
@@ -114,13 +113,12 @@ export class EntityDefinitionsClient {
 
     const stored = await this.repository.replace(existing.id, {
       type,
-      version: existing.attributes.version + 1,
       createdAt: existing.attributes.createdAt,
       updatedAt: this.now().toISOString(),
       definition,
     });
     this.cache.invalidate(this.namespace);
-    this.logger.debug(`Replaced entity definition "${type}" (version ${stored.version})`);
+    this.logger.debug(`Replaced entity definition "${type}"`);
     return apiRecord(stored, this.namespace);
   }
 

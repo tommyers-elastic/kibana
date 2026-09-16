@@ -26,7 +26,6 @@ const stored = (
   overrides: Partial<StoredEntityDefinitionAttributes> = {}
 ): StoredEntityDefinitionAttributes => ({
   type: definition.type,
-  version: 1,
   createdAt: '2026-09-16T00:00:00.000Z',
   updatedAt: '2026-09-16T00:00:00.000Z',
   definition,
@@ -97,7 +96,7 @@ describe('entity definition saved object type', () => {
       defaultSearchField: 'type',
     });
     expect(soType.management?.getTitle?.(asSavedObject(stored(k8sPodInventoryDefinition)))).toBe(
-      'Entity definition: k8s.pod (v1)'
+      'Entity definition: k8s.pod'
     );
   });
 

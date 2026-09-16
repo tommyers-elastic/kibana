@@ -132,7 +132,6 @@ export class EntityDefinitionRegistry {
 const builtInRecord = (type: BuiltInEntityType, namespace: string): EntityDefinitionRecord => ({
   definition: getBuiltInEntityDefinition(type, namespace),
   source: 'built_in',
-  version: 1,
 });
 
 const codeRecord = (
@@ -141,16 +140,14 @@ const codeRecord = (
 ): EntityDefinitionRecord => ({
   definition: withDynamicId(definition, namespace),
   source: 'code',
-  version: 1,
 });
 
 export const apiRecord = (
-  { definition, version, createdAt, updatedAt }: StoredEntityDefinitionAttributes,
+  { definition, createdAt, updatedAt }: StoredEntityDefinitionAttributes,
   namespace: string
 ): EntityDefinitionRecord => ({
   definition: withDynamicId(definition, namespace),
   source: 'api',
-  version,
   createdAt,
   updatedAt,
 });

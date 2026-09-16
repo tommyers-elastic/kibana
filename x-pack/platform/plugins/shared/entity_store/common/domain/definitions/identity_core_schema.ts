@@ -168,6 +168,11 @@ export const identityCoreSchema = z.object({
   type: entityTypeNameSchema,
   name: z.string().min(1).max(MAX_NAME_LENGTH),
   identityField: identityFieldSchema,
+  /**
+   * Optional author-declared version of the definition. The store does not maintain it: bump it
+   * when the identity changes so readers can tell which ids are comparable.
+   */
+  version: z.number().int().min(1).optional(),
 });
 
 export type EntityIdentityCore = z.infer<typeof identityCoreSchema>;

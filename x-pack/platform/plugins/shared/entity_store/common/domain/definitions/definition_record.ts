@@ -15,16 +15,13 @@ import type { EntityDefinition } from './entity_schema';
  */
 export type EntityDefinitionSource = 'built_in' | 'code' | 'api';
 
-/** A resolved definition plus the metadata readers need to reason about id stability. */
+/**
+ * A resolved definition plus where it came from and, for `api` definitions, when it was written.
+ * Versioning is the author's: a definition may carry its own `version` in the core schema.
+ */
 export interface EntityDefinitionRecord {
   definition: EntityDefinition;
   source: EntityDefinitionSource;
-  /**
-   * Monotonically increasing per type; bumped on every replace of an `api` definition. Code-defined
-   * definitions (`built_in`, `code`) are always version 1: they change only with a Kibana release.
-   * Readers that derive ids should report the version they used.
-   */
-  version: number;
   createdAt?: string;
   updatedAt?: string;
 }

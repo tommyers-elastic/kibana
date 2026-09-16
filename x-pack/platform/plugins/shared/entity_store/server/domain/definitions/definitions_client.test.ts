@@ -78,7 +78,7 @@ describe('EntityDefinitionsClient', () => {
   });
 
   describe('create', () => {
-    it('persists version 1 with an explicit mode and returns the record', async () => {
+    it('persists the definition with an explicit mode and returns the record', async () => {
       cache.set(NAMESPACE, []);
       const record = await client.create(k8sDeploymentInventoryDefinition);
 
@@ -86,7 +86,6 @@ describe('EntityDefinitionsClient', () => {
         ENTITY_DEFINITION_SAVED_OBJECT_TYPE,
         {
           type: 'k8s.deployment',
-          version: 1,
           createdAt: T0.toISOString(),
           updatedAt: T0.toISOString(),
           definition: { ...k8sDeploymentInventoryDefinition, materialisation: { mode: 'none' } },
@@ -95,7 +94,6 @@ describe('EntityDefinitionsClient', () => {
       );
       expect(record).toMatchObject({
         source: 'api',
-        version: 1,
         createdAt: T0.toISOString(),
         definition: { id: 'registered_k8s.deployment_default', type: 'k8s.deployment' },
       });
@@ -142,11 +140,11 @@ describe('EntityDefinitionsClient', () => {
 
   describe('replace', () => {
     beforeEach(() => {
-      mockStored(storedOf(k8sDeploymentInventoryDefinition, 2));
+      mockStored(storedOf(k8sDeploymentInventoryDefinition));
       clock = T1;
     });
 
-    it('bumps the version and keeps createdAt when identity is unchanged', async () => {
+    it('keeps createdAt and stamps updatedAt when identity is unchanged', async () => {
       const relabelled = buildInventoryEntityDefinition({
         type: 'k8s.deployment',
         name: 'renamed',
@@ -159,14 +157,16 @@ describe('EntityDefinitionsClient', () => {
         SO_ID,
         {
           type: 'k8s.deployment',
-          version: 3,
           createdAt: T0.toISOString(),
           updatedAt: T1.toISOString(),
           definition: { ...relabelled, materialisation: { mode: 'none' } },
         },
         { refresh: 'wait_for', mergeAttributes: false }
       );
-      expect(record).toMatchObject({ version: 3, definition: { name: 'renamed' } });
+      expect(record).toMatchObject({
+        updatedAt: T1.toISOString(),
+        definition: { name: 'renamed' },
+      });
     });
 
     it('rejects an identity change without force and accepts it with force', async () => {
@@ -188,7 +188,7 @@ describe('EntityDefinitionsClient', () => {
       expect(soClient.update).not.toHaveBeenCalled();
 
       const record = await client.replace('k8s.deployment', reidentified, { force: true });
-      expect(record.version).toBe(3);
+      expect(record.definition.inventory?.identity).toHaveLength(3);
     });
 
     it('rejects a body whose type differs from the path', async () => {
@@ -230,12 +230,10 @@ describe('EntityDefinitionsClient', () => {
 });
 
 function storedOf(
-  definition: StoredEntityDefinitionAttributes['definition'],
-  version = 1
+  definition: StoredEntityDefinitionAttributes['definition']
 ): StoredEntityDefinitionAttributes {
   return {
     type: definition.type,
-    version,
     createdAt: T0.toISOString(),
     updatedAt: T0.toISOString(),
     definition,

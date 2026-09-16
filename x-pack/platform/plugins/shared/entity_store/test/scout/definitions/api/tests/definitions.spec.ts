@@ -108,9 +108,7 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
     expect(materialised.statusCode).toBe(200);
     const records: EntityDefinitionRecord[] = materialised.body.definitions;
     expect(records.map(({ definition }) => definition.type)).toStrictEqual(BUILT_IN_TYPES);
-    expect(records.every(({ source, version }) => source === 'built_in' && version === 1)).toBe(
-      true
-    );
+    expect(records.every(({ source }) => source === 'built_in')).toBe(true);
     expect(records[1].definition.id).toBe('security_host_default');
 
     const live = await apiClient.get(`${definitionsPath()}?mode=none`, {
@@ -137,7 +135,6 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
         expect(created.statusCode).toBe(201);
         expect(created.body).toMatchObject({
           source: 'api',
-          version: 1,
           definition: {
             ...definition,
             id: `registered_${definition.type}_default`,
@@ -242,7 +239,7 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
   });
 
   apiTest(
-    'versions replacements and protects identity changes behind force',
+    'replaces definitions and protects identity changes behind force',
     async ({ apiClient }) => {
       const created = await apiClient.post(definitionsPath(), {
         headers,
@@ -269,8 +266,10 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
         body: relabelled,
       });
       expect(replaced.statusCode).toBe(200);
-      expect(replaced.body.version).toBe(2);
       expect(replaced.body.createdAt).toBe(created.body.createdAt);
+      expect(Date.parse(replaced.body.updatedAt)).toBeGreaterThanOrEqual(
+        Date.parse(created.body.updatedAt)
+      );
       expect(replaced.body.definition.inventory.label).toBe('Deployments');
 
       const reidentified = buildInventoryEntityDefinition({
@@ -299,7 +298,7 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
         body: reidentified,
       });
       expect(forced.statusCode).toBe(200);
-      expect(forced.body.version).toBe(3);
+      expect(forced.body.definition.inventory.identity).toHaveLength(3);
       expect(
         getEuidFromDefinition(forced.body.definition, {
           kubernetes: {

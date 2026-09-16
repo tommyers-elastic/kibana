@@ -25,8 +25,6 @@ import { assertRegistrableDefinition, parseDefinitionInput } from './registratio
  */
 export interface StoredEntityDefinitionAttributes {
   type: string;
-  /** Monotonically increasing per type; bumped on every replace. */
-  version: number;
   createdAt: string;
   updatedAt: string;
   definition: EntityDefinitionWithoutId;
@@ -64,7 +62,6 @@ export function validateStoredEntityDefinition(
 
 const storedEntityDefinitionSchemaV1 = schema.object({
   type: schema.string({ minLength: 1, maxLength: 128 }),
-  version: schema.number({ min: 1 }),
   createdAt: schema.string(),
   updatedAt: schema.string(),
   // Validated by the zod `entityDefinitionInputSchema` before it is written; stored unmapped.
@@ -127,21 +124,21 @@ export function createEntityDefinitionSavedObjectType(
       },
     },
     modelVersions: { 1: version1 },
-    // Writes go through the definitions API (registration rules, versioning); the generic
+    // Writes go through the definitions API (registration rules); the generic
     // saved objects HTTP API stays closed. Import/export remain available through management.
     hiddenFromHttpApis: true,
     management: {
       importableAndExportable: true,
       visibleInManagement: true,
       defaultSearchField: 'type',
-      icon: 'indexMapping',
+      icon: 'indexSettings',
       displayName: i18n.translate('entityStore.savedObjects.entityDefinition.displayName', {
         defaultMessage: 'Entity definition',
       }),
       getTitle: ({ attributes }) =>
         i18n.translate('entityStore.savedObjects.entityDefinition.title', {
-          defaultMessage: 'Entity definition: {type} (v{version})',
-          values: { type: attributes.type, version: attributes.version },
+          defaultMessage: 'Entity definition: {type}',
+          values: { type: attributes.type },
         }),
       onImport: (objects) => ({
         warnings: getEntityDefinitionImportWarnings(objects, reservedTypes),
