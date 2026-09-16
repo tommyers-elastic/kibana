@@ -3,16 +3,21 @@
   "compilerOptions": {
     "outDir": "target/types"
   },
-  "include": ["common/**/*", "server/**/*", "test/scout*/**/*"],
+  "include": ["common/**/*", "public/**/*", "server/**/*", "test/scout*/**/*"],
   "exclude": ["target/**/*"],
   "kbn_references": [
     "@kbn/core",
+    "@kbn/code-editor",
     "@kbn/config-schema",
     "@kbn/entity-store",
     "@kbn/es-types",
+    "@kbn/i18n",
+    "@kbn/i18n-react",
     "@kbn/logging",
+    "@kbn/react-kibana-context-render",
     "@kbn/server-route-repository",
     "@kbn/spaces-plugin",
+    "@kbn/ui-callout",
     "@kbn/zod",
     "@kbn/scout-oblt"
   ]

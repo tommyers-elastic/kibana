@@ -13,6 +13,6 @@ module.exports = {
     '<rootDir>/target/kibana-coverage/jest/x-pack/solutions/observability/plugins/entity_inventory',
   coverageReporters: ['text', 'html'],
   collectCoverageFrom: [
-    '<rootDir>/x-pack/solutions/observability/plugins/entity_inventory/{common,server}/**/*.ts',
+    '<rootDir>/x-pack/solutions/observability/plugins/entity_inventory/{common,public,server}/**/*.{ts,tsx}',
   ],
 };

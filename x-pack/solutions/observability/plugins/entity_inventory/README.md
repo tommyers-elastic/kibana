@@ -1,6 +1,6 @@
 # Entity inventory
 
-Server-only Observability plugin that serves inventory **lists**, **details** and **counts** for
+Observability plugin that serves inventory **lists**, **details** and **counts** for
 registered entity types with ES|QL generated from their entity definitions, straight from raw
 telemetry. Nothing is materialised: every request reads the source data streams.
 
@@ -9,6 +9,18 @@ Definitions come from the entity store (`entityStore` plugin): authored types re
 carry an inventory extension (`host`). The plugin is gated by the ui setting
 `entityInventory:enabled` (API-only, default off) and authorised by the store's neutral
 `read_entity_definitions` privilege.
+
+## Management UI (development)
+
+`/app/entityInventoryDefinitions` (hidden from navigation; requires the `entityInventory:enabled`
+ui setting) lists the definitions of the current space from `GET /internal/entity_store/definitions`
+with their `source` (`built_in` | `code` | `api`) and `inventorySource`, and edits them as JSON:
+API definitions are sent back without their `id` to `PUT /internal/entity_store/definitions/{type}?force=true`,
+API extensions of built-ins as `{ extends, inventory }` to the same route, "New" posts either
+document kind, and "Delete" removes the definition or the built-in's extension. Built-ins without
+an API extension and code-registered records are read-only. A preview section runs
+`POST /internal/entity_inventory/entities/{type}/_list` over a 15m / 1h / 6h window for any type
+returned by `GET /internal/entity_inventory/types` and shows the rows, timings and generated ES|QL.
 
 ## Routes (internal, unversioned; send `x-elastic-internal-origin: kibana`)
 
@@ -53,7 +65,10 @@ TS metrics-kubernetes.pod-*
   the id per row, so ids match Security's. Computing the id per document is 200x slower.
 - **Existence per source**: a source with metrics lists the entities that reported at least one
   of them in the window (explicit in `WHERE`, which is also what `TS` does implicitly); a source
-  without metrics lists every identity occurrence. Type-level existence is the union.
+  without metrics lists every identity occurrence. Type-level existence is the union. Only value
+  metrics (`avg`, `min`, `max`, `sum`, `last`) define "reported": a `count_distinct` over a
+  dimension present on every document would make the predicate vacuous and the `FROM` count a
+  full scan.
 - **Metrics**: `avg`/`min`/`max`/`sum` are window aggregates (`AGG(AGG_OVER_TIME(f))` under `TS`,
   `AGG(f)` under `FROM`, identical results); `count_distinct`; `last` is the newest sample.
 - **Attributes** are always `LAST(f, @timestamp) WHERE f IS NOT NULL`: never split an entity,
