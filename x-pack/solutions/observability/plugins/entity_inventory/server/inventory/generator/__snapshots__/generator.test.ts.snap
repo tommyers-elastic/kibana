@@ -510,30 +510,20 @@ Object {
     Object {
       "fields": Array [
         "k8s.node.cpu.usage",
+        "kubernetes.node.cpu.usage.nanocores",
       ],
       "kind": "metric",
       "name": "cpu_cores",
+      "unit": "cores",
     },
     Object {
       "fields": Array [
         "k8s.node.memory.usage",
-      ],
-      "kind": "metric",
-      "name": "mem_bytes",
-    },
-    Object {
-      "fields": Array [
-        "kubernetes.node.cpu.usage.nanocores",
-      ],
-      "kind": "metric",
-      "name": "cpu_nanocores",
-    },
-    Object {
-      "fields": Array [
         "kubernetes.node.memory.usage.bytes",
       ],
       "kind": "metric",
-      "name": "mem_usage_bytes",
+      "name": "mem_bytes",
+      "unit": "bytes",
     },
     Object {
       "kind": "last_seen",
@@ -610,12 +600,13 @@ FROM metrics-kubernetes.node-*
 | WHERE @timestamp >= ?from AND @timestamp < ?to
     AND \`kubernetes.node.name\` IS NOT NULL
     AND (\`kubernetes.node.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.node.memory.usage.bytes\` IS NOT NULL)
-| STATS \`cpu_nanocores\` = AVG(\`kubernetes.node.cpu.usage.nanocores\`),
-    \`mem_usage_bytes\` = AVG(\`kubernetes.node.memory.usage.bytes\`),
+| STATS \`cpu_cores\` = AVG(\`kubernetes.node.cpu.usage.nanocores\`),
+    \`mem_bytes\` = AVG(\`kubernetes.node.memory.usage.bytes\`),
     \`last_seen\` = MAX(@timestamp)
     BY \`kubernetes.node.name\`
+| EVAL \`cpu_cores\` = \`cpu_cores\` * 1.0E-9
 | EVAL entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))
-| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_nanocores\`, \`mem_usage_bytes\`, \`last_seen\`
+| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
 | SORT \`last_seen\` DESC NULLS LAST
 | LIMIT 10000",
   "params": Array [
@@ -636,12 +627,13 @@ TS metrics-kubernetes.node-*
 | WHERE @timestamp >= ?from AND @timestamp < ?to
     AND \`kubernetes.node.name\` IS NOT NULL
     AND (\`kubernetes.node.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.node.memory.usage.bytes\` IS NOT NULL)
-| STATS \`cpu_nanocores\` = AVG(AVG_OVER_TIME(\`kubernetes.node.cpu.usage.nanocores\`)),
-    \`mem_usage_bytes\` = AVG(AVG_OVER_TIME(\`kubernetes.node.memory.usage.bytes\`)),
+| STATS \`cpu_cores\` = AVG(AVG_OVER_TIME(\`kubernetes.node.cpu.usage.nanocores\`)),
+    \`mem_bytes\` = AVG(AVG_OVER_TIME(\`kubernetes.node.memory.usage.bytes\`)),
     \`last_seen\` = MAX(@timestamp)
     BY \`kubernetes.node.name\`
+| EVAL \`cpu_cores\` = \`cpu_cores\` * 1.0E-9
 | EVAL entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))
-| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_nanocores\`, \`mem_usage_bytes\`, \`last_seen\`
+| KEEP \`entity.id\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
 | SORT \`last_seen\` DESC NULLS LAST
 | LIMIT 10000",
   "params": Array [
@@ -662,7 +654,7 @@ FROM metrics-kubeletstatsreceiver.otel-default, metrics-kubernetes.pod-*, metric
 | WHERE @timestamp >= ?from AND @timestamp < ?to
     AND \`kubernetes.pod.uid\` IS NOT NULL
     AND (((_index LIKE \\"metrics-kubeletstatsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-kubeletstatsreceiver.otel-default-*\\") AND (\`k8s.pod.cpu.usage\` IS NOT NULL OR \`k8s.pod.memory.usage\` IS NOT NULL))
-      OR ((_index LIKE \\"metrics-kubernetes.pod-*\\" OR _index LIKE \\".ds-metrics-kubernetes.pod-*-*\\") AND (\`kubernetes.pod.cpu.usage.node.pct\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-kubernetes.pod-*\\" OR _index LIKE \\".ds-metrics-kubernetes.pod-*-*\\") AND (\`kubernetes.pod.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL))
       OR ((_index LIKE \\"metrics-kubernetes.state_pod-*\\" OR _index LIKE \\".ds-metrics-kubernetes.state_pod-*-*\\"))
       OR ((_index LIKE \\"metrics-k8sclusterreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-k8sclusterreceiver.otel-default-*\\") AND (k8s.pod.phase IS NOT NULL)))
 | STATS BY \`kubernetes.pod.uid\`
@@ -724,30 +716,20 @@ Object {
     Object {
       "fields": Array [
         "k8s.pod.cpu.usage",
+        "kubernetes.pod.cpu.usage.nanocores",
       ],
       "kind": "metric",
       "name": "cpu_cores",
+      "unit": "cores",
     },
     Object {
       "fields": Array [
         "k8s.pod.memory.usage",
-      ],
-      "kind": "metric",
-      "name": "mem_bytes",
-    },
-    Object {
-      "fields": Array [
-        "kubernetes.pod.cpu.usage.node.pct",
-      ],
-      "kind": "metric",
-      "name": "cpu_node_pct",
-    },
-    Object {
-      "fields": Array [
         "kubernetes.pod.memory.usage.bytes",
       ],
       "kind": "metric",
-      "name": "mem_usage_bytes",
+      "name": "mem_bytes",
+      "unit": "bytes",
     },
     Object {
       "kind": "last_seen",
@@ -829,16 +811,17 @@ Object {
 FROM metrics-kubernetes.pod-*
 | WHERE @timestamp >= ?from AND @timestamp < ?to
     AND \`kubernetes.pod.uid\` IS NOT NULL
-    AND (\`kubernetes.pod.cpu.usage.node.pct\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL)
-| STATS \`cpu_node_pct\` = AVG(\`kubernetes.pod.cpu.usage.node.pct\`),
-    \`mem_usage_bytes\` = AVG(\`kubernetes.pod.memory.usage.bytes\`),
+    AND (\`kubernetes.pod.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL)
+| STATS \`cpu_cores\` = AVG(\`kubernetes.pod.cpu.usage.nanocores\`),
+    \`mem_bytes\` = AVG(\`kubernetes.pod.memory.usage.bytes\`),
     \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
     \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
     \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
     \`last_seen\` = MAX(@timestamp)
     BY \`kubernetes.pod.uid\`
+| EVAL \`cpu_cores\` = \`cpu_cores\` * 1.0E-9
 | EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
-| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_node_pct\`, \`mem_usage_bytes\`, \`last_seen\`
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
 | SORT \`last_seen\` DESC NULLS LAST
 | LIMIT 10000",
   "params": Array [
@@ -858,16 +841,17 @@ Object {
 TS metrics-kubernetes.pod-*
 | WHERE @timestamp >= ?from AND @timestamp < ?to
     AND \`kubernetes.pod.uid\` IS NOT NULL
-    AND (\`kubernetes.pod.cpu.usage.node.pct\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL)
-| STATS \`cpu_node_pct\` = AVG(AVG_OVER_TIME(\`kubernetes.pod.cpu.usage.node.pct\`)),
-    \`mem_usage_bytes\` = AVG(AVG_OVER_TIME(\`kubernetes.pod.memory.usage.bytes\`)),
+    AND (\`kubernetes.pod.cpu.usage.nanocores\` IS NOT NULL OR \`kubernetes.pod.memory.usage.bytes\` IS NOT NULL)
+| STATS \`cpu_cores\` = AVG(AVG_OVER_TIME(\`kubernetes.pod.cpu.usage.nanocores\`)),
+    \`mem_bytes\` = AVG(AVG_OVER_TIME(\`kubernetes.pod.memory.usage.bytes\`)),
     \`kubernetes.pod.name\` = LAST(\`kubernetes.pod.name\`, @timestamp) WHERE \`kubernetes.pod.name\` IS NOT NULL,
     \`kubernetes.namespace\` = LAST(\`kubernetes.namespace\`, @timestamp) WHERE \`kubernetes.namespace\` IS NOT NULL,
     \`kubernetes.node.name\` = LAST(\`kubernetes.node.name\`, @timestamp) WHERE \`kubernetes.node.name\` IS NOT NULL,
     \`last_seen\` = MAX(@timestamp)
     BY \`kubernetes.pod.uid\`
+| EVAL \`cpu_cores\` = \`cpu_cores\` * 1.0E-9
 | EVAL entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))
-| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_node_pct\`, \`mem_usage_bytes\`, \`last_seen\`
+| KEEP \`entity.id\`, \`kubernetes.pod.uid\`, \`kubernetes.pod.name\`, \`kubernetes.namespace\`, \`kubernetes.node.name\`, \`cpu_cores\`, \`mem_bytes\`, \`last_seen\`
 | SORT \`last_seen\` DESC NULLS LAST
 | LIMIT 10000",
   "params": Array [

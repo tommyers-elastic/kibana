@@ -16,11 +16,13 @@ import type {
 import type { EntityDefinitionRegistry } from '@kbn/entity-store/server';
 import {
   DEFAULT_LIST_LIMIT,
+  ENTITY_ID_COLUMN,
   ESQL_MAX_ROWS,
   LAST_SEEN_COLUMN,
   type InventoryColumn,
   type InventoryCountResponse,
   type InventoryListResponse,
+  type InventoryProvenance,
   type InventoryQueryInfo,
   type InventoryRow,
   type InventorySort,
@@ -153,14 +155,16 @@ export class InventoryService {
       countQuery ? this.runCount(countQuery, request.filter) : Promise.resolve(undefined),
     ]);
 
-    const rowSets = sourceResults.flatMap(({ plan, rows }) =>
-      rows ? [applyValueLabels(rows, plan.source)] : []
+    const inputs = sourceResults.flatMap(({ plan, rows }) =>
+      rows ? [{ index: plan.source.index, rows: applyValueLabels(rows, plan.source) }] : []
     );
-    let rows = mergeRows(rowSets);
+    const merged = mergeRows(inputs, resolution.columns);
+    let rows = merged.rows;
     if (!pushDownSort) {
       rows = sortRows(rows, sort);
     }
     const returned = rows.slice(0, limit).map((row) => withEveryColumn(row, resolution.columns));
+    const provenance = provenanceFor(returned, merged.provenance);
 
     const total = countResult?.count ?? null;
     const anyCapped = sourceResults.some(({ info }) => info.capped);
@@ -175,6 +179,7 @@ export class InventoryService {
       type,
       columns: this.withTypes(resolution.columns, sourceResults),
       rows: returned,
+      provenance,
       total,
       truncated,
       tookMs: Math.round(performance.now() - started),
@@ -213,19 +218,22 @@ export class InventoryService {
       }),
     }));
     const sourceResults = await this.runSourceQueries(queries);
-    const rows = sortRows(
-      mergeRows(
-        sourceResults.flatMap(({ plan, rows: r }) => (r ? [applyValueLabels(r, plan.source)] : []))
+    const merged = mergeRows(
+      sourceResults.flatMap(({ plan, rows: r }) =>
+        r ? [{ index: plan.source.index, rows: applyValueLabels(r, plan.source) }] : []
       ),
-      DEFAULT_SORT
-    )
+      resolution.columns
+    );
+    const rows = sortRows(merged.rows, DEFAULT_SORT)
       .slice(0, DETAIL_LIMIT)
       .map((row) => withEveryColumn(row, resolution.columns));
+    const provenance = provenanceFor(rows, merged.provenance);
     const queriesInfo = sourceResults.map(({ info }) => info);
     return {
       type,
       columns: this.withTypes(resolution.columns, sourceResults),
       rows,
+      provenance,
       total: rows.length,
       truncated: false,
       tookMs: Math.round(performance.now() - started),
@@ -449,6 +457,15 @@ export class InventoryService {
     });
   }
 }
+
+/** Provenance restricted to the returned rows. */
+const provenanceFor = (rows: InventoryRow[], all: InventoryProvenance): InventoryProvenance =>
+  Object.fromEntries(
+    rows.flatMap((row) => {
+      const id = row[ENTITY_ID_COLUMN];
+      return typeof id === 'string' && all[id] ? [[id, all[id]]] : [];
+    })
+  );
 
 /** Every row carries every output column, null when no source produced it. */
 const withEveryColumn = (row: InventoryRow, columns: InventoryColumn[]): InventoryRow => {

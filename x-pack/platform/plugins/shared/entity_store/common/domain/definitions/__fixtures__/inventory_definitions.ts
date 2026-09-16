@@ -58,15 +58,27 @@ export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInvento
       {
         index: OTEL_KUBELETSTATS_INDEX,
         metrics: [
-          { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg' },
-          { name: 'mem_bytes', field: 'k8s.pod.memory.usage', agg: 'avg' },
+          { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg', unit: 'cores' },
+          { name: 'mem_bytes', field: 'k8s.pod.memory.usage', agg: 'avg', unit: 'bytes' },
         ],
       },
       {
+        // Same measurements from the ECS pipeline: same names, nanocores scaled to cores.
         index: ECS_K8S_POD_INDEX,
         metrics: [
-          { name: 'cpu_node_pct', field: 'kubernetes.pod.cpu.usage.node.pct', agg: 'avg' },
-          { name: 'mem_usage_bytes', field: 'kubernetes.pod.memory.usage.bytes', agg: 'avg' },
+          {
+            name: 'cpu_cores',
+            field: 'kubernetes.pod.cpu.usage.nanocores',
+            agg: 'avg',
+            scale: 1e-9,
+            unit: 'cores',
+          },
+          {
+            name: 'mem_bytes',
+            field: 'kubernetes.pod.memory.usage.bytes',
+            agg: 'avg',
+            unit: 'bytes',
+          },
         ],
       },
       {
@@ -102,15 +114,26 @@ export const k8sNodeInventoryDefinition: InventoryEntityDefinition = buildInvent
         {
           index: OTEL_KUBELETSTATS_INDEX,
           metrics: [
-            { name: 'cpu_cores', field: 'k8s.node.cpu.usage', agg: 'avg' },
-            { name: 'mem_bytes', field: 'k8s.node.memory.usage', agg: 'avg' },
+            { name: 'cpu_cores', field: 'k8s.node.cpu.usage', agg: 'avg', unit: 'cores' },
+            { name: 'mem_bytes', field: 'k8s.node.memory.usage', agg: 'avg', unit: 'bytes' },
           ],
         },
         {
           index: ECS_K8S_NODE_INDEX,
           metrics: [
-            { name: 'cpu_nanocores', field: 'kubernetes.node.cpu.usage.nanocores', agg: 'avg' },
-            { name: 'mem_usage_bytes', field: 'kubernetes.node.memory.usage.bytes', agg: 'avg' },
+            {
+              name: 'cpu_cores',
+              field: 'kubernetes.node.cpu.usage.nanocores',
+              agg: 'avg',
+              scale: 1e-9,
+              unit: 'cores',
+            },
+            {
+              name: 'mem_bytes',
+              field: 'kubernetes.node.memory.usage.bytes',
+              agg: 'avg',
+              unit: 'bytes',
+            },
           ],
         },
       ],

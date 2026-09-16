@@ -28,6 +28,7 @@ import {
   METRICS_INDEX,
   MISSING_INDEX,
   SEED_PODS,
+  STANDARD_INDEX,
   STATE_INDEX,
   WINDOW_15M,
   WINDOW_6H,
@@ -122,6 +123,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
       ]);
       expect(pod?.sources.map(({ index }) => index)).toStrictEqual([
         METRICS_INDEX,
+        STANDARD_INDEX,
         STATE_INDEX,
         MISSING_INDEX,
       ]);
@@ -182,9 +184,29 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
       expect(body.unavailableColumns).toStrictEqual([
         { index: METRICS_INDEX, column: 'ghost', field: 'k8s.pod.ghost.metric' },
       ]);
-      // Two TSDB source queries plus the cross-source count, all with their ES|QL and timings.
+      // Metrics come from the first declared source; the standard copy (declared second, FROM
+      // engine, memory stored in kilobytes and scaled by 1024) only fills gaps. Phase comes from the
+      // state source. Provenance says so per row.
+      expect(body.provenance['invtest.pod:pod-uid-1']).toStrictEqual({
+        'kubernetes.pod.name': METRICS_INDEX,
+        'kubernetes.namespace': METRICS_INDEX,
+        'kubernetes.node.name': METRICS_INDEX,
+        cpu_cores: METRICS_INDEX,
+        mem_bytes: METRICS_INDEX,
+        phase: STATE_INDEX,
+      });
+      expect(body.provenance['invtest.pod:pod-uid-7']).toStrictEqual({
+        'kubernetes.pod.name': STATE_INDEX,
+        'kubernetes.namespace': STATE_INDEX,
+        'kubernetes.node.name': STATE_INDEX,
+        phase: STATE_INDEX,
+      });
+      const standardQuery = body.queries.find(({ index }) => index === STANDARD_INDEX);
+      expect(standardQuery?.esql).toContain('`mem_bytes` = `mem_bytes` * 1024.0');
+      // Source queries in definition order plus the cross-source count, all with ES|QL and timings.
       expect(body.queries.map(({ index, engine }) => `${engine} ${index}`)).toStrictEqual([
         `TS ${METRICS_INDEX}`,
+        `FROM ${STANDARD_INDEX}`,
         `TS ${STATE_INDEX}`,
         'COUNT *',
       ]);
@@ -194,7 +216,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
         expect(query.tookMs).toBeGreaterThanOrEqual(0);
         expect(query.params).toStrictEqual({ from: WINDOW_15M.from, to: WINDOW_15M.to });
       }
-      expect(body.queries[2].esql).toContain('METADATA _index');
+      expect(body.queries[3].esql).toContain('METADATA _index');
       expect(body.tookMs).toBeGreaterThanOrEqual(body.esTookMs > 0 ? 1 : 0);
       expect(body.columns.find(({ name }) => name === 'cpu_cores')?.esType).toBe('double');
     }

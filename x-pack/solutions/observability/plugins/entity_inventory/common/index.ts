@@ -38,6 +38,8 @@ export interface InventoryColumn {
   esType?: string;
   /** The declared field behind an attribute or metric (per-source ones list every variant). */
   fields?: string[];
+  /** Unit of a metric column as declared in the definition (`cores`, `bytes`, ...). */
+  unit?: string;
 }
 
 /** How a type identifies entities: the authored tuple, or the built-in type's field ranking. */
@@ -97,10 +99,17 @@ export interface InventoryUnavailableColumn {
 
 export type InventoryRow = Record<string, unknown>;
 
+/**
+ * Which source supplied each merged attribute or metric value of a row, keyed by `entity.id` then
+ * column name (the source's index pattern). Only columns that came from a source are listed.
+ */
+export type InventoryProvenance = Record<string, Record<string, string>>;
+
 export interface InventoryListResponse {
   type: string;
   columns: InventoryColumn[];
   rows: InventoryRow[];
+  provenance: InventoryProvenance;
   /** Exact distinct entity count across sources for the window, or null if the count query failed. */
   total: number | null;
   truncated: boolean;

@@ -5,10 +5,20 @@
  * 2.0.
  */
 
+import type { InventoryColumn } from '../../../common';
 import { applyValueLabels, mergeRows, sortRows } from './merge';
 
 describe('mergeRows', () => {
-  it('merges by entity.id: newest last_seen wins per column, nulls never override, last_seen is the max', () => {
+  const columns: InventoryColumn[] = [
+    { name: 'entity.id', kind: 'entity_id' },
+    { name: 'kubernetes.pod.uid', kind: 'identity' },
+    { name: 'name', kind: 'attribute' },
+    { name: 'phase', kind: 'attribute' },
+    { name: 'cpu', kind: 'metric' },
+    { name: 'last_seen', kind: 'last_seen' },
+  ];
+
+  it('metrics: first source in definition order wins; attributes: newest last_seen wins; last_seen: max', () => {
     const otel = [
       {
         'entity.id': 'k8s.pod:a',
@@ -25,11 +35,11 @@ describe('mergeRows', () => {
         last_seen: '2026-09-16T08:40:00.000Z',
       },
     ];
-    const state = [
+    const ecs = [
       {
         'entity.id': 'k8s.pod:a',
         name: 'a-newer',
-        cpu: null,
+        cpu: 1.1,
         phase: 'running',
         last_seen: '2026-09-16T08:44:30.000Z',
       },
@@ -41,8 +51,15 @@ describe('mergeRows', () => {
         last_seen: '2026-09-16T08:30:00.000Z',
       },
     ];
-    const merged = mergeRows([otel, state]);
-    expect(merged).toEqual([
+    const { rows, provenance } = mergeRows(
+      [
+        { index: 'otel', rows: otel },
+        { index: 'ecs', rows: ecs },
+      ],
+      columns
+    );
+    expect(rows).toEqual([
+      // cpu stays 1 (otel declared first) even though ecs is newer; name and phase follow the newer source.
       {
         'entity.id': 'k8s.pod:a',
         name: 'a-newer',
@@ -65,18 +82,54 @@ describe('mergeRows', () => {
         last_seen: '2026-09-16T08:30:00.000Z',
       },
     ]);
+    expect(provenance).toEqual({
+      'k8s.pod:a': { name: 'ecs', cpu: 'otel', phase: 'ecs' },
+      'k8s.pod:b': { name: 'otel', cpu: 'otel' },
+      'k8s.pod:c': { name: 'ecs', phase: 'ecs' },
+    });
   });
 
-  it('keeps the newer value when an older source arrives second', () => {
-    const merged = mergeRows([
-      [{ 'entity.id': 'x', v: 'new', last_seen: '2026-09-16T09:00:00.000Z' }],
-      [{ 'entity.id': 'x', v: 'old', last_seen: '2026-09-16T08:00:00.000Z' }],
+  it('a null in the preferred source never masks a value from a later one', () => {
+    const { rows, provenance } = mergeRows(
+      [
+        {
+          index: 'first',
+          rows: [{ 'entity.id': 'x', cpu: null, last_seen: '2026-09-16T09:00:00.000Z' }],
+        },
+        {
+          index: 'second',
+          rows: [{ 'entity.id': 'x', cpu: 5, last_seen: '2026-09-16T08:00:00.000Z' }],
+        },
+      ],
+      columns
+    );
+    expect(rows).toEqual([{ 'entity.id': 'x', cpu: 5, last_seen: '2026-09-16T09:00:00.000Z' }]);
+    expect(provenance).toEqual({ x: { cpu: 'second' } });
+  });
+
+  it('keeps the newer attribute when an older source arrives second', () => {
+    const { rows } = mergeRows(
+      [
+        {
+          index: 'a',
+          rows: [{ 'entity.id': 'x', name: 'new', last_seen: '2026-09-16T09:00:00.000Z' }],
+        },
+        {
+          index: 'b',
+          rows: [{ 'entity.id': 'x', name: 'old', last_seen: '2026-09-16T08:00:00.000Z' }],
+        },
+      ],
+      columns
+    );
+    expect(rows).toEqual([
+      { 'entity.id': 'x', name: 'new', last_seen: '2026-09-16T09:00:00.000Z' },
     ]);
-    expect(merged).toEqual([{ 'entity.id': 'x', v: 'new', last_seen: '2026-09-16T09:00:00.000Z' }]);
   });
 
   it('drops rows without an entity id', () => {
-    expect(mergeRows([[{ 'entity.id': null, v: 1 }]])).toEqual([]);
+    expect(
+      mergeRows([{ index: 'a', rows: [{ 'entity.id': null, cpu: 1 }] }], columns).rows
+    ).toEqual([]);
   });
 });
 

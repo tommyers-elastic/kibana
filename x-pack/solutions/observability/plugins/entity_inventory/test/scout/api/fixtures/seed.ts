@@ -153,6 +153,7 @@ export async function createInventoryTestIndices(esClient: Client): Promise<void
     'kubernetes.node.name': { type: 'keyword' },
     'k8s.pod.cpu.usage': { type: 'double' },
     'k8s.pod.memory.usage': { type: 'long' },
+    'k8s.pod.memory.usage.kb': { type: 'double' },
   };
   await esClient.indices.create({
     index: STANDARD_INDEX,
@@ -169,7 +170,10 @@ export async function createInventoryTestIndices(esClient: Client): Promise<void
         'k8s.pod.memory.usage': pod.mem,
       };
       operations.push({ index: { _index: METRICS_INDEX } }, doc);
-      operations.push({ index: { _index: STANDARD_INDEX } }, doc);
+      operations.push(
+        { index: { _index: STANDARD_INDEX } },
+        { ...doc, 'k8s.pod.memory.usage.kb': pod.mem / 1024 }
+      );
     }
     if (pod.state) {
       operations.push(
@@ -195,11 +199,15 @@ export async function deleteInventoryTestIndices(esClient: Client): Promise<void
 
 const POD_ATTRIBUTES = ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'];
 const POD_METRICS = [
-  { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg' },
-  { name: 'mem_bytes', field: 'k8s.pod.memory.usage', agg: 'avg' },
+  { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg', unit: 'cores' },
+  { name: 'mem_bytes', field: 'k8s.pod.memory.usage', agg: 'avg', unit: 'bytes' },
 ];
 
-/** Multi-source pod type: metrics, a state family with labelled phase, an unmapped metric and a missing index. */
+/**
+ * Multi-source pod type: TSDB metrics, the same metrics again from the standard copy (declared
+ * second, with memory stored in kilobytes and scaled back, so precedence and scale are both
+ * observable), a state family with labelled phase, an unmapped metric and a missing index.
+ */
 export const POD_DEFINITION = {
   type: 'invtest.pod',
   name: 'Inventory test pod',
@@ -213,6 +221,19 @@ export const POD_DEFINITION = {
       {
         index: METRICS_INDEX,
         metrics: [...POD_METRICS, { name: 'ghost', field: 'k8s.pod.ghost.metric', agg: 'max' }],
+      },
+      {
+        index: STANDARD_INDEX,
+        metrics: [
+          { name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg', unit: 'cores' },
+          {
+            name: 'mem_bytes',
+            field: 'k8s.pod.memory.usage.kb',
+            agg: 'avg',
+            scale: 1024,
+            unit: 'bytes',
+          },
+        ],
       },
       {
         index: STATE_INDEX,

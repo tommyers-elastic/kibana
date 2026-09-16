@@ -61,7 +61,10 @@ complete non-materialised definition from the authoring form.
 Authors declare what they need, not how it is fetched: `attributes` is a list of literal field paths
 resolved to the newest value per entity, and each source's `metrics` are `{ name, field, agg }` with
 `agg` one of `avg | min | max | sum | count_distinct | last` (`avg`/`min`/`max`/`sum` are window
-aggregates with identical results under both engines; `last` is the newest sample). Fields that do
+aggregates with identical results under both engines; `last` is the newest sample), plus optional
+`scale` (a multiplier applied after aggregation, e.g. `1e-9` from nanocores to cores) and `unit`.
+Across sources the same metric `name` is the same measurement in the same unit: shared names must
+share `agg` and `unit`, and `scale` is how a pipeline's field is brought into that unit. Fields that do
 not alias across pipelines are declared per source as `attributes: [{ name, field, valueLabels? }]`
 and merged by `name` across sources like metrics; `valueLabels` maps raw values (stringified) to
 canonical labels on the aggregated rows, and an unmapped raw value passes through. Names are output

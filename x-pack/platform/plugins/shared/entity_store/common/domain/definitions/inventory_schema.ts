@@ -37,6 +37,7 @@ const MAX_METRICS_PER_SOURCE = 64;
 const MAX_ATTRIBUTES_PER_SOURCE = 64;
 const MAX_VALUE_LABELS = 64;
 const MAX_VALUE_LABEL_LENGTH = 256;
+const MAX_UNIT_LENGTH = 32;
 
 /**
  * A literal, mapped field path: dot-separated segments of letters, digits, `_`, `@` and `-`.
@@ -97,12 +98,29 @@ export const inventoryMetricAggregationSchema = z.enum([
 ]);
 export type InventoryMetricAggregation = z.infer<typeof inventoryMetricAggregationSchema>;
 
-/** A named metric: one field aggregated one way per entity. */
-export const inventoryMetricSchema = z.strictObject({
-  name: identifierSchema,
-  field: literalFieldPathSchema,
-  agg: inventoryMetricAggregationSchema,
-});
+/**
+ * A named metric: one field aggregated one way per entity. Across sources the same `name` is the
+ * same measurement in the same unit; `scale` multiplies the aggregated value so pipelines that
+ * report in different units line up (ECS nanocores to cores: `scale: 1e-9`), and `unit` documents
+ * the resulting unit (`cores`, `bytes`, `percent`) for display and for the consistency check.
+ */
+export const inventoryMetricSchema = z
+  .strictObject({
+    name: identifierSchema,
+    field: literalFieldPathSchema,
+    agg: inventoryMetricAggregationSchema,
+    scale: z
+      .number()
+      .refine((value) => Number.isFinite(value) && value !== 0, {
+        message: 'scale must be a finite, non-zero number',
+      })
+      .optional(),
+    unit: z.string().min(1).max(MAX_UNIT_LENGTH).optional(),
+  })
+  .refine((metric) => !(metric.agg === 'count_distinct' && metric.scale !== undefined), {
+    message: 'scale does not apply to count_distinct',
+    path: ['scale'],
+  });
 export type InventoryMetric = z.infer<typeof inventoryMetricSchema>;
 
 /**
@@ -187,7 +205,9 @@ const inventoryExtensionShape = {
 /**
  * Output column names must be unambiguous across the whole extension: a per-source attribute name
  * may not be a metric name in another source, and may not repeat a top-level attribute or (where
- * known) an identity field, since every one of them becomes a column of the same row.
+ * known) an identity field, since every one of them becomes a column of the same row. Metrics
+ * that share a name across sources are the same measurement: they must share `agg` and, where
+ * declared, `unit` (use `scale` to bring a pipeline's field into that unit).
  */
 const assertOutputColumnsUnambiguous = (
   inventory: { identity?: string[]; attributes?: string[]; sources: InventorySource[] },
@@ -197,6 +217,30 @@ const assertOutputColumnsUnambiguous = (
   const metricNames = new Set(
     inventory.sources.flatMap((source) => (source.metrics ?? []).map(({ name }) => name))
   );
+  const firstMetricByName = new Map<string, { agg: string; unit?: string; sourceIndex: number }>();
+  for (const [sourceIndex, source] of inventory.sources.entries()) {
+    for (const [index, metric] of (source.metrics ?? []).entries()) {
+      const first = firstMetricByName.get(metric.name);
+      if (!first) {
+        firstMetricByName.set(metric.name, { agg: metric.agg, unit: metric.unit, sourceIndex });
+        continue;
+      }
+      if (first.agg !== metric.agg) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sources', sourceIndex, 'metrics', index, 'agg'],
+          message: `metric "${metric.name}" is aggregated with "${first.agg}" in source ${first.sourceIndex} and "${metric.agg}" here; the same name means the same measurement`,
+        });
+      }
+      if (first.unit !== undefined && metric.unit !== undefined && first.unit !== metric.unit) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sources', sourceIndex, 'metrics', index, 'unit'],
+          message: `metric "${metric.name}" is in "${first.unit}" in source ${first.sourceIndex} and "${metric.unit}" here; use scale to normalise to one unit`,
+        });
+      }
+    }
+  }
   for (const [sourceIndex, source] of inventory.sources.entries()) {
     for (const [index, { name }] of (source.attributes ?? []).entries()) {
       if (reserved.has(name)) {

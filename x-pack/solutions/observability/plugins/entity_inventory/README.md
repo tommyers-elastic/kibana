@@ -109,8 +109,15 @@ scan per metrics source, more than doubles the cost and was rejected; the measur
 
 ## Merge semantics
 
-Rows are merged in Kibana by `entity.id`. Per column, the value from the source with the newest
-`last_seen` wins; a null never overrides a value; `last_seen` is the newest of all. Per-source
+Rows are merged in Kibana by `entity.id`. Metrics take the value of the **first source in
+definition order** that has one (both sources describe the same window, so "scraped last" would be
+arbitrary; authors put the pipeline they trust first). Attributes take the value from the source
+with the newest `last_seen` (mutable state such as phase). A null never overrides a value, so a
+preferred source without a value falls through to the next. `last_seen` is the newest of all. The
+response's `provenance` map records which source supplied every merged metric and attribute per
+row. Metrics that share a name across sources are the same measurement in the same unit: the schema
+requires matching `agg` and `unit`, and a metric's `scale` (applied on the aggregated rows) is how a
+pipeline's field is normalised into that unit (ECS nanocores `scale: 1e-9` next to OTel cores). Per-source
 attributes are merged by `name` and their `valueLabels` applied before the merge (unlabelled raw
 values pass through as strings). A failed source is reported in `errors[]` and does not fail the
 request; a source whose pattern matches no index, or whose identity fields are all unmapped, is

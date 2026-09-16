@@ -44,15 +44,18 @@ export const buildColumns = (
     columns.push({ name: field, kind: 'attribute', fields: [field] });
   }
   const named = new Map<string, InventoryColumn>();
-  const addNamed = (name: string, kind: 'attribute' | 'metric', field: string) => {
+  const addNamed = (name: string, kind: 'attribute' | 'metric', field: string, unit?: string) => {
     const existing = named.get(name);
     if (existing) {
       if (!existing.fields?.includes(field)) {
         existing.fields = [...(existing.fields ?? []), field];
       }
+      if (existing.unit === undefined && unit !== undefined) {
+        existing.unit = unit;
+      }
       return;
     }
-    const column: InventoryColumn = { name, kind, fields: [field] };
+    const column: InventoryColumn = { name, kind, fields: [field], ...(unit ? { unit } : {}) };
     named.set(name, column);
     columns.push(column);
   };
@@ -63,7 +66,7 @@ export const buildColumns = (
   }
   for (const source of inventory.sources) {
     for (const metric of source.metrics ?? []) {
-      addNamed(metric.name, 'metric', metric.field);
+      addNamed(metric.name, 'metric', metric.field, metric.unit);
     }
   }
   columns.push({ name: LAST_SEEN_COLUMN, kind: 'last_seen' });

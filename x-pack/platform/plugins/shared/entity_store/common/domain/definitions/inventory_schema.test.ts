@@ -153,6 +153,47 @@ describe('inventoryExtensionSchema', () => {
     ]);
   });
 
+  it('accepts the same metric name across sources with scale and unit, and rejects inconsistent agg or unit', () => {
+    const consistent = inventoryExtensionSchema.safeParse({
+      ...minimalInventory,
+      sources: [
+        {
+          index: 'otel-*',
+          metrics: [{ name: 'cpu_cores', field: 'k8s.pod.cpu.usage', agg: 'avg', unit: 'cores' }],
+        },
+        {
+          index: 'ecs-*',
+          metrics: [
+            {
+              name: 'cpu_cores',
+              field: 'kubernetes.pod.cpu.usage.nanocores',
+              agg: 'avg',
+              scale: 1e-9,
+              unit: 'cores',
+            },
+          ],
+        },
+      ],
+    });
+    expect(consistent.error?.issues).toBeUndefined();
+    const differentAgg = inventoryExtensionSchema.safeParse({
+      ...minimalInventory,
+      sources: [
+        { index: 'otel-*', metrics: [{ name: 'cpu_cores', field: 'a', agg: 'avg' }] },
+        { index: 'ecs-*', metrics: [{ name: 'cpu_cores', field: 'b', agg: 'max' }] },
+      ],
+    });
+    expect(differentAgg.error?.issues[0].path).toEqual(['sources', 1, 'metrics', 0, 'agg']);
+    const differentUnit = inventoryExtensionSchema.safeParse({
+      ...minimalInventory,
+      sources: [
+        { index: 'otel-*', metrics: [{ name: 'cpu', field: 'a', agg: 'avg', unit: 'cores' }] },
+        { index: 'ecs-*', metrics: [{ name: 'cpu', field: 'b', agg: 'avg', unit: 'percent' }] },
+      ],
+    });
+    expect(differentUnit.error?.issues[0].path).toEqual(['sources', 1, 'metrics', 0, 'unit']);
+  });
+
   it('rejects a name used as a metric in one source and as an attribute in another', () => {
     const result = inventoryExtensionSchema.safeParse({
       ...minimalInventory,
@@ -309,6 +350,28 @@ describe('inventorySourceSchema', () => {
       inventorySourceSchema.safeParse({
         index: 'metrics-*',
         attributes: [{ name: 'Phase', field: 'k8s.pod.phase' }],
+      }).success
+    ).toBe(false);
+  });
+
+  it('rejects a zero or non-finite scale and scale on count_distinct', () => {
+    const base = { index: 'metrics-*' };
+    expect(
+      inventorySourceSchema.safeParse({
+        ...base,
+        metrics: [{ name: 'm', field: 'f', agg: 'avg', scale: 0 }],
+      }).success
+    ).toBe(false);
+    expect(
+      inventorySourceSchema.safeParse({
+        ...base,
+        metrics: [{ name: 'm', field: 'f', agg: 'avg', scale: 1e-9 }],
+      }).success
+    ).toBe(true);
+    expect(
+      inventorySourceSchema.safeParse({
+        ...base,
+        metrics: [{ name: 'm', field: 'f', agg: 'count_distinct', scale: 2 }],
       }).success
     ).toBe(false);
   });

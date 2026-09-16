@@ -48,6 +48,27 @@ export const metricExpression = (metric: InventoryMetric, engine: InventoryEngin
   }
 };
 
+/** An ES|QL double literal for a scale factor (`1e-9` is written `1.0E-9`). */
+const numberLiteral = (value: number): string => {
+  const text = String(value);
+  if (!/[eE]/.test(text)) {
+    return text.includes('.') ? text : `${text}.0`;
+  }
+  const [mantissa, exponent] = text.split(/[eE]/);
+  return `${mantissa.includes('.') ? mantissa : `${mantissa}.0`}E${exponent}`;
+};
+
+/** `scale` multiplies the aggregated value (on the entity rows, not per document). */
+const scaleAssignments = (source: InventorySource): string[] =>
+  (source.metrics ?? [])
+    .filter((metric) => metric.scale !== undefined && metric.scale !== 1)
+    .map(
+      (metric) =>
+        `${quoteIdentifier(metric.name)} = ${quoteIdentifier(metric.name)} * ${numberLiteral(
+          metric.scale as number
+        )}`
+    );
+
 /** `LAST(f, @timestamp)` does not skip null rows in either engine, so every attribute filters them. */
 const attributeExpression = (field: string): string => {
   const quoted = quoteIdentifier(field);
@@ -157,6 +178,7 @@ export const buildSourceQuery = (
   aggregates.push(`${quoteIdentifier(LAST_SEEN_COLUMN)} = MAX(@timestamp)`);
 
   const columns = sourceColumnNames(definition, identity, source);
+  const scaled = scaleAssignments(source);
   const lines = [
     UNMAPPED_FIELDS_DIRECTIVE,
     `${engine} ${source.index}`,
@@ -164,6 +186,7 @@ export const buildSourceQuery = (
     `| STATS ${aggregates.join(',\n    ')}\n    BY ${identity.fields
       .map(quoteIdentifier)
       .join(', ')}`,
+    ...(scaled.length > 0 ? [`| EVAL ${scaled.join(', ')}`] : []),
     `| EVAL ${identity.entityIdEvaluation}`,
     `| KEEP ${columns.map(quoteIdentifier).join(', ')}`,
   ];

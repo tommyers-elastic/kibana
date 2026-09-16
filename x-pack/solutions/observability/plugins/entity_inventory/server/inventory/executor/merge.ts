@@ -9,6 +9,9 @@ import type { InventorySource } from '@kbn/entity-store/common';
 import {
   ENTITY_ID_COLUMN,
   LAST_SEEN_COLUMN,
+  type InventoryColumn,
+  type InventoryColumnKind,
+  type InventoryProvenance,
   type InventoryRow,
   type InventorySort,
 } from '../../../common';
@@ -43,15 +46,35 @@ const lastSeenOf = (row: InventoryRow): string => {
   return typeof value === 'string' ? value : '';
 };
 
+/** One source's rows, in the definition's source order. */
+export interface MergeInput {
+  index: string;
+  rows: InventoryRow[];
+}
+
+export interface MergeResult {
+  rows: InventoryRow[];
+  provenance: InventoryProvenance;
+}
+
 /**
- * Merges per-source rows by `entity.id`. An entity exists if any source saw it; per column the
- * value from the source with the newest `last_seen` wins, a null never overrides a value, and
- * `last_seen` is the newest of all. Rows of one source that share an id (a ranked identity whose
- * documents differ in which ranking fields they carry) merge the same way.
+ * Merges per-source rows by `entity.id`. An entity exists if any source saw it. Per column:
+ *
+ * - **metrics**: the first source in definition order with a non-null value wins. Both sources
+ *   describe the same window, so "which scraped last" is arbitrary; declaration order is explicit
+ *   and stable, and authors control it by ordering sources.
+ * - **attributes**: the source with the newest `last_seen` wins (mutable state such as phase).
+ * - identity and `entity.id`: first non-null; `last_seen`: the newest of all.
+ *
+ * A null never overrides a value. `provenance` records which source supplied every merged metric
+ * and attribute. Rows of one source that share an id (a ranked identity whose documents differ in
+ * which ranking fields they carry) merge the same way.
  */
-export const mergeRows = (rowSets: InventoryRow[][]): InventoryRow[] => {
+export const mergeRows = (inputs: MergeInput[], columns: InventoryColumn[]): MergeResult => {
+  const kinds = new Map(columns.map(({ name, kind }) => [name, kind]));
   const merged = new Map<string, InventoryRow>();
-  for (const rows of rowSets) {
+  const provenance: InventoryProvenance = {};
+  for (const { index, rows } of inputs) {
     for (const row of rows) {
       const id = row[ENTITY_ID_COLUMN];
       if (typeof id !== 'string') {
@@ -60,6 +83,11 @@ export const mergeRows = (rowSets: InventoryRow[][]): InventoryRow[] => {
       const existing = merged.get(id);
       if (!existing) {
         merged.set(id, { ...row });
+        provenance[id] = Object.fromEntries(
+          Object.entries(row)
+            .filter(([column, value]) => !isNull(value) && isSourced(kinds.get(column)))
+            .map(([column]) => [column, index])
+        );
         continue;
       }
       const incomingIsNewer = lastSeenOf(row) > lastSeenOf(existing);
@@ -67,18 +95,28 @@ export const mergeRows = (rowSets: InventoryRow[][]): InventoryRow[] => {
         if (isNull(value)) {
           continue;
         }
+        const kind = kinds.get(column);
         if (column === LAST_SEEN_COLUMN) {
-          existing[column] = incomingIsNewer ? value : existing[column];
+          if (incomingIsNewer) {
+            existing[column] = value;
+          }
           continue;
         }
-        if (isNull(existing[column]) || incomingIsNewer) {
+        const takeIncoming = isNull(existing[column]) || (kind === 'attribute' && incomingIsNewer);
+        if (takeIncoming) {
           existing[column] = value;
+          if (isSourced(kind)) {
+            provenance[id][column] = index;
+          }
         }
       }
     }
   }
-  return [...merged.values()];
+  return { rows: [...merged.values()], provenance };
 };
+
+const isSourced = (kind: InventoryColumnKind | undefined): boolean =>
+  kind === 'attribute' || kind === 'metric';
 
 const compareValues = (a: unknown, b: unknown): number => {
   if (typeof a === 'number' && typeof b === 'number') {

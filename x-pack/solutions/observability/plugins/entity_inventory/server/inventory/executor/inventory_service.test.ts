@@ -82,7 +82,7 @@ const POD_FIELDS = [
   'kubernetes.node.name',
   'k8s.pod.cpu.usage',
   'k8s.pod.memory.usage',
-  'kubernetes.pod.cpu.usage.node.pct',
+  'kubernetes.pod.cpu.usage.nanocores',
   'kubernetes.pod.memory.usage.bytes',
   'kubernetes.pod.status.phase',
   'k8s.pod.phase',
@@ -120,8 +120,6 @@ describe('InventoryService', () => {
       'phase',
       'cpu_cores',
       'mem_bytes',
-      'cpu_node_pct',
-      'mem_usage_bytes',
       'last_seen',
     ]);
   });
@@ -199,8 +197,6 @@ describe('InventoryService', () => {
     const empty = {
       'kubernetes.namespace': null,
       'kubernetes.node.name': null,
-      cpu_node_pct: null,
-      mem_usage_bytes: null,
     };
     expect(response.rows).toStrictEqual([
       {
@@ -234,6 +230,23 @@ describe('InventoryService', () => {
         last_seen: '2026-09-16T08:30:00.000Z',
       },
     ]);
+    expect(response.provenance).toEqual({
+      'k8s.pod:a': {
+        'kubernetes.pod.name': 'metrics-kubernetes.state_pod-*',
+        cpu_cores: 'metrics-kubeletstatsreceiver.otel-default',
+        mem_bytes: 'metrics-kubeletstatsreceiver.otel-default',
+        phase: 'metrics-kubernetes.state_pod-*',
+      },
+      'k8s.pod:b': {
+        'kubernetes.pod.name': 'metrics-kubeletstatsreceiver.otel-default',
+        cpu_cores: 'metrics-kubeletstatsreceiver.otel-default',
+        mem_bytes: 'metrics-kubeletstatsreceiver.otel-default',
+      },
+      'k8s.pod:c': {
+        'kubernetes.pod.name': 'metrics-k8sclusterreceiver.otel-default',
+        phase: 'metrics-k8sclusterreceiver.otel-default',
+      },
+    });
     expect(response.total).toBe(3);
     expect(response.truncated).toBe(false);
     expect(response.errors).toEqual([
