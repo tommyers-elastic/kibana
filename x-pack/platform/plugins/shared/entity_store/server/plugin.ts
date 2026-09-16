@@ -16,7 +16,7 @@ import type {
   EntityStoreSetupContract,
 } from './types';
 import { createRequestHandlerContext } from './request_context_factory';
-import { PLUGIN_ID } from '../common';
+import { FF_ENABLE_DYNAMIC_DEFINITIONS, PLUGIN_ID } from '../common';
 import { registerTasks } from './tasks/register_tasks';
 import { scheduleLegacySecurityAssetsMigrationIfNeeded } from './tasks/legacy_security_assets_migration_task';
 import { isLegacySecurityAssetsMigrationEnabled } from './infra/feature_flags';
@@ -45,8 +45,10 @@ import { createWorkflowTriggerEmitter } from './workflow/create_workflow_trigger
 import {
   BuiltInInventoryExtensionsRegistry,
   CodeDefinitionsRegistry,
+  DynamicDefinitionsDisabledError,
   EntityDefinitionRegistry,
   EntityDefinitionsCache,
+  EntityDefinitionsClient,
   createEntityDefinitionSavedObjectType,
   createInventoryExtensionSavedObjectType,
   EntityDefinitionsRepository,
@@ -194,6 +196,26 @@ export class EntityStorePlugin
           namespace,
           logger,
         }),
+      getEntityDefinitionsClient: async (request) => {
+        const savedObjectsClient = core.savedObjects.getScopedClient(request);
+        const enabled = await core.uiSettings
+          .asScopedToClient(savedObjectsClient)
+          .get<boolean>(FF_ENABLE_DYNAMIC_DEFINITIONS);
+        if (!enabled) {
+          throw new DynamicDefinitionsDisabledError();
+        }
+        const namespace = plugins.spaces.spacesService.getSpaceId(request);
+        return new EntityDefinitionsClient({
+          repository: new EntityDefinitionsRepository(savedObjectsClient, namespace),
+          cache: this.definitionsCache,
+          codeDefinitions: this.codeDefinitions,
+          extensionsRepository: new InventoryExtensionsRepository(savedObjectsClient, namespace),
+          extensionsCache: this.extensionsCache,
+          builtInInventoryExtensions: this.builtInInventoryExtensions,
+          namespace,
+          logger,
+        });
+      },
       createCRUDClient: (esClient, namespace, getWorkflowsClient) => {
         const emitWorkflowTriggerEvent = getWorkflowsClient
           ? createWorkflowTriggerEmitter({

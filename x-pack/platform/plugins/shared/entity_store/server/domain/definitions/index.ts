@@ -47,4 +47,6 @@ export {
   EntityDefinitionIdentityChangedError,
   InventoryExtensionAlreadyExistsError,
   InventoryExtensionCodeRegisteredError,
+  DynamicDefinitionsDisabledError,
+  DYNAMIC_DEFINITIONS_DISABLED_MESSAGE,
 } from './errors';

@@ -6,9 +6,9 @@
  */
 
 import type { Middleware } from '.';
-import { FF_ENABLE_DYNAMIC_DEFINITIONS } from '../../../common';
+import { DYNAMIC_DEFINITIONS_DISABLED_MESSAGE } from '../../domain/definitions';
 
-export const DYNAMIC_DEFINITIONS_DISABLED_MESSAGE = `Dynamic entity definitions are not enabled (ui setting "${FF_ENABLE_DYNAMIC_DEFINITIONS}" is off)`;
+export { DYNAMIC_DEFINITIONS_DISABLED_MESSAGE };
 
 /**
  * Gates the definitions API on its own ui setting, independent of the Security entity store

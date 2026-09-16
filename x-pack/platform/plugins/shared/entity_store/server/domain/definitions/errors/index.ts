@@ -11,3 +11,7 @@ export { EntityDefinitionAlreadyExistsError } from './entity_definition_already_
 export { EntityDefinitionIdentityChangedError } from './entity_definition_identity_changed_error';
 export { InventoryExtensionAlreadyExistsError } from './inventory_extension_already_exists_error';
 export { InventoryExtensionCodeRegisteredError } from './inventory_extension_code_registered_error';
+export {
+  DynamicDefinitionsDisabledError,
+  DYNAMIC_DEFINITIONS_DISABLED_MESSAGE,
+} from './dynamic_definitions_disabled_error';

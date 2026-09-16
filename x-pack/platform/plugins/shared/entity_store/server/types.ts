@@ -30,7 +30,7 @@ import type {
   LicensingPluginStart,
 } from '@kbn/licensing-plugin/server';
 import type { SpacesPluginSetup, SpacesPluginStart } from '@kbn/spaces-plugin/server';
-import type { CoreSetup } from '@kbn/core/server';
+import type { CoreSetup, KibanaRequest } from '@kbn/core/server';
 import type { UsageCollectionSetup } from '@kbn/usage-collection-plugin/server';
 import type { ElasticsearchClient } from '@kbn/core/server';
 import type { FeaturesPluginSetup } from '@kbn/features-plugin/server';
@@ -134,6 +134,14 @@ export interface EntityStoreStartContract {
    * saved objects repository, so the caller is responsible for authorising its own user.
    */
   getEntityDefinitionRegistry: (namespace: string) => EntityDefinitionRegistry;
+  /**
+   * The write side of the definitions API for the request's space, built over the request-scoped
+   * saved objects client so saved-object authorization applies (the same client the definitions
+   * routes use). Rejects with `DynamicDefinitionsDisabledError` when the dynamic definitions ui
+   * setting is off; the caller is responsible for checking the `manage_entity_definitions`
+   * privilege of its user.
+   */
+  getEntityDefinitionsClient: (request: KibanaRequest) => Promise<EntityDefinitionsClient>;
 }
 
 export interface EntityStoreSetupContract {

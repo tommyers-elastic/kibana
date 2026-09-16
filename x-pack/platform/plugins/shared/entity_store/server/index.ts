@@ -37,7 +37,25 @@ export type {
   EntityStoreStartContract,
   EntityStoreCRUDClient,
 } from './types';
-export type { EntityDefinitionRegistry } from './domain/definitions';
+export type {
+  EntityDefinitionRegistry,
+  EntityDefinitionsClient,
+  ReplaceDefinitionOptions,
+} from './domain/definitions';
+export {
+  DynamicDefinitionsDisabledError,
+  EntityDefinitionAlreadyExistsError,
+  EntityDefinitionIdentityChangedError,
+  EntityDefinitionNotFoundError,
+  EntityDefinitionValidationError,
+  InventoryExtensionAlreadyExistsError,
+  InventoryExtensionCodeRegisteredError,
+} from './domain/definitions';
+// The definitions API body schema (zod) is server-only: the `common` barrel keeps zod out of page loads.
+export {
+  entityDefinitionsApiBodySchema,
+  type EntityDefinitionsApiBody,
+} from '../common/domain/definitions/definitions_api_body';
 export type { RegisterEntityMaintainerConfig } from './tasks/entity_maintainers/types';
 export { EntityMaintainerTaskStatus } from './tasks/entity_maintainers/types';
 export type {
