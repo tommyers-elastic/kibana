@@ -15,6 +15,11 @@ export interface InventoryEntityDefinitionInput {
   inventory: InventoryExtension;
 }
 
+/** A non-materialised definition assembled from its inventory authoring form (identity included). */
+export type InventoryEntityDefinition = EntityDefinitionWithoutId & {
+  inventory: InventoryExtension;
+};
+
 /**
  * Assembles a non-materialised entity definition from its inventory authoring form: the identity
  * core is derived from `inventory.identity` and materialisation is switched off, so the definition
@@ -25,7 +30,7 @@ export function buildInventoryEntityDefinition({
   type,
   name,
   inventory,
-}: InventoryEntityDefinitionInput): EntityDefinitionWithoutId {
+}: InventoryEntityDefinitionInput): InventoryEntityDefinition {
   return {
     type,
     name,

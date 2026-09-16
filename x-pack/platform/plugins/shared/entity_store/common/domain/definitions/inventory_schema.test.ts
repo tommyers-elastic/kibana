@@ -7,6 +7,7 @@
 
 import { INVENTORY_DEFINITION_FIXTURES } from './__fixtures__/inventory_definitions';
 import {
+  builtInInventoryExtensionSchema,
   inventoryExtensionSchema,
   inventorySourceSchema,
   isLiteralFieldPath,
@@ -107,6 +108,69 @@ describe('inventoryExtensionSchema', () => {
     expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, sources: [] }).success).toBe(
       false
     );
+  });
+});
+
+describe('builtInInventoryExtensionSchema', () => {
+  const minimalBuiltInExtension = { sources: [{ index: 'metrics-system.cpu-*' }] };
+
+  it('accepts label, attributes and sources without an identity', () => {
+    const result = builtInInventoryExtensionSchema.safeParse({
+      label: 'Hosts',
+      attributes: ['host.os.name', 'cloud.provider'],
+      sources: [
+        {
+          index: 'metrics-system.cpu-*',
+          filter: 'system.cpu.total.norm.pct IS NOT NULL',
+          metrics: [{ name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' }],
+        },
+      ],
+    });
+    expect(result.error?.issues).toBeUndefined();
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a sources-only extension', () => {
+    expect(builtInInventoryExtensionSchema.safeParse(minimalBuiltInExtension).success).toBe(true);
+  });
+
+  it('rejects an identity: the built-in core owns it', () => {
+    const result = builtInInventoryExtensionSchema.safeParse({
+      ...minimalBuiltInExtension,
+      identity: ['host.name'],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toMatch(/Unrecognized key.*identity/);
+  });
+
+  it('applies the same bounds as the authored extension', () => {
+    expect(
+      builtInInventoryExtensionSchema.safeParse({ ...minimalBuiltInExtension, sources: [] }).success
+    ).toBe(false);
+    expect(
+      builtInInventoryExtensionSchema.safeParse({
+        ...minimalBuiltInExtension,
+        attributes: ['host.os.name', 'host.os.name'],
+      }).success
+    ).toBe(false);
+    expect(
+      builtInInventoryExtensionSchema.safeParse({ ...minimalBuiltInExtension, attributes: ['a b'] })
+        .success
+    ).toBe(false);
+    expect(
+      builtInInventoryExtensionSchema.safeParse({ ...minimalBuiltInExtension, label: '' }).success
+    ).toBe(false);
+  });
+
+  it.each([
+    ['edges', []],
+    ['inventoryWindow', '15m'],
+    ['materialisation', { mode: 'none' }],
+  ])('rejects the unknown key %s so it fails loudly', (key, value) => {
+    expect(
+      builtInInventoryExtensionSchema.safeParse({ ...minimalBuiltInExtension, [key]: value })
+        .success
+    ).toBe(false);
   });
 });
 

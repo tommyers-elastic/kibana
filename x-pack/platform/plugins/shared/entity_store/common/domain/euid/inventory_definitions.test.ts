@@ -17,6 +17,7 @@ import {
   k8sDeploymentInventoryDefinition,
   k8sPodInventoryDefinition,
 } from '../definitions/__fixtures__/inventory_definitions';
+import { getInventoryIdentity } from '../definitions/entity_schema';
 import {
   getEuidDslDocumentsContainsIdFilterFromDefinition,
   getEuidDslFilterBasedOnDocumentFromDefinition,
@@ -219,7 +220,7 @@ describe('EUID compiler over Observability inventory definitions', () => {
         expect(getEuidDslDocumentsContainsIdFilterFromDefinition(definition)).toBeDefined();
         expect(getEuidPainlessEvaluationFromDefinition(definition)).toContain('return');
         expect(getEuidSourceFieldsFromDefinition(definition).identitySourceFields).toEqual(
-          definition.inventory?.identity
+          getInventoryIdentity(definition)
         );
       });
     }

@@ -136,6 +136,7 @@ export type {
   MaterialisedEntityDefinition,
   MaterialisationMode,
   InventoryExtension,
+  BuiltInInventoryExtension,
 } from './domain/definitions/entity_schema';
 
 export type {

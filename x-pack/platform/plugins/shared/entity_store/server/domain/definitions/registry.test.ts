@@ -15,10 +15,13 @@ import {
 } from '../../../common/domain/definitions/__fixtures__/inventory_definitions';
 import { ALL_BUILT_IN_ENTITY_TYPES } from '../../../common/domain/definitions/built_in_entity_types';
 import { hostEntityDefinition } from '../../../common/domain/definitions/host';
+import { getInventoryIdentity } from '../../../common/domain/definitions/entity_schema';
+import { getEntityDefinition as getBuiltInEntityDefinition } from '../../../common/domain/definitions/registry';
 import { ENTITY_DEFINITION_SAVED_OBJECT_TYPE } from '../../../common';
 import { EntityDefinitionsCache } from './definitions_cache';
 import { EntityDefinitionsRepository } from './definitions_repository';
 import { EntityDefinitionValidationError } from './errors';
+import { BuiltInInventoryExtensionsRegistry } from './built_in_inventory_extensions';
 import { CodeDefinitionsRegistry } from './code_definitions_registry';
 import { EntityDefinitionRegistry } from './registry';
 import type { StoredEntityDefinitionAttributes } from './saved_object';
@@ -33,6 +36,17 @@ const stored = (
   updatedAt: '2026-09-15T00:00:00.000Z',
   definition,
 });
+
+const hostInventoryExtension = {
+  label: 'Hosts',
+  attributes: ['host.os.name', 'cloud.provider'],
+  sources: [
+    {
+      index: 'metrics-system.cpu-*',
+      metrics: [{ name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' as const }],
+    },
+  ],
+};
 
 describe('CodeDefinitionsRegistry', () => {
   it('registers a valid non-materialised definition', () => {
@@ -80,6 +94,7 @@ describe('EntityDefinitionRegistry', () => {
   let soClient: ReturnType<typeof savedObjectsClientMock.create>;
   let cache: EntityDefinitionsCache;
   let codeDefinitions: CodeDefinitionsRegistry;
+  let builtInInventoryExtensions: BuiltInInventoryExtensionsRegistry;
   let now: number;
 
   const createRegistry = (namespace = NAMESPACE) =>
@@ -87,6 +102,7 @@ describe('EntityDefinitionRegistry', () => {
       repository: new EntityDefinitionsRepository(soClient, namespace),
       cache,
       codeDefinitions,
+      builtInInventoryExtensions,
       namespace,
     });
 
@@ -110,6 +126,7 @@ describe('EntityDefinitionRegistry', () => {
     now = 1_000_000;
     cache = new EntityDefinitionsCache(30_000, () => now);
     codeDefinitions = new CodeDefinitionsRegistry();
+    builtInInventoryExtensions = new BuiltInInventoryExtensionsRegistry();
     mockStored();
   });
 
@@ -119,9 +136,80 @@ describe('EntityDefinitionRegistry', () => {
       source: 'built_in',
       definition: { type: 'host', id: 'security_host_space-a' },
     });
+    expect(record?.definition.inventory).toBeUndefined();
+    expect(record?.definition).toEqual(getBuiltInEntityDefinition('host', NAMESPACE));
     expect(soClient.find).not.toHaveBeenCalled();
     expect(createRegistry().isBuiltIn('host')).toBe(true);
     expect(createRegistry().isReserved('host')).toBe(true);
+  });
+
+  it('serves a built-in with its registered inventory extension without changing its identity or materialisation', async () => {
+    builtInInventoryExtensions.register('host', hostInventoryExtension);
+    const registry = createRegistry();
+
+    const host = await registry.getDefinition('host');
+    const builtIn = getBuiltInEntityDefinition('host', NAMESPACE);
+    expect(host).toEqual({
+      source: 'built_in',
+      definition: { ...builtIn, inventory: hostInventoryExtension },
+    });
+    expect(host?.definition.identityField).toBe(builtIn.identityField);
+    expect(host?.definition.materialisation).toBe(builtIn.materialisation);
+    expect(getInventoryIdentity(host!.definition)).toBeUndefined();
+
+    // The other built-ins and the static registry are untouched.
+    expect((await registry.getDefinition('user'))?.definition.inventory).toBeUndefined();
+    expect(getBuiltInEntityDefinition('host', NAMESPACE).inventory).toBeUndefined();
+    expect(soClient.find).not.toHaveBeenCalled();
+  });
+
+  it('lists only definitions with an inventory extension when asked', async () => {
+    builtInInventoryExtensions.register('host', hostInventoryExtension);
+    codeDefinitions.register(k8sNodeInventoryDefinition);
+    codeDefinitions.register({
+      type: 'plain.code',
+      name: 'code definition without inventory',
+      identityField: { singleField: 'plain.id' },
+    });
+    mockStored(
+      stored(k8sDeploymentInventoryDefinition),
+      stored({
+        type: 'plain.api',
+        name: 'API definition without inventory',
+        identityField: { singleField: 'plain.id' },
+      })
+    );
+    const registry = createRegistry();
+
+    const withInventory = await registry.getDefinitions({ inventory: true });
+    expect(withInventory.map(({ definition, source }) => [definition.type, source])).toEqual([
+      ['host', 'built_in'],
+      ['k8s.node', 'code'],
+      ['k8s.deployment', 'api'],
+    ]);
+
+    const liveWithInventory = await registry.getDefinitions({ inventory: true, mode: 'none' });
+    expect(liveWithInventory.map(({ definition }) => definition.type)).toEqual([
+      'k8s.node',
+      'k8s.deployment',
+    ]);
+
+    // `inventory: false` and omitting it behave alike; the `mode` filter is unchanged.
+    expect(await registry.getDefinitions({ inventory: false })).toEqual(
+      await registry.getDefinitions()
+    );
+    expect(
+      (await registry.getDefinitions({ mode: 'extraction' })).map(
+        ({ definition }) => definition.type
+      )
+    ).toEqual(ALL_BUILT_IN_ENTITY_TYPES);
+    expect((await registry.getDefinitions()).map(({ definition }) => definition.type)).toEqual([
+      ...ALL_BUILT_IN_ENTITY_TYPES,
+      'k8s.node',
+      'plain.code',
+      'k8s.deployment',
+      'plain.api',
+    ]);
   });
 
   it('resolves code-registered definitions in every space', async () => {
@@ -230,6 +318,7 @@ describe('EntityDefinitionRegistry with imported objects', () => {
       repository: new EntityDefinitionsRepository(soClient, NAMESPACE),
       cache: new EntityDefinitionsCache(),
       codeDefinitions,
+      builtInInventoryExtensions: new BuiltInInventoryExtensionsRegistry(),
       namespace: NAMESPACE,
       logger,
     });

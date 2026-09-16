@@ -29,6 +29,7 @@ import {
   EntityDefinitionRegistry,
   EntityDefinitionsClient,
   EntityDefinitionsRepository,
+  type BuiltInInventoryExtensionsRegistry,
   type CodeDefinitionsRegistry,
   type EntityDefinitionsCache,
 } from './domain/definitions';
@@ -42,6 +43,7 @@ interface EntityStoreApiRequestHandlerContextDeps {
   analytics: TelemetryReporter;
   definitionsCache: EntityDefinitionsCache;
   codeDefinitions: CodeDefinitionsRegistry;
+  builtInInventoryExtensions: BuiltInInventoryExtensionsRegistry;
 }
 
 export async function createRequestHandlerContext({
@@ -53,6 +55,7 @@ export async function createRequestHandlerContext({
   analytics,
   definitionsCache,
   codeDefinitions,
+  builtInInventoryExtensions,
 }: EntityStoreApiRequestHandlerContextDeps): Promise<EntityStoreApiRequestHandlerContext> {
   const core = await context.core;
   const [coreStart, startPlugins] = await coreSetup.getStartServices();
@@ -175,7 +178,11 @@ export async function createRequestHandlerContext({
     logsExtractionClient,
     historySnapshotClient,
     security: startPlugins.security,
-    entityDefinitionRegistry: new EntityDefinitionRegistry({ ...definitionsDeps, logger }),
+    entityDefinitionRegistry: new EntityDefinitionRegistry({
+      ...definitionsDeps,
+      builtInInventoryExtensions,
+      logger,
+    }),
     entityDefinitionsClient: new EntityDefinitionsClient({ ...definitionsDeps, logger }),
     namespace,
     analytics,

@@ -21,6 +21,7 @@ import {
   getMaterialisedEntityTypes,
 } from '../../../common/domain/definitions/registry';
 import type { EntityDefinitionRecord } from '../../../common/domain/definitions/definition_record';
+import type { BuiltInInventoryExtensionsRegistry } from './built_in_inventory_extensions';
 import type { CodeDefinitionsRegistry } from './code_definitions_registry';
 import type { EntityDefinitionsCache } from './definitions_cache';
 import type { EntityDefinitionsRepository } from './definitions_repository';
@@ -32,6 +33,11 @@ import {
 export interface GetDefinitionsOptions {
   /** Only definitions whose materialisation mode matches. */
   mode?: MaterialisationMode;
+  /**
+   * When `true`, only definitions that carry an `inventory` extension: built-ins with an extension
+   * registered through `registerInventoryExtension`, and code or API definitions that declare one.
+   */
+  inventory?: boolean;
 }
 
 /** Id stamped on dynamic (code or API) definitions; built-ins keep `security_<type>_<space>`. */
@@ -42,19 +48,22 @@ interface EntityDefinitionRegistryDeps {
   repository: EntityDefinitionsRepository;
   cache: EntityDefinitionsCache;
   codeDefinitions: CodeDefinitionsRegistry;
+  builtInInventoryExtensions: BuiltInInventoryExtensionsRegistry;
   namespace: string;
   logger?: Logger;
 }
 
 /**
  * Resolves entity definitions by type name for one space: the four built-ins, definitions
- * registered in code at setup, and definitions registered per space through the API. Read-only;
- * writes go through `EntityDefinitionsClient`, which shares the cache.
+ * registered in code at setup, and definitions registered per space through the API. A built-in
+ * is served with the inventory extension registered for it at setup, if any. Read-only; writes go
+ * through `EntityDefinitionsClient`, which shares the cache.
  */
 export class EntityDefinitionRegistry {
   private readonly repository: EntityDefinitionsRepository;
   private readonly cache: EntityDefinitionsCache;
   private readonly codeDefinitions: CodeDefinitionsRegistry;
+  private readonly builtInInventoryExtensions: BuiltInInventoryExtensionsRegistry;
   private readonly namespace: string;
   private readonly logger: Logger | undefined;
 
@@ -62,12 +71,14 @@ export class EntityDefinitionRegistry {
     repository,
     cache,
     codeDefinitions,
+    builtInInventoryExtensions,
     namespace,
     logger,
   }: EntityDefinitionRegistryDeps) {
     this.repository = repository;
     this.cache = cache;
     this.codeDefinitions = codeDefinitions;
+    this.builtInInventoryExtensions = builtInInventoryExtensions;
     this.namespace = namespace;
     this.logger = logger;
   }
@@ -84,7 +95,7 @@ export class EntityDefinitionRegistry {
 
   async getDefinition(type: string): Promise<EntityDefinitionRecord | undefined> {
     if (isBuiltInEntityType(type)) {
-      return builtInRecord(type, this.namespace);
+      return this.builtInRecord(type);
     }
     const code = this.codeDefinitions.get(type);
     if (code) {
@@ -94,17 +105,30 @@ export class EntityDefinitionRegistry {
     return stored ? apiRecord(stored, this.namespace) : undefined;
   }
 
-  async getDefinitions({ mode }: GetDefinitionsOptions = {}): Promise<EntityDefinitionRecord[]> {
+  async getDefinitions({ mode, inventory }: GetDefinitionsOptions = {}): Promise<
+    EntityDefinitionRecord[]
+  > {
     const stored = await this.loadStored();
     const records: EntityDefinitionRecord[] = [
-      ...getMaterialisedEntityTypes().map((type) => builtInRecord(type, this.namespace)),
+      ...getMaterialisedEntityTypes().map((type) => this.builtInRecord(type)),
       ...this.codeDefinitions.values().map((definition) => codeRecord(definition, this.namespace)),
       ...[...stored.values()].map((attributes) => apiRecord(attributes, this.namespace)),
     ];
-    if (mode === undefined) {
-      return records;
-    }
-    return records.filter(({ definition }) => getMaterialisationMode(definition) === mode);
+    return records.filter(
+      ({ definition }) =>
+        (mode === undefined || getMaterialisationMode(definition) === mode) &&
+        (!inventory || definition.inventory !== undefined)
+    );
+  }
+
+  /** The static built-in definition, plus the inventory extension registered for it, if any. */
+  private builtInRecord(type: BuiltInEntityType): EntityDefinitionRecord {
+    const definition = getBuiltInEntityDefinition(type, this.namespace);
+    const inventory = this.builtInInventoryExtensions.get(type);
+    return {
+      definition: inventory ? { ...definition, inventory } : definition,
+      source: 'built_in',
+    };
   }
 
   private async loadStored(): Promise<ReadonlyMap<string, StoredEntityDefinitionAttributes>> {
@@ -128,11 +152,6 @@ export class EntityDefinitionRegistry {
     return new Map(all.map((stored) => [stored.type, stored]));
   }
 }
-
-const builtInRecord = (type: BuiltInEntityType, namespace: string): EntityDefinitionRecord => ({
-  definition: getBuiltInEntityDefinition(type, namespace),
-  source: 'built_in',
-});
 
 const codeRecord = (
   definition: EntityDefinitionWithoutId,

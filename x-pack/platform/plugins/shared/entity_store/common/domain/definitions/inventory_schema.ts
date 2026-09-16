@@ -113,10 +113,31 @@ export const inventorySourceSchema = z
   });
 export type InventorySource = z.infer<typeof inventorySourceSchema>;
 
+/**
+ * The parts of an inventory extension that do not describe identity. Shared by the authored
+ * extension (`inventoryExtensionSchema`, which adds `identity`) and the extension that another
+ * plugin attaches to a built-in type (`builtInInventoryExtensionSchema`).
+ */
+const inventoryExtensionShape = {
+  /** Human readable type name for the UI. */
+  label: z.string().min(1).max(MAX_LABEL_LENGTH).optional(),
+  /**
+   * Literal field paths shown per entity, resolved to the newest observed value across all
+   * sources that carry them. Structural fields (names, namespaces, nodes) should use canonical
+   * ECS names so the ECS<->OTel alias layer resolves them on both pipeline shapes.
+   */
+  attributes: z
+    .array(literalFieldPathSchema)
+    .max(MAX_ATTRIBUTES)
+    .refine(uniqueStrings, { message: 'attributes must be unique' })
+    .optional(),
+  /** Existence is identity occurrence in any declared source; metric-less entities list with null metrics. */
+  sources: z.array(inventorySourceSchema).min(1).max(MAX_SOURCES),
+};
+
 export const inventoryExtensionSchema = z
   .strictObject({
-    /** Human readable type name for the UI. */
-    label: z.string().min(1).max(MAX_LABEL_LENGTH).optional(),
+    ...inventoryExtensionShape,
     /**
      * Ordered tuple of literal field paths that identifies an entity. The core `identityField` is
      * derived from this list (see `identityTupleToIdentityField`); the list is kept here because
@@ -127,18 +148,6 @@ export const inventoryExtensionSchema = z
       .min(1)
       .max(MAX_IDENTITY_FIELDS)
       .refine(uniqueStrings, { message: 'identity fields must be unique' }),
-    /**
-     * Literal field paths shown per entity, resolved to the newest observed value across all
-     * sources that carry them. Structural fields (names, namespaces, nodes) should use canonical
-     * ECS names so the ECS<->OTel alias layer resolves them on both pipeline shapes.
-     */
-    attributes: z
-      .array(literalFieldPathSchema)
-      .max(MAX_ATTRIBUTES)
-      .refine(uniqueStrings, { message: 'attributes must be unique' })
-      .optional(),
-    /** Existence is identity occurrence in any declared source; metric-less entities list with null metrics. */
-    sources: z.array(inventorySourceSchema).min(1).max(MAX_SOURCES),
   })
   .superRefine((inventory, ctx) => {
     const identity = new Set(inventory.identity);
@@ -154,3 +163,14 @@ export const inventoryExtensionSchema = z
   });
 
 export type InventoryExtension = z.infer<typeof inventoryExtensionSchema>;
+
+/**
+ * An inventory extension attached to a built-in (Security) type by another plugin through
+ * `registerInventoryExtension`. It has no `identity`: the built-in core's `identityField` is the
+ * identity, so entity ids stay `host:` / `user:` ids and the query generator groups by the fields
+ * that ranking references. Attributes may not be identity fields of the built-in; that rule is
+ * applied at registration, where the built-in definition is known.
+ */
+export const builtInInventoryExtensionSchema = z.strictObject(inventoryExtensionShape);
+
+export type BuiltInInventoryExtension = z.infer<typeof builtInInventoryExtensionSchema>;

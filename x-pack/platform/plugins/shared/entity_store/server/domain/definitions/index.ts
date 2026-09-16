@@ -25,6 +25,7 @@ export {
   type GetDefinitionsOptions,
 } from './registry';
 export { CodeDefinitionsRegistry } from './code_definitions_registry';
+export { BuiltInInventoryExtensionsRegistry } from './built_in_inventory_extensions';
 export { EntityDefinitionsClient, type ReplaceDefinitionOptions } from './definitions_client';
 export {
   EntityDefinitionValidationError,

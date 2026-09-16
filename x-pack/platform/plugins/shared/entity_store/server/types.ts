@@ -49,7 +49,10 @@ import type { ResolutionClient } from './domain/resolution';
 import type { ResolutionRulesClient } from './domain/resolution/rules';
 import type { RegisterEntityMaintainerConfig } from './tasks/entity_maintainers/types';
 import type { TelemetryReporter } from './telemetry/events';
-import type { EntityDefinitionWithoutId } from '../common/domain/definitions/entity_schema';
+import type {
+  BuiltInInventoryExtension,
+  EntityDefinitionWithoutId,
+} from '../common/domain/definitions/entity_schema';
 import type { EntityDefinitionRegistry, EntityDefinitionsClient } from './domain/definitions';
 
 export interface EntityStoreSetupPlugins {
@@ -142,6 +145,15 @@ export interface EntityStoreSetupContract {
    * name, or a materialisation mode other than `none`.
    */
   registerEntityDefinition: (definition: EntityDefinitionWithoutId) => void;
+  /**
+   * Attaches an inventory extension (label, attributes, sources) to one of the built-in Security
+   * types (e.g. an Observability `host` inventory view). Global across spaces, held in memory,
+   * served by the registry as `definition.inventory` on the built-in record. The built-in
+   * definition's identity and materialisation are never changed, so entity ids stay the built-in's
+   * (`host:...`). Throws on an invalid extension, a type that is not built-in, a type that already
+   * has an extension, or an attribute that is an identity field of the built-in.
+   */
+  registerInventoryExtension: (type: string, extension: BuiltInInventoryExtension) => void;
 }
 
 export type EntityStoreCoreSetup = CoreSetup<EntityStoreStartPlugins, EntityStoreStartContract>;

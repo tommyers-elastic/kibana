@@ -43,6 +43,7 @@ import { registerEntityStoreUsageCollector } from './telemetry/usage_collector';
 import { automatedResolutionMaintainerConfig } from './domain/resolution/rules/maintainers/automated_resolution';
 import { createWorkflowTriggerEmitter } from './workflow/create_workflow_trigger_emitter';
 import {
+  BuiltInInventoryExtensionsRegistry,
   CodeDefinitionsRegistry,
   EntityDefinitionRegistry,
   EntityDefinitionsCache,
@@ -64,6 +65,7 @@ export class EntityStorePlugin
   private readonly isServerless: boolean;
   private readonly definitionsCache = new EntityDefinitionsCache();
   private readonly codeDefinitions = new CodeDefinitionsRegistry();
+  private readonly builtInInventoryExtensions = new BuiltInInventoryExtensionsRegistry();
 
   constructor(initializerContext: PluginInitializerContext) {
     this.logger = initializerContext.logger.get();
@@ -95,6 +97,7 @@ export class EntityStorePlugin
           analytics: createReportEvent(core.analytics),
           definitionsCache: this.definitionsCache,
           codeDefinitions: this.codeDefinitions,
+          builtInInventoryExtensions: this.builtInInventoryExtensions,
         })
     );
 
@@ -137,6 +140,8 @@ export class EntityStorePlugin
           analytics: createReportEvent(core.analytics),
         }),
       registerEntityDefinition: (definition) => this.codeDefinitions.register(definition),
+      registerInventoryExtension: (type, extension) =>
+        this.builtInInventoryExtensions.register(type, extension),
     };
   }
 
@@ -172,6 +177,7 @@ export class EntityStorePlugin
           repository: new EntityDefinitionsRepository(internalSavedObjectsRepository, namespace),
           cache: this.definitionsCache,
           codeDefinitions: this.codeDefinitions,
+          builtInInventoryExtensions: this.builtInInventoryExtensions,
           namespace,
           logger,
         }),

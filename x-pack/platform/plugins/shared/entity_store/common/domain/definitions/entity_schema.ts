@@ -11,7 +11,11 @@ import type { Condition } from '@kbn/streamlang';
 import { ALL_BUILT_IN_ENTITY_TYPES, BuiltInEntityType } from './built_in_entity_types';
 import { identityCoreSchema } from './identity_core_schema';
 import { identityTupleToIdentityField } from './identity_tuple';
-import { inventoryExtensionSchema } from './inventory_schema';
+import {
+  inventoryExtensionSchema,
+  type BuiltInInventoryExtension,
+  type InventoryExtension,
+} from './inventory_schema';
 import {
   materialisationSchema,
   type EntityField,
@@ -98,7 +102,17 @@ export const entitySchema = entityDefinitionBaseSchema
   })
   .superRefine(assertIdentityConsistency);
 
-export type EntityDefinition = z.infer<typeof entitySchema>; // entity with id generated in runtime
+type ParsedEntityDefinition = z.infer<typeof entitySchema>;
+
+/**
+ * A definition with its runtime `id`. `inventory` is either the authored extension (dynamic
+ * definitions, carrying `identity`) or, on a built-in record served by the server registry, a
+ * `BuiltInInventoryExtension` attached through `registerInventoryExtension`, whose identity is
+ * the core `identityField`. The schemas above only ever parse the authored form.
+ */
+export type EntityDefinition = Omit<ParsedEntityDefinition, 'inventory'> & {
+  inventory?: InventoryExtension | BuiltInInventoryExtension;
+};
 export type EntityDefinitionWithoutId = Omit<EntityDefinition, 'id'>;
 
 /** A definition whose materialisation mode is `extraction`: it has fields, templates and tasks. */
@@ -145,6 +159,17 @@ export function getPostStatsFieldOverrides(definition: HasMaterialisation): SetF
   return getMaterialisation(definition)?.whenConditionTrueSetFieldsAfterStats ?? [];
 }
 
+/**
+ * The authored identity tuple of an inventory extension, or `undefined` when the definition has
+ * no inventory extension or carries a built-in extension (whose identity is `identityField`).
+ */
+export function getInventoryIdentity(
+  definition: Pick<EntityDefinitionWithoutId, 'inventory'>
+): string[] | undefined {
+  const { inventory } = definition;
+  return inventory !== undefined && 'identity' in inventory ? inventory.identity : undefined;
+}
+
 export {
   identityCoreSchema,
   identityFieldSchema,
@@ -189,9 +214,10 @@ export type {
   MaterialisationMode,
 } from './materialisation_schema';
 
-export { inventoryExtensionSchema } from './inventory_schema';
+export { inventoryExtensionSchema, builtInInventoryExtensionSchema } from './inventory_schema';
 export type {
   InventoryExtension,
+  BuiltInInventoryExtension,
   InventorySource,
   InventoryMetric,
   InventoryMetricAggregation,

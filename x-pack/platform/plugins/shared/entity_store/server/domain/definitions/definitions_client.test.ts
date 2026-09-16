@@ -14,6 +14,7 @@ import {
   k8sPodInventoryDefinition,
 } from '../../../common/domain/definitions/__fixtures__/inventory_definitions';
 import { buildInventoryEntityDefinition } from '../../../common/domain/definitions/inventory_definition';
+import { getInventoryIdentity } from '../../../common/domain/definitions/entity_schema';
 import { hostEntityDefinition } from '../../../common/domain/definitions/host';
 import { ENTITY_DEFINITION_SAVED_OBJECT_TYPE } from '../../../common';
 import { EntityDefinitionsCache } from './definitions_cache';
@@ -188,7 +189,7 @@ describe('EntityDefinitionsClient', () => {
       expect(soClient.update).not.toHaveBeenCalled();
 
       const record = await client.replace('k8s.deployment', reidentified, { force: true });
-      expect(record.definition.inventory?.identity).toHaveLength(3);
+      expect(getInventoryIdentity(record.definition)).toHaveLength(3);
     });
 
     it('rejects a body whose type differs from the path', async () => {

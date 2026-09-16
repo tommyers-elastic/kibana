@@ -120,6 +120,33 @@ by default) and on the neutral **Entity definitions** Kibana feature (`read_enti
 in the space. Registering a type never creates an engine, component template, extraction task or
 install step; those remain driven by `getMaterialisedEntityTypes()` over the built-ins.
 
+#### Inventory extensions for built-in types
+
+Built-in types cannot be registered again, but another plugin can attach an inventory view to one
+(e.g. an Observability `host` inventory that keeps Security's `host:` entity ids) through the
+**setup** contract:
+
+```ts
+plugins.entityStore.registerInventoryExtension('host', {
+  label: 'Hosts',
+  attributes: ['host.os.name', 'cloud.provider'],
+  sources: [{ index: 'metrics-system.cpu-*', metrics: [{ name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' }] }],
+});
+```
+
+The extension is `builtInInventoryExtensionSchema` (`BuiltInInventoryExtension`): the inventory
+extension without `identity`. The built-in's identity and materialisation are never changed; its
+`identityField` is the identity, so the query generator groups by the fields that ranking references
+and entity ids stay the built-in's. Attributes may not be identity fields of the built-in (rejected
+at registration, as `attributes` repeating `identity` is for authored definitions). Extensions are
+global, in memory, one per type (a second registration throws rather than overriding), and exist
+only server-side: `EntityDefinitionRegistry` serves the built-in record with `definition.inventory`
+set, while the static `common/domain/definitions/registry.ts` and everything that extracts or
+materialises built-ins are unaffected. `getDefinitions({ inventory: true })` returns only the
+records that carry an inventory extension (built-ins with a registered extension and code or API
+definitions that declare one); `getInventoryIdentity(definition)` returns the authored tuple or
+`undefined` for a built-in.
+
 ## Entity AI Summary — index privileges
 
 The Entity AI Summary is persisted to the entity **metadata** datastream

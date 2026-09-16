@@ -8,6 +8,7 @@
 import { isEqual } from 'lodash';
 import type { Logger } from '@kbn/logging';
 import type { EntityDefinitionWithoutId } from '../../../common/domain/definitions/entity_schema';
+import { getInventoryIdentity } from '../../../common/domain/definitions/entity_schema';
 import type { EntityDefinitionRecord } from '../../../common/domain/definitions/definition_record';
 import type { EntityDefinitionsCache } from './definitions_cache';
 import {
@@ -152,7 +153,7 @@ const identityChanged = (
   after: EntityDefinitionWithoutId
 ): boolean =>
   !isEqual(before.identityField, after.identityField) ||
-  !isEqual(before.inventory?.identity, after.inventory?.identity);
+  !isEqual(getInventoryIdentity(before), getInventoryIdentity(after));
 
 function assertNotReserved(type: string, codeDefinitions: CodeDefinitionsRegistry): void {
   assertRegistrableDefinition(

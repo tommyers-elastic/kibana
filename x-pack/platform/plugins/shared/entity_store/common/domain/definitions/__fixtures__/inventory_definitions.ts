@@ -16,14 +16,16 @@
  * owns the engine-specific ES|QL. Edges and derived metadata are deliberately not ported.
  */
 
-import type { EntityDefinitionWithoutId } from '../entity_schema';
-import { buildInventoryEntityDefinition } from '../inventory_definition';
+import {
+  buildInventoryEntityDefinition,
+  type InventoryEntityDefinition,
+} from '../inventory_definition';
 
 const OTEL_KUBELETSTATS_INDEX = 'metrics-kubeletstatsreceiver.otel-default';
 const OTEL_K8S_CLUSTER_INDEX = 'metrics-k8sclusterreceiver.otel-default';
 const ECS_KUBERNETES_INDEX = 'metrics-kubernetes.tsdb-default';
 
-export const k8sPodInventoryDefinition: EntityDefinitionWithoutId = buildInventoryEntityDefinition({
+export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInventoryEntityDefinition({
   type: 'k8s.pod',
   name: `Observability 'k8s.pod' inventory definition`,
   inventory: {
@@ -60,7 +62,7 @@ export const k8sPodInventoryDefinition: EntityDefinitionWithoutId = buildInvento
   },
 });
 
-export const k8sNodeInventoryDefinition: EntityDefinitionWithoutId = buildInventoryEntityDefinition(
+export const k8sNodeInventoryDefinition: InventoryEntityDefinition = buildInventoryEntityDefinition(
   {
     type: 'k8s.node',
     name: `Observability 'k8s.node' inventory definition`,
@@ -92,7 +94,7 @@ export const k8sNodeInventoryDefinition: EntityDefinitionWithoutId = buildInvent
  * Composite identity: deployment names are only unique within a namespace. The prototype ran on a
  * single cluster; a multi-cluster deployment would prepend the cluster name to the tuple.
  */
-export const k8sDeploymentInventoryDefinition: EntityDefinitionWithoutId =
+export const k8sDeploymentInventoryDefinition: InventoryEntityDefinition =
   buildInventoryEntityDefinition({
     type: 'k8s.deployment',
     name: `Observability 'k8s.deployment' inventory definition`,
@@ -130,7 +132,7 @@ export const k8sDeploymentInventoryDefinition: EntityDefinitionWithoutId =
     },
   });
 
-export const k8sStatefulsetInventoryDefinition: EntityDefinitionWithoutId =
+export const k8sStatefulsetInventoryDefinition: InventoryEntityDefinition =
   buildInventoryEntityDefinition({
     type: 'k8s.statefulset',
     name: `Observability 'k8s.statefulset' inventory definition`,
