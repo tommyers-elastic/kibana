@@ -221,6 +221,7 @@ export const DefinitionEditor = ({
               <EuiButton
                 data-test-subj="entityInventoryDefinitionEditorAddInventoryExtensionButton"
                 size="s"
+                iconType="plusCircle"
                 onClick={() => onAddExtension(recordType)}
               >
                 {i18n.translate('xpack.entityInventory.editor.addExtensionButton', {
@@ -281,6 +282,7 @@ export const DefinitionEditor = ({
           <EuiButton
             data-test-subj="entityInventoryDefinitionEditorButton"
             fill
+            iconType="save"
             onClick={handleSave}
             isLoading={isSaving}
             isDisabled={isReadOnly}
@@ -299,6 +301,7 @@ export const DefinitionEditor = ({
             <EuiButtonEmpty
               data-test-subj="entityInventoryDefinitionEditorButton"
               color="danger"
+              iconType="trash"
               onClick={() => setIsConfirmingDelete(true)}
               isLoading={isDeleting}
             >

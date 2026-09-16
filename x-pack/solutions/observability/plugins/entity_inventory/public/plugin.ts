@@ -25,6 +25,7 @@ export class EntityInventoryPlugin
         defaultMessage: 'Entity definitions',
       }),
       category: DEFAULT_APP_CATEGORIES.observability,
+      euiIconType: 'indexManagementApp',
       visibleIn: [],
       mount: async ({ element }: AppMountParameters) => {
         const [[coreStart], { renderApp }] = await Promise.all([

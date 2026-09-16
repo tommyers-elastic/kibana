@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { css } from '@emotion/react';
 import {
   EuiAccordion,
@@ -20,13 +20,20 @@ import {
   EuiFormRow,
   EuiSpacer,
   EuiText,
+  EuiTextColor,
   EuiTitle,
+  useEuiTheme,
   useGeneratedHtmlId,
   type EuiBasicTableColumn,
 } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
 import { KbnDangerCallout, KbnInfoCallout } from '@kbn/ui-callout';
-import type { InventoryListResponse, InventoryQueryInfo, InventoryRow } from '../../common';
+import type {
+  InventoryColumn,
+  InventoryListResponse,
+  InventoryQueryInfo,
+  InventoryRow,
+} from '../../common';
 import { ENTITY_INVENTORY_ROUTES, ESQL_MAX_ROWS } from '../../common';
 import { formatCellValue } from '../lib/format_cell_value';
 import type { InventoryApi } from '../lib/inventory_api';
@@ -43,9 +50,26 @@ const DEFAULT_PREVIEW_LIMIT = 50;
 
 const rangeOptions = RELATIVE_RANGES.map((range) => ({ id: range, label: range }));
 
-const scrollableTable = css`
-  overflow-x: auto;
-`;
+/** ES|QL numeric types; metric columns are numeric by construction. */
+const NUMERIC_ES_TYPES = new Set([
+  'long',
+  'integer',
+  'short',
+  'byte',
+  'double',
+  'float',
+  'half_float',
+  'scaled_float',
+  'unsigned_long',
+  'counter_long',
+  'counter_integer',
+  'counter_double',
+]);
+
+const isNumericColumn = ({ kind, esType }: InventoryColumn): boolean =>
+  kind === 'metric' || (esType !== undefined && NUMERIC_ES_TYPES.has(esType));
+
+const EMPTY_CELL = '\u2014';
 
 const summaryItems = (result: InventoryListResponse) => [
   { title: 'total', description: result.total === null ? 'null' : String(result.total) },
@@ -79,9 +103,9 @@ const summaryItems = (result: InventoryListResponse) => [
 const queryItems = (query: InventoryQueryInfo) => [
   { title: 'engine', description: query.engine },
   { title: 'index', description: query.index },
-  { title: 'tookMs', description: formatCellValue(query.tookMs) },
-  { title: 'documentsFound', description: formatCellValue(query.documentsFound) },
-  { title: 'rows', description: formatCellValue(query.rows) },
+  { title: 'tookMs', description: formatCellValue(query.tookMs) ?? EMPTY_CELL },
+  { title: 'documentsFound', description: formatCellValue(query.documentsFound) ?? EMPTY_CELL },
+  { title: 'rows', description: formatCellValue(query.rows) ?? EMPTY_CELL },
 ];
 
 /** Runs the type's `_list` route over a relative window and shows rows, timings and the ES|QL. */
@@ -92,6 +116,18 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
   const [result, setResult] = useState<InventoryListResponse | undefined>();
   const [error, setError] = useState<DescribedError | undefined>();
   const accordionBaseId = useGeneratedHtmlId({ prefix: 'entityInventoryPreviewQuery' });
+  const { euiTheme } = useEuiTheme();
+
+  // Fixed-height scroll container so wide or long result sets scroll instead of stretching the page.
+  const scrollableTable = useMemo(
+    () => css`
+      height: 40vh;
+      overflow: auto;
+      border: ${euiTheme.border.thin};
+      border-radius: ${euiTheme.border.radius.medium};
+    `,
+    [euiTheme]
+  );
 
   const run = async () => {
     setIsRunning(true);
@@ -106,12 +142,22 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
     }
   };
 
+  // Columns arrive ordered by the route (entity.id first, last_seen last) and are kept as-is.
   const rowColumns: Array<EuiBasicTableColumn<InventoryRow>> =
-    result?.columns.map(({ name }) => ({
-      field: name,
-      name,
+    result?.columns.map((column) => ({
+      field: column.name,
+      name: column.name,
+      truncateText: true,
+      align: isNumericColumn(column) ? 'right' : 'left',
       // Column names contain dots ("entity.id"), so the value is read by key rather than by path.
-      render: (_value: unknown, row: InventoryRow) => formatCellValue(row[name]),
+      render: (_value: unknown, row: InventoryRow) => {
+        const text = formatCellValue(row[column.name]);
+        return text === undefined ? (
+          <EuiTextColor color="subdued">{EMPTY_CELL}</EuiTextColor>
+        ) : (
+          <span title={text}>{text}</span>
+        );
+      },
     })) ?? [];
 
   return (
@@ -210,6 +256,20 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
                 data-test-subj="entityInventoryPreviewSummary"
               />
               <EuiSpacer size="m" />
+              <EuiText size="xs" color="subdued">
+                <p>
+                  {i18n.translate('xpack.entityInventory.preview.rowsSummary', {
+                    defaultMessage:
+                      '{rows} of {total} rows, truncated: {truncated, select, true {yes} other {no}}',
+                    values: {
+                      rows: result.rows.length,
+                      total: result.total === null ? '?' : result.total,
+                      truncated: String(result.truncated),
+                    },
+                  })}
+                </p>
+              </EuiText>
+              <EuiSpacer size="xs" />
               <div css={scrollableTable}>
                 <EuiBasicTable
                   tableCaption={i18n.translate('xpack.entityInventory.preview.rowsCaption', {
@@ -219,6 +279,9 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
                   items={result.rows}
                   columns={rowColumns}
                   tableLayout="auto"
+                  compressed
+                  stickyHeader
+                  responsiveBreakpoint={false}
                   noItemsMessage={i18n.translate('xpack.entityInventory.preview.noRows', {
                     defaultMessage: 'No entities in the window',
                   })}

@@ -37,7 +37,7 @@ export const DefinitionsList = ({
       width: '32px',
       render: (_value: unknown, record: EntityDefinitionRecord) =>
         record.definition.type === selectedType ? (
-          <EuiIcon type="checkInCircleFilled" aria-hidden={true} />
+          <EuiIcon type="check" aria-hidden={true} />
         ) : null,
     },
     {

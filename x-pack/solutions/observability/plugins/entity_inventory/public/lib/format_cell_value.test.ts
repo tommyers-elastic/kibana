@@ -8,15 +8,16 @@
 import { formatCellValue } from './format_cell_value';
 
 describe('formatCellValue', () => {
-  it('rounds non-integer numbers to four decimals and leaves integers alone', () => {
+  it('rounds numbers to four decimals and adds thousands separators', () => {
     expect(formatCellValue(0.123456789)).toBe('0.1235');
     expect(formatCellValue(42)).toBe('42');
     expect(formatCellValue(1.5)).toBe('1.5');
+    expect(formatCellValue(1234567.891)).toBe('1,234,567.891');
   });
 
-  it('renders nullish values as a dash and structured values as JSON', () => {
-    expect(formatCellValue(null)).toBe('-');
-    expect(formatCellValue(undefined)).toBe('-');
+  it('returns undefined for nullish values and JSON for structured ones', () => {
+    expect(formatCellValue(null)).toBeUndefined();
+    expect(formatCellValue(undefined)).toBeUndefined();
     expect(formatCellValue('pod-1')).toBe('pod-1');
     expect(formatCellValue(true)).toBe('true');
     expect(formatCellValue(['a', 'b'])).toBe('["a","b"]');

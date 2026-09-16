@@ -183,7 +183,7 @@ export const DefinitionsApp = ({ core }: DefinitionsAppProps) => {
           <EuiFlexItem grow={3}>
             {editorMode === undefined ? (
               <EuiEmptyPrompt
-                iconType="documentEdit"
+                iconType="documents"
                 titleSize="s"
                 title={
                   <h2>

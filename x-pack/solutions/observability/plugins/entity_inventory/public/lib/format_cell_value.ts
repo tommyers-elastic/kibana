@@ -5,15 +5,23 @@
  * 2.0.
  */
 
-const DECIMALS = 4;
+const MAX_FRACTION_DIGITS = 4;
 
-/** Renders one inventory row value as text; numbers are rounded to four decimals. */
-export const formatCellValue = (value: unknown): string => {
+const numberFormat = new Intl.NumberFormat('en-US', {
+  maximumFractionDigits: MAX_FRACTION_DIGITS,
+});
+
+/**
+ * Renders one inventory row value as text: numbers with thousands separators and at most four
+ * decimals, structured values as JSON; `undefined` for a missing value so the caller can render a
+ * placeholder.
+ */
+export const formatCellValue = (value: unknown): string | undefined => {
   if (value === null || value === undefined) {
-    return '-';
+    return undefined;
   }
   if (typeof value === 'number') {
-    return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(DECIMALS)));
+    return numberFormat.format(value);
   }
   if (typeof value === 'string') {
     return value;
