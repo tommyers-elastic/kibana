@@ -5,11 +5,26 @@
  * 2.0.
  */
 
-export type RelativeRange = '15m' | '1h' | '6h';
+export type RelativeRange = '15m' | '1h' | '6h' | '24h' | '3d' | '7d';
 
-export const RELATIVE_RANGES: readonly RelativeRange[] = ['15m', '1h', '6h'] as const;
+/** Offered in the preview, shortest first; wide windows are slower and may cap at 10,000 rows per source. */
+export const RELATIVE_RANGES: readonly RelativeRange[] = [
+  '15m',
+  '1h',
+  '6h',
+  '24h',
+  '3d',
+  '7d',
+] as const;
 
-const RANGE_MINUTES: Record<RelativeRange, number> = { '15m': 15, '1h': 60, '6h': 360 };
+const RANGE_MINUTES: Record<RelativeRange, number> = {
+  '15m': 15,
+  '1h': 60,
+  '6h': 6 * 60,
+  '24h': 24 * 60,
+  '3d': 72 * 60,
+  '7d': 168 * 60,
+};
 
 export interface AbsoluteRange {
   from: string;

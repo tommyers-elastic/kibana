@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import { relativeRangeToAbsolute } from './time_range';
+import { RELATIVE_RANGES, relativeRangeToAbsolute } from './time_range';
 
 describe('relativeRangeToAbsolute', () => {
   const now = new Date('2026-01-15T12:00:00.000Z');
@@ -17,5 +17,12 @@ describe('relativeRangeToAbsolute', () => {
     });
     expect(relativeRangeToAbsolute('1h', now).from).toBe('2026-01-15T11:00:00.000Z');
     expect(relativeRangeToAbsolute('6h', now).from).toBe('2026-01-15T06:00:00.000Z');
+    expect(relativeRangeToAbsolute('24h', now).from).toBe('2026-01-14T12:00:00.000Z');
+    expect(relativeRangeToAbsolute('3d', now).from).toBe('2026-01-12T12:00:00.000Z');
+    expect(relativeRangeToAbsolute('7d', now).from).toBe('2026-01-08T12:00:00.000Z');
+  });
+
+  it('offers the windows shortest first with 15m as the first (default) option', () => {
+    expect(RELATIVE_RANGES).toEqual(['15m', '1h', '6h', '24h', '3d', '7d']);
   });
 });

@@ -5,7 +5,7 @@
  * 2.0.
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/react';
 import {
   EuiAccordion,
@@ -33,10 +33,18 @@ import { KbnDangerCallout, KbnInfoCallout, KbnWarningCallout } from '@kbn/ui-cal
 import type {
   InventoryColumn,
   InventoryColumnKind,
+  InventoryDocumentCount,
+  InventoryDocumentCountsResponse,
   InventoryListResponse,
   InventoryQueryInfo,
 } from '../../common';
 import { ENTITY_INVENTORY_ROUTES, ESQL_MAX_ROWS } from '../../common';
+import {
+  documentShare,
+  formatPercent,
+  sumDocumentsInWindow,
+  sumProcessedDocuments,
+} from '../lib/document_stats';
 import { formatCellValue } from '../lib/format_cell_value';
 import type { InventoryApi } from '../lib/inventory_api';
 import { describeHttpError, type DescribedError } from '../lib/http_error';
@@ -194,13 +202,38 @@ const yesNo = (value: boolean): string =>
     ? i18n.translate('xpack.entityInventory.preview.yes', { defaultMessage: 'yes' })
     : i18n.translate('xpack.entityInventory.preview.no', { defaultMessage: 'no' });
 
-const queryItems = (query: InventoryQueryInfo) => [
-  { title: 'engine', description: query.engine },
-  { title: 'index', description: query.index },
-  { title: 'tookMs', description: formatCellValue(query.tookMs) ?? EMPTY_CELL },
-  { title: 'documentsFound', description: formatCellValue(query.documentsFound) ?? EMPTY_CELL },
-  { title: 'rows', description: formatCellValue(query.rows) ?? EMPTY_CELL },
-];
+const UNKNOWN = '?';
+
+/** Per-query facts; source queries also get their pattern's in-window count and share when known. */
+const queryItems = (query: InventoryQueryInfo, count?: InventoryDocumentCount) => {
+  const items = [
+    { title: 'engine', description: query.engine },
+    { title: 'index', description: query.index },
+    { title: 'tookMs', description: formatCellValue(query.tookMs) ?? EMPTY_CELL },
+    { title: 'documentsFound', description: formatCellValue(query.documentsFound) ?? EMPTY_CELL },
+  ];
+  if (query.engine !== 'COUNT') {
+    const inWindow =
+      count === undefined || count.documentsInWindow === null ? undefined : count.documentsInWindow;
+    items.push(
+      {
+        title: 'documentsInWindow',
+        description:
+          count === undefined
+            ? EMPTY_CELL
+            : count.error !== undefined
+            ? `${UNKNOWN} (${count.error})`
+            : formatCellValue(inWindow) ?? UNKNOWN,
+      },
+      {
+        title: 'share',
+        description: formatPercent(documentShare(query.documentsFound, inWindow)) ?? EMPTY_CELL,
+      }
+    );
+  }
+  items.push({ title: 'rows', description: formatCellValue(query.rows) ?? EMPTY_CELL });
+  return items;
+};
 
 /** Runs the type's `_list` route over a relative window and shows rows, timings and the ES|QL. */
 export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewProps) => {
@@ -209,6 +242,13 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<InventoryListResponse | undefined>();
   const [error, setError] = useState<DescribedError | undefined>();
+  const [documentCounts, setDocumentCounts] = useState<
+    InventoryDocumentCountsResponse | undefined
+  >();
+  const [documentCountsError, setDocumentCountsError] = useState<DescribedError | undefined>();
+  const [isCountingDocuments, setIsCountingDocuments] = useState(false);
+  // Identifies the latest run so a slow document count from an earlier run is ignored.
+  const runIdRef = useRef(0);
   const accordionBaseId = useGeneratedHtmlId({ prefix: 'entityInventoryPreviewQuery' });
 
   // Columns arrive ordered by the route (entity.id first, last_seen last) and are kept as-is.
@@ -219,17 +259,66 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
   const tableRows = useMemo(() => (result === undefined ? [] : toPreviewRows(result)), [result]);
 
   const run = async () => {
+    const runId = ++runIdRef.current;
+    const isCurrent = () => runId === runIdRef.current;
+    const { from, to } = relativeRangeToAbsolute(range);
+
     setIsRunning(true);
     setError(undefined);
+    setDocumentCounts(undefined);
+    setDocumentCountsError(undefined);
+    setIsCountingDocuments(true);
+
+    // The document count is a separate request so it never delays the rows or enters the timings.
+    api
+      .documentCounts(type, { from, to })
+      .then((counts) => {
+        if (isCurrent()) {
+          setDocumentCounts(counts);
+        }
+      })
+      .catch((caught) => {
+        if (isCurrent()) {
+          setDocumentCountsError(describeHttpError(caught));
+        }
+      })
+      .finally(() => {
+        if (isCurrent()) {
+          setIsCountingDocuments(false);
+        }
+      });
+
     try {
-      const { from, to } = relativeRangeToAbsolute(range);
-      setResult(await api.list(type, { from, to, limit }));
+      const listResult = await api.list(type, { from, to, limit });
+      if (isCurrent()) {
+        setResult(listResult);
+      }
     } catch (caught) {
-      setError(describeHttpError(caught));
+      if (isCurrent()) {
+        setError(describeHttpError(caught));
+      }
     } finally {
-      setIsRunning(false);
+      if (isCurrent()) {
+        setIsRunning(false);
+      }
     }
   };
+
+  const inWindow =
+    documentCounts === undefined ? undefined : sumDocumentsInWindow(documentCounts.counts);
+  const processed = result === undefined ? undefined : sumProcessedDocuments(result.queries);
+  const share = documentShare(processed, inWindow?.total);
+  const countByIndex = new Map(documentCounts?.counts.map((count) => [count.index, count]) ?? []);
+  const inWindowProblems = [
+    ...(inWindow?.errors ?? []),
+    ...(documentCountsError !== undefined
+      ? [
+          documentCountsError.statusCode !== undefined
+            ? `[${documentCountsError.statusCode}] ${documentCountsError.message}`
+            : documentCountsError.message,
+        ]
+      : []),
+  ];
 
   if (!isAvailable) {
     return (
@@ -394,6 +483,74 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
           </EuiText>
           <EuiSpacer size="l" />
 
+          <EuiFlexGroup
+            gutterSize="l"
+            responsive={false}
+            data-test-subj="entityInventoryPreviewDocuments"
+          >
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                isLoading={isCountingDocuments}
+                title={
+                  inWindow?.total !== undefined ? (
+                    formatCellValue(inWindow.total)
+                  ) : inWindowProblems.length > 0 ? (
+                    <EuiToolTip
+                      content={
+                        <ul>
+                          {inWindowProblems.map((problem) => (
+                            <li key={problem}>{problem}</li>
+                          ))}
+                        </ul>
+                      }
+                    >
+                      <span tabIndex={0}>{UNKNOWN}</span>
+                    </EuiToolTip>
+                  ) : (
+                    EMPTY_CELL
+                  )
+                }
+                description={i18n.translate(
+                  'xpack.entityInventory.preview.stat.documentsInWindow',
+                  {
+                    defaultMessage: 'Documents in window',
+                  }
+                )}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={formatCellValue(processed) ?? EMPTY_CELL}
+                description={i18n.translate(
+                  'xpack.entityInventory.preview.stat.documentsProcessed',
+                  {
+                    defaultMessage: 'Processed by queries',
+                  }
+                )}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                isLoading={isCountingDocuments}
+                title={formatPercent(share) ?? (inWindowProblems.length > 0 ? UNKNOWN : EMPTY_CELL)}
+                description={i18n.translate('xpack.entityInventory.preview.stat.documentsShare', {
+                  defaultMessage: 'Share',
+                })}
+              />
+            </EuiFlexItem>
+          </EuiFlexGroup>
+          <EuiSpacer size="s" />
+          <EuiText size="xs" color="subdued">
+            {i18n.translate('xpack.entityInventory.preview.documentsHint', {
+              defaultMessage:
+                'Processed is what Elasticsearch read after pushing filters down (under TS only documents carrying the declared metrics); in window is every document of the sources’ indices in the range. Counted by a separate query, not included in the timings.',
+            })}
+          </EuiText>
+          <EuiSpacer size="l" />
+
           {result.errors.length > 0 && (
             <>
               <KbnWarningCallout
@@ -499,7 +656,11 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
               buttonContent={`${query.engine} ${query.index}`}
               paddingSize="s"
             >
-              <EuiDescriptionList type="inline" compressed listItems={queryItems(query)} />
+              <EuiDescriptionList
+                type="inline"
+                compressed
+                listItems={queryItems(query, countByIndex.get(query.index))}
+              />
               <EuiSpacer size="s" />
               <EuiCodeBlock language="sql" fontSize="s" paddingSize="s" isCopyable>
                 {query.esql}
