@@ -34,6 +34,9 @@ const MAX_IDENTITY_FIELDS = 8;
 const MAX_ATTRIBUTES = 64;
 const MAX_SOURCES = 16;
 const MAX_METRICS_PER_SOURCE = 64;
+const MAX_ATTRIBUTES_PER_SOURCE = 64;
+const MAX_VALUE_LABELS = 64;
+const MAX_VALUE_LABEL_LENGTH = 256;
 
 /**
  * A literal, mapped field path: dot-separated segments of letters, digits, `_`, `@` and `-`.
@@ -77,9 +80,12 @@ const uniqueStrings = (values: readonly string[]): boolean =>
   new Set(values).size === values.length;
 
 /**
- * How a metric field is aggregated per entity over the window. The query generator emits the
- * engine-correct form (e.g. `AVG(LAST_OVER_TIME(f))` under `TS`, `AVG(f)` under `FROM`).
- * Counter-rate aggregations are not modelled yet.
+ * How a metric field is aggregated per entity over the window. `avg`, `min`, `max` and `sum` are
+ * window aggregates and mean the same under both engines: the generator emits
+ * `AGG(AGG_OVER_TIME(f))` under `TS` and `AGG(f)` under `FROM`, which return identical values.
+ * `count_distinct` counts distinct values of the field. `last` is the newest sample in the window
+ * (`LAST(f, @timestamp)` with a null filter, identical under both engines), for "current value"
+ * columns. Counter-rate aggregations are not modelled yet.
  */
 export const inventoryMetricAggregationSchema = z.enum([
   'avg',
@@ -87,6 +93,7 @@ export const inventoryMetricAggregationSchema = z.enum([
   'max',
   'sum',
   'count_distinct',
+  'last',
 ]);
 export type InventoryMetricAggregation = z.infer<typeof inventoryMetricAggregationSchema>;
 
@@ -99,19 +106,59 @@ export const inventoryMetricSchema = z.strictObject({
 export type InventoryMetric = z.infer<typeof inventoryMetricSchema>;
 
 /**
- * One binding of the entity type to an index pattern. Metrics are per source because metric
- * fields do not alias across pipelines (units differ); across sources the same metric name means
- * the same measurement reported by a different pipeline. Metric names must be unique within a source.
+ * Maps raw attribute values (stringified) to canonical display labels, e.g. the OTel numeric pod
+ * phase `"2"` and the ECS keyword `"Running"` both to `"running"`. Applied by the query executor
+ * on the aggregated rows, never in ES|QL. A raw value without an entry passes through unchanged.
+ */
+export const inventoryValueLabelsSchema = z
+  .record(
+    z.string().min(1).max(MAX_VALUE_LABEL_LENGTH),
+    z.string().min(1).max(MAX_VALUE_LABEL_LENGTH)
+  )
+  .refine((labels) => Object.keys(labels).length <= MAX_VALUE_LABELS, {
+    message: `at most ${MAX_VALUE_LABELS} value labels`,
+  });
+export type InventoryValueLabels = z.infer<typeof inventoryValueLabelsSchema>;
+
+/**
+ * A named attribute variant of one source: the newest value of `field` per entity, shown under
+ * `name`. Per-source attributes exist for fields that do not alias across pipelines (the same
+ * logical attribute has a different field and value space per pipeline); the top-level
+ * `attributes` list covers fields that do alias. Across sources the same `name` is the same
+ * attribute and the values merge by name, like metrics.
+ */
+export const inventorySourceAttributeSchema = z.strictObject({
+  name: identifierSchema,
+  field: literalFieldPathSchema,
+  valueLabels: inventoryValueLabelsSchema.optional(),
+});
+export type InventorySourceAttribute = z.infer<typeof inventorySourceAttributeSchema>;
+
+/**
+ * One binding of the entity type to an index pattern. Metrics and per-source attributes are per
+ * source because their fields do not alias across pipelines (units and value spaces differ);
+ * across sources the same name means the same measurement or attribute reported by a different
+ * pipeline. Names are output columns and must be unique within a source across both lists.
+ *
+ * A source that declares metrics lists the entities that reported at least one of them in the
+ * window; a source without metrics lists every identity occurrence. A family that should define
+ * existence on its own (e.g. `state_pod`) is therefore declared as its own metric-less source.
  */
 export const inventorySourceSchema = z
   .strictObject({
     index: indexPatternSchema,
     filter: sourceFilterSchema.optional(),
     metrics: z.array(inventoryMetricSchema).max(MAX_METRICS_PER_SOURCE).optional(),
+    attributes: z.array(inventorySourceAttributeSchema).max(MAX_ATTRIBUTES_PER_SOURCE).optional(),
   })
-  .refine((source) => uniqueStrings((source.metrics ?? []).map(({ name }) => name)), {
-    message: 'metric names must be unique within a source',
-  });
+  .refine(
+    (source) =>
+      uniqueStrings([
+        ...(source.metrics ?? []).map(({ name }) => name),
+        ...(source.attributes ?? []).map(({ name }) => name),
+      ]),
+    { message: 'metric and attribute names must be unique within a source' }
+  );
 export type InventorySource = z.infer<typeof inventorySourceSchema>;
 
 /**
@@ -125,7 +172,8 @@ const inventoryExtensionShape = {
   /**
    * Literal field paths shown per entity, resolved to the newest observed value across all
    * sources that carry them. Structural fields (names, namespaces, nodes) should use canonical
-   * ECS names so the ECS<->OTel alias layer resolves them on both pipeline shapes.
+   * ECS names so the ECS<->OTel alias layer resolves them on both pipeline shapes. Fields that do
+   * not alias are declared per source (`sources[].attributes`) under a shared name instead.
    */
   attributes: z
     .array(literalFieldPathSchema)
@@ -134,6 +182,39 @@ const inventoryExtensionShape = {
     .optional(),
   /** Existence is identity occurrence in any declared source; metric-less entities list with null metrics. */
   sources: z.array(inventorySourceSchema).min(1).max(MAX_SOURCES),
+};
+
+/**
+ * Output column names must be unambiguous across the whole extension: a per-source attribute name
+ * may not be a metric name in another source, and may not repeat a top-level attribute or (where
+ * known) an identity field, since every one of them becomes a column of the same row.
+ */
+const assertOutputColumnsUnambiguous = (
+  inventory: { identity?: string[]; attributes?: string[]; sources: InventorySource[] },
+  ctx: z.RefinementCtx
+): void => {
+  const reserved = new Set([...(inventory.identity ?? []), ...(inventory.attributes ?? [])]);
+  const metricNames = new Set(
+    inventory.sources.flatMap((source) => (source.metrics ?? []).map(({ name }) => name))
+  );
+  for (const [sourceIndex, source] of inventory.sources.entries()) {
+    for (const [index, { name }] of (source.attributes ?? []).entries()) {
+      if (reserved.has(name)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sources', sourceIndex, 'attributes', index, 'name'],
+          message: `attribute "${name}" repeats an identity field or a top-level attribute`,
+        });
+      }
+      if (metricNames.has(name)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['sources', sourceIndex, 'attributes', index, 'name'],
+          message: `"${name}" is used as an attribute in one source and as a metric in another`,
+        });
+      }
+    }
+  }
 };
 
 export const inventoryExtensionSchema = z
@@ -161,6 +242,7 @@ export const inventoryExtensionSchema = z
         });
       }
     }
+    assertOutputColumnsUnambiguous(inventory, ctx);
   });
 
 export type InventoryExtension = z.infer<typeof inventoryExtensionSchema>;
@@ -172,7 +254,9 @@ export type InventoryExtension = z.infer<typeof inventoryExtensionSchema>;
  * that ranking references. Attributes may not be identity fields of the built-in; that rule is
  * applied at registration, where the built-in definition is known.
  */
-export const builtInInventoryExtensionSchema = z.strictObject(inventoryExtensionShape);
+export const builtInInventoryExtensionSchema = z
+  .strictObject(inventoryExtensionShape)
+  .superRefine(assertOutputColumnsUnambiguous);
 
 export type BuiltInInventoryExtension = z.infer<typeof builtInInventoryExtensionSchema>;
 

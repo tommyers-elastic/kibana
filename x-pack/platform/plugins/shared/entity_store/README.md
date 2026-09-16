@@ -22,7 +22,7 @@ plus optional, independently validated **solution extensions**. The core is what
 | --- | --- | --- |
 | Identity core (`type`, `name`, `identityField`) | `identity_core_schema.ts` | EUID compiler (all five backends), extraction, CRUD |
 | Materialisation extension | `materialisation_schema.ts` | Logs extraction, component templates, CRUD field validation, single-document creation |
-| Inventory extension (`identity`, `attributes`, `sources[].{index, filter, metrics}`, `label`) | `inventory_schema.ts` | Inventory query generation (later stage) |
+| Inventory extension (`identity`, `attributes`, `sources[].{index, filter, metrics, attributes}`, `label`) | `inventory_schema.ts` | Inventory query generation (later stage) |
 
 ### Materialisation modes
 
@@ -60,10 +60,18 @@ complete non-materialised definition from the authoring form.
 
 Authors declare what they need, not how it is fetched: `attributes` is a list of literal field paths
 resolved to the newest value per entity, and each source's `metrics` are `{ name, field, agg }` with
-`agg` one of `avg | min | max | sum | count_distinct`. Engine selection, `BY` versus `LAST(...)`
-placement, null handling and `*_OVER_TIME` wrapping belong to the query generator. The only ES|QL an
-author writes is the optional per-source `filter` (the document-family discriminator). Time windows
-and sort order are client concerns. Metadata lookup/write indices, relationships (edges) and derived
+`agg` one of `avg | min | max | sum | count_distinct | last` (`avg`/`min`/`max`/`sum` are window
+aggregates with identical results under both engines; `last` is the newest sample). Fields that do
+not alias across pipelines are declared per source as `attributes: [{ name, field, valueLabels? }]`
+and merged by `name` across sources like metrics; `valueLabels` maps raw values (stringified) to
+canonical labels on the aggregated rows, and an unmapped raw value passes through. Names are output
+columns and must be unambiguous across the extension. A source with metrics lists the entities that
+reported at least one of them in the window; a metric-less source lists every identity occurrence,
+so a family that defines existence on its own is declared as its own source. Engine selection,
+`BY` versus `LAST(...)` placement, null handling and `*_OVER_TIME` wrapping belong to the query
+generator (see `entity_inventory_query_performance.md` at the repository root for the measurements
+behind those rules). The only ES|QL an author writes is the optional per-source `filter` (the
+document-family discriminator). Time windows and sort order are client concerns. Metadata lookup/write indices, relationships (edges) and derived
 metadata are deferred; the entity inventory context document tracks what is deferred and why.
 
 ### Compiling a definition object

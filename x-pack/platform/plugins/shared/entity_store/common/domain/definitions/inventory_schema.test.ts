@@ -111,6 +111,59 @@ describe('inventoryExtensionSchema', () => {
       false
     );
   });
+
+  it('accepts per-source attributes with value labels merged by name across sources', () => {
+    const result = inventoryExtensionSchema.safeParse({
+      ...minimalInventory,
+      sources: [
+        {
+          index: 'metrics-k8sclusterreceiver.otel-default',
+          filter: 'k8s.pod.phase IS NOT NULL',
+          attributes: [{ name: 'phase', field: 'k8s.pod.phase', valueLabels: { '2': 'running' } }],
+        },
+        {
+          index: 'metrics-kubernetes.tsdb-default',
+          filter: 'metricset.name == "state_pod"',
+          attributes: [{ name: 'phase', field: 'kubernetes.pod.status.phase' }],
+        },
+      ],
+    });
+    expect(result.error?.issues).toBeUndefined();
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects a per-source attribute name that repeats an identity field or a top-level attribute', () => {
+    const result = inventoryExtensionSchema.safeParse({
+      identity: ['uid'],
+      attributes: ['name'],
+      sources: [
+        {
+          index: 'metrics-*',
+          attributes: [
+            { name: 'uid', field: 'k8s.pod.uid' },
+            { name: 'name', field: 'k8s.pod.name' },
+          ],
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map(({ path }) => path)).toEqual([
+      ['sources', 0, 'attributes', 0, 'name'],
+      ['sources', 0, 'attributes', 1, 'name'],
+    ]);
+  });
+
+  it('rejects a name used as a metric in one source and as an attribute in another', () => {
+    const result = inventoryExtensionSchema.safeParse({
+      ...minimalInventory,
+      sources: [
+        { index: 'a-*', metrics: [{ name: 'phase', field: 'k8s.pod.phase', agg: 'last' }] },
+        { index: 'b-*', attributes: [{ name: 'phase', field: 'kubernetes.pod.status.phase' }] },
+      ],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].path).toEqual(['sources', 1, 'attributes', 0, 'name']);
+  });
 });
 
 describe('builtInInventoryExtensionSchema', () => {
@@ -219,6 +272,47 @@ describe('builtInInventoryExtensionDocumentSchema', () => {
 });
 
 describe('inventorySourceSchema', () => {
+  it('accepts the last aggregation', () => {
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        metrics: [{ name: 'phase', field: 'k8s.pod.phase', agg: 'last' }],
+      }).success
+    ).toBe(true);
+  });
+
+  it('rejects a metric and an attribute sharing a name within a source', () => {
+    const result = inventorySourceSchema.safeParse({
+      index: 'metrics-*',
+      metrics: [{ name: 'phase', field: 'k8s.pod.phase', agg: 'last' }],
+      attributes: [{ name: 'phase', field: 'k8s.pod.phase' }],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toContain('unique within a source');
+  });
+
+  it('bounds value labels', () => {
+    const tooMany = Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`${i}`, 'x']));
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        attributes: [{ name: 'phase', field: 'k8s.pod.phase', valueLabels: tooMany }],
+      }).success
+    ).toBe(false);
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        attributes: [{ name: 'phase', field: 'k8s.pod.phase', valueLabels: { '1': '' } }],
+      }).success
+    ).toBe(false);
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        attributes: [{ name: 'Phase', field: 'k8s.pod.phase' }],
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects duplicate metric names within a source', () => {
     const result = inventorySourceSchema.safeParse({
       index: 'metrics-*',

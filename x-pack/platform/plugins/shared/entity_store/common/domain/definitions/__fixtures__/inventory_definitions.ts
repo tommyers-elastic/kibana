@@ -25,18 +25,29 @@ const OTEL_KUBELETSTATS_INDEX = 'metrics-kubeletstatsreceiver.otel-default';
 const OTEL_K8S_CLUSTER_INDEX = 'metrics-k8sclusterreceiver.otel-default';
 const ECS_KUBERNETES_INDEX = 'metrics-kubernetes.tsdb-default';
 
+/** OTel `k8s.pod.phase` gauge values (1..5) and ECS `kubernetes.pod.status.phase` keywords, unified. */
+const OTEL_POD_PHASE_LABELS = {
+  '1': 'pending',
+  '2': 'running',
+  '3': 'succeeded',
+  '4': 'failed',
+  '5': 'unknown',
+};
+const ECS_POD_PHASE_LABELS = {
+  Pending: 'pending',
+  Running: 'running',
+  Succeeded: 'succeeded',
+  Failed: 'failed',
+  Unknown: 'unknown',
+};
+
 export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInventoryEntityDefinition({
   type: 'k8s.pod',
   name: `Observability 'k8s.pod' inventory definition`,
   inventory: {
     label: 'K8s Pod',
     identity: ['kubernetes.pod.uid'],
-    attributes: [
-      'kubernetes.pod.name',
-      'kubernetes.namespace',
-      'kubernetes.node.name',
-      'kubernetes.pod.status.phase',
-    ],
+    attributes: ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'],
     sources: [
       {
         index: OTEL_KUBELETSTATS_INDEX,
@@ -47,16 +58,30 @@ export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInvento
       },
       {
         index: ECS_KUBERNETES_INDEX,
-        filter: 'metricset.name IN ("pod", "state_pod")',
+        filter: 'metricset.name == "pod"',
         metrics: [
           { name: 'cpu_node_pct', field: 'kubernetes.pod.cpu.usage.node.pct', agg: 'avg' },
           { name: 'mem_usage_bytes', field: 'kubernetes.pod.memory.usage.bytes', agg: 'avg' },
         ],
       },
       {
-        // Contributes existence and attributes only (pod phase as a numeric gauge on this pipeline).
+        // State family as its own metric-less source: it defines existence for pending and
+        // succeeded pods and carries the phase as an ECS keyword.
+        index: ECS_KUBERNETES_INDEX,
+        filter: 'metricset.name == "state_pod"',
+        attributes: [
+          {
+            name: 'phase',
+            field: 'kubernetes.pod.status.phase',
+            valueLabels: ECS_POD_PHASE_LABELS,
+          },
+        ],
+      },
+      {
+        // Existence and the phase only; the phase is a numeric gauge on this pipeline.
         index: OTEL_K8S_CLUSTER_INDEX,
         filter: 'k8s.pod.phase IS NOT NULL',
+        attributes: [{ name: 'phase', field: 'k8s.pod.phase', valueLabels: OTEL_POD_PHASE_LABELS }],
       },
     ],
   },
