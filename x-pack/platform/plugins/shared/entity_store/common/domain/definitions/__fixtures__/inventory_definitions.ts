@@ -23,7 +23,13 @@ import {
 
 const OTEL_KUBELETSTATS_INDEX = 'metrics-kubeletstatsreceiver.otel-default';
 const OTEL_K8S_CLUSTER_INDEX = 'metrics-k8sclusterreceiver.otel-default';
-const ECS_KUBERNETES_INDEX = 'metrics-kubernetes.tsdb-default';
+// The Kubernetes integration writes one data stream per metricset, so each ECS source names its
+// stream and needs no `metricset.name` filter.
+const ECS_K8S_POD_INDEX = 'metrics-kubernetes.pod-*';
+const ECS_K8S_STATE_POD_INDEX = 'metrics-kubernetes.state_pod-*';
+const ECS_K8S_NODE_INDEX = 'metrics-kubernetes.node-*';
+const ECS_K8S_STATE_DEPLOYMENT_INDEX = 'metrics-kubernetes.state_deployment-*';
+const ECS_K8S_STATE_STATEFULSET_INDEX = 'metrics-kubernetes.state_statefulset-*';
 
 /** OTel `k8s.pod.phase` gauge values (1..5) and ECS `kubernetes.pod.status.phase` keywords, unified. */
 const OTEL_POD_PHASE_LABELS = {
@@ -57,8 +63,7 @@ export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInvento
         ],
       },
       {
-        index: ECS_KUBERNETES_INDEX,
-        filter: 'metricset.name == "pod"',
+        index: ECS_K8S_POD_INDEX,
         metrics: [
           { name: 'cpu_node_pct', field: 'kubernetes.pod.cpu.usage.node.pct', agg: 'avg' },
           { name: 'mem_usage_bytes', field: 'kubernetes.pod.memory.usage.bytes', agg: 'avg' },
@@ -67,8 +72,7 @@ export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInvento
       {
         // State family as its own metric-less source: it defines existence for pending and
         // succeeded pods and carries the phase as an ECS keyword.
-        index: ECS_KUBERNETES_INDEX,
-        filter: 'metricset.name == "state_pod"',
+        index: ECS_K8S_STATE_POD_INDEX,
         attributes: [
           {
             name: 'phase',
@@ -103,8 +107,7 @@ export const k8sNodeInventoryDefinition: InventoryEntityDefinition = buildInvent
           ],
         },
         {
-          index: ECS_KUBERNETES_INDEX,
-          filter: 'metricset.name == "node"',
+          index: ECS_K8S_NODE_INDEX,
           metrics: [
             { name: 'cpu_nanocores', field: 'kubernetes.node.cpu.usage.nanocores', agg: 'avg' },
             { name: 'mem_usage_bytes', field: 'kubernetes.node.memory.usage.bytes', agg: 'avg' },
@@ -138,8 +141,7 @@ export const k8sDeploymentInventoryDefinition: InventoryEntityDefinition =
         },
         {
           // Deployment-level state documents reported by the kubernetes integration.
-          index: ECS_KUBERNETES_INDEX,
-          filter: 'metricset.name == "state_deployment"',
+          index: ECS_K8S_STATE_DEPLOYMENT_INDEX,
           metrics: [
             {
               name: 'replicas_desired',
@@ -174,8 +176,7 @@ export const k8sStatefulsetInventoryDefinition: InventoryEntityDefinition =
           ],
         },
         {
-          index: ECS_KUBERNETES_INDEX,
-          filter: 'metricset.name == "state_statefulset"',
+          index: ECS_K8S_STATE_STATEFULSET_INDEX,
           metrics: [
             {
               name: 'replicas_desired',
