@@ -84,15 +84,18 @@ const uniqueStrings = (values: readonly string[]): boolean =>
  * How a metric field is aggregated per entity over the window. `avg`, `min`, `max` and `sum` are
  * window aggregates and mean the same under both engines: the generator emits
  * `AGG(AGG_OVER_TIME(f))` under `TS` and `AGG(f)` under `FROM`, which return identical values.
+ * `count` counts the documents carrying the field (log lines per service with `@timestamp`);
  * `count_distinct` counts distinct values of the field. `last` is the newest sample in the window
  * (`LAST(f, @timestamp)` with a null filter, identical under both engines), for "current value"
- * columns. Counter-rate aggregations are not modelled yet.
+ * columns. `count` and `count_distinct` do not define an entity's existence in a source (only value
+ * metrics do). Counter-rate aggregations are not modelled yet.
  */
 export const inventoryMetricAggregationSchema = z.enum([
   'avg',
   'min',
   'max',
   'sum',
+  'count',
   'count_distinct',
   'last',
 ]);
@@ -117,10 +120,11 @@ export const inventoryMetricSchema = z
       .optional(),
     unit: z.string().min(1).max(MAX_UNIT_LENGTH).optional(),
   })
-  .refine((metric) => !(metric.agg === 'count_distinct' && metric.scale !== undefined), {
-    message: 'scale does not apply to count_distinct',
-    path: ['scale'],
-  });
+  .refine(
+    (metric) =>
+      !((metric.agg === 'count_distinct' || metric.agg === 'count') && metric.scale !== undefined),
+    { message: 'scale does not apply to count or count_distinct', path: ['scale'] }
+  );
 export type InventoryMetric = z.infer<typeof inventoryMetricSchema>;
 
 /**

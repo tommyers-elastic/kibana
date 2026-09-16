@@ -354,6 +354,15 @@ describe('inventorySourceSchema', () => {
     ).toBe(false);
   });
 
+  it('accepts the count aggregation', () => {
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'logs-*',
+        metrics: [{ name: 'log_lines', field: '@timestamp', agg: 'count', unit: 'count' }],
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects a zero or non-finite scale and scale on count_distinct', () => {
     const base = { index: 'metrics-*' };
     expect(

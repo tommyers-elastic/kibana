@@ -359,7 +359,7 @@ export class InventoryService {
       columns,
       sources,
       errors,
-      unavailableColumns: sources.flatMap(({ unavailable }) => unavailable),
+      unavailableColumns: dedupeUnavailable(sources.flatMap(({ unavailable }) => unavailable)),
     };
   }
 
@@ -457,6 +457,19 @@ export class InventoryService {
     });
   }
 }
+
+/** The same index pattern may back several sources; report each unmapped column once per pattern. */
+const dedupeUnavailable = (items: InventoryUnavailableColumn[]): InventoryUnavailableColumn[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.index}|${item.column}|${item.field}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+};
 
 /** Provenance restricted to the returned rows. */
 const provenanceFor = (rows: InventoryRow[], all: InventoryProvenance): InventoryProvenance =>

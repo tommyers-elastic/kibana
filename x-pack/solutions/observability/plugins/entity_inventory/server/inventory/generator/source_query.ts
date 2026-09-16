@@ -34,6 +34,8 @@ export const timeParams = ({ from, to }: TimeRange): NamedParams => [{ from }, {
 export const metricExpression = (metric: InventoryMetric, engine: InventoryEngine): string => {
   const field = quoteIdentifier(metric.field);
   switch (metric.agg) {
+    case 'count':
+      return engine === 'TS' ? `SUM(COUNT_OVER_TIME(${field}))` : `COUNT(${field})`;
     case 'count_distinct':
       return `COUNT_DISTINCT(${field})`;
     case 'last':
@@ -78,15 +80,15 @@ const attributeExpression = (field: string): string => {
 /**
  * A source that declares metrics lists the entities that reported at least one of them: explicit
  * in `WHERE` so `TS` (which only scans metric-carrying documents anyway) and `FROM` agree and
- * `FROM` gets the same pushdown. Only value metrics count as "reported": a `count_distinct` is
- * usually over a dimension present on every document (pod names, node names), which would make
- * the predicate true everywhere and turn the `FROM` count into a full scan (measured: 43M
- * documents instead of 5.9M at 6 h). Sources with only `count_distinct` metrics fall back to
- * those fields so presence is still required.
+ * `FROM` gets the same pushdown. Only value metrics count as "reported": `count` and
+ * `count_distinct` are usually over fields present on every document (`@timestamp`, pod names),
+ * which would make the predicate true everywhere and turn the `FROM` count into a full scan
+ * (measured: 43M documents instead of 5.9M at 6 h). Sources with only counting metrics fall back
+ * to those fields so presence is still required.
  */
 export const metricPresenceFilter = (source: InventorySource): string | undefined => {
   const metrics = source.metrics ?? [];
-  const valueMetrics = metrics.filter(({ agg }) => agg !== 'count_distinct');
+  const valueMetrics = metrics.filter(({ agg }) => agg !== 'count_distinct' && agg !== 'count');
   const fields = [
     ...new Set((valueMetrics.length > 0 ? valueMetrics : metrics).map(({ field }) => field)),
   ];

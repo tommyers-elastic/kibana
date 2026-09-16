@@ -173,6 +173,16 @@ describe('generator', () => {
         ],
       })
     ).toBe('(`kubernetes.pod.name` IS NOT NULL OR `kubernetes.node.name` IS NOT NULL)');
+    // A log-volume count does not define existence next to a value metric.
+    expect(
+      metricPresenceFilter({
+        index: 'x',
+        metrics: [
+          { name: 'log_lines', field: '@timestamp', agg: 'count' },
+          { name: 'latency', field: 'transaction.duration.summary', agg: 'avg' },
+        ],
+      })
+    ).toBe('(`transaction.duration.summary` IS NOT NULL)');
     expect(metricPresenceFilter({ index: 'x' })).toBeUndefined();
   });
 
@@ -184,6 +194,8 @@ describe('generator', () => {
     expect(metricExpression({ ...metric, agg: 'count_distinct' }, 'TS')).toBe(
       'COUNT_DISTINCT(`f.x`)'
     );
+    expect(metricExpression({ ...metric, agg: 'count' }, 'TS')).toBe('SUM(COUNT_OVER_TIME(`f.x`))');
+    expect(metricExpression({ ...metric, agg: 'count' }, 'FROM')).toBe('COUNT(`f.x`)');
     expect(metricExpression({ ...metric, agg: 'last' }, 'TS')).toBe(
       'LAST(`f.x`, @timestamp) WHERE `f.x` IS NOT NULL'
     );
