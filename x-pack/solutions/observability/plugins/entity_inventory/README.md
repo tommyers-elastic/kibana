@@ -83,6 +83,30 @@ TS metrics-kubernetes.pod-*
 The measurements behind these rules are in `entity_inventory_query_performance.md` at the
 repository root.
 
+## Entities without metrics
+
+Existence is decided **per source**, and a type's inventory is the union of what its sources see.
+
+- A source that declares value metrics (`avg`, `min`, `max`, `sum`, `last`) lists the entities that
+  reported at least one of them in the window. Under `TS` this is how the engine works (it only
+  reads documents carrying a `*_OVER_TIME` field); under `FROM` the generator writes the same rule
+  into `WHERE`, so both engines and the count agree. `count_distinct`, attributes and `last_seen`
+  never widen a source's view.
+- A source without value metrics lists every entity with any document in the window.
+
+Example, the pod definition: a pod that is pending or has finished has no cpu or memory documents,
+so the kubeletstats source never lists it. The k8sclusterreceiver source (phase gauge, no value
+metrics) and the ECS `state_pod` source (phase keyword, no metrics) list every pod with a state
+document, so the pod appears in the merged inventory with identity, name, namespace, node,
+`phase: succeeded` and null metrics, and the exact count includes it.
+
+Authoring consequence: a type whose sources all declare value metrics shows only entities that
+reported them in the window. To surface silent entities, declare the family that knows about them
+as its own metric-less source (this is why the ECS pod definition has `metrics-kubernetes.pod-*`
+with metrics and `metrics-kubernetes.state_pod-*` without). The alternative, an extra presence
+scan per metrics source, more than doubles the cost and was rejected; the measurements are in
+`entity_inventory_query_performance.md` §3.
+
 ## Merge semantics
 
 Rows are merged in Kibana by `entity.id`. Per column, the value from the source with the newest
