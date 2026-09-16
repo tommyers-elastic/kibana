@@ -9,21 +9,22 @@ import React, { useMemo, useState } from 'react';
 import { css } from '@emotion/react';
 import {
   EuiAccordion,
-  EuiBasicTable,
   EuiButton,
   EuiButtonGroup,
+  EuiCode,
   EuiCodeBlock,
   EuiDescriptionList,
   EuiFieldNumber,
   EuiFlexGroup,
   EuiFlexItem,
   EuiFormRow,
+  EuiInMemoryTable,
   EuiSpacer,
   EuiStat,
   EuiText,
   EuiTextColor,
   EuiTitle,
-  useEuiTheme,
+  EuiToolTip,
   useGeneratedHtmlId,
   type EuiBasicTableColumn,
 } from '@elastic/eui';
@@ -31,9 +32,9 @@ import { i18n } from '@kbn/i18n';
 import { KbnDangerCallout, KbnInfoCallout, KbnWarningCallout } from '@kbn/ui-callout';
 import type {
   InventoryColumn,
+  InventoryColumnKind,
   InventoryListResponse,
   InventoryQueryInfo,
-  InventoryRow,
 } from '../../common';
 import { ENTITY_INVENTORY_ROUTES, ESQL_MAX_ROWS } from '../../common';
 import { formatCellValue } from '../lib/format_cell_value';
@@ -72,6 +73,114 @@ const isNumericColumn = ({ kind, esType }: InventoryColumn): boolean =>
 
 const EMPTY_CELL = '—';
 
+const DEFAULT_PAGE_SIZE = 25;
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+
+/** Wide row sets scroll horizontally; pagination bounds the height. */
+const scrollableTable = css`
+  overflow-x: auto;
+`;
+
+const kindHint: Record<InventoryColumnKind, string> = {
+  entity_id: i18n.translate('xpack.entityInventory.preview.columnKind.entityId', {
+    defaultMessage: 'id',
+  }),
+  identity: i18n.translate('xpack.entityInventory.preview.columnKind.identity', {
+    defaultMessage: 'identity',
+  }),
+  attribute: i18n.translate('xpack.entityInventory.preview.columnKind.attribute', {
+    defaultMessage: 'attribute',
+  }),
+  metric: i18n.translate('xpack.entityInventory.preview.columnKind.metric', {
+    defaultMessage: 'metric',
+  }),
+  last_seen: i18n.translate('xpack.entityInventory.preview.columnKind.lastSeen', {
+    defaultMessage: 'timestamp',
+  }),
+};
+
+/**
+ * Table view model: values by column position (column names contain dots, which the table would
+ * read as paths) plus one string the search box matches against.
+ */
+interface PreviewRow {
+  id: string;
+  values: unknown[];
+  searchText: string;
+}
+
+const toPreviewRows = ({ columns, rows }: InventoryListResponse): PreviewRow[] =>
+  rows.map((row, index) => {
+    const values = columns.map(({ name }) => row[name]);
+    return {
+      id: String(index),
+      values,
+      searchText: values
+        .map((value) => formatCellValue(value))
+        .filter((text): text is string => text !== undefined)
+        .join(' '),
+    };
+  });
+
+/** Sort key per column: numbers for numeric columns, epoch millis for last_seen, text otherwise. */
+const sortKey = (value: unknown, column: InventoryColumn): number | string => {
+  if (column.kind === 'last_seen') {
+    const millis = Date.parse(String(value ?? ''));
+    return Number.isNaN(millis) ? Number.NEGATIVE_INFINITY : millis;
+  }
+  if (isNumericColumn(column)) {
+    return typeof value === 'number' ? value : Number.NEGATIVE_INFINITY;
+  }
+  return formatCellValue(value) ?? '';
+};
+
+const columnHeader = (column: InventoryColumn) => {
+  const details = [
+    kindHint[column.kind],
+    ...(column.fields !== undefined && column.fields.length > 0 ? [column.fields.join(', ')] : []),
+    ...(column.esType !== undefined ? [column.esType] : []),
+  ].join(' · ');
+  return (
+    <EuiToolTip content={details}>
+      <div tabIndex={0}>
+        <span>{column.name}</span>
+        <EuiText size="xs" color="subdued">
+          {kindHint[column.kind]}
+        </EuiText>
+      </div>
+    </EuiToolTip>
+  );
+};
+
+const renderCell = (value: unknown, column: InventoryColumn) => {
+  if (value === null || value === undefined) {
+    return <EuiTextColor color="subdued">{EMPTY_CELL}</EuiTextColor>;
+  }
+  if (column.kind === 'entity_id') {
+    const id = String(value);
+    return <EuiCode title={id}>{id}</EuiCode>;
+  }
+  if (column.kind === 'last_seen') {
+    const iso = String(value);
+    const millis = Date.parse(iso);
+    return (
+      <span title={iso}>{Number.isNaN(millis) ? iso : new Date(millis).toLocaleString()}</span>
+    );
+  }
+  const text = formatCellValue(value) ?? EMPTY_CELL;
+  return <span title={text}>{text}</span>;
+};
+
+const toTableColumns = (columns: InventoryColumn[]): Array<EuiBasicTableColumn<PreviewRow>> =>
+  columns.map((column, index) => ({
+    field: `values.${index}`,
+    name: columnHeader(column),
+    truncateText: true,
+    align: isNumericColumn(column) ? 'right' : 'left',
+    sortable: (row: PreviewRow) => sortKey(row.values[index], column),
+    render: (_value: unknown, row: PreviewRow) => renderCell(row.values[index], column),
+  }));
+
 /** The longest single ES `took`: the Elasticsearch share of the wall time, since queries run concurrently. */
 const slowestQueryMs = (result: InventoryListResponse): number | undefined => {
   const tooks = result.queries
@@ -101,18 +210,13 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
   const [result, setResult] = useState<InventoryListResponse | undefined>();
   const [error, setError] = useState<DescribedError | undefined>();
   const accordionBaseId = useGeneratedHtmlId({ prefix: 'entityInventoryPreviewQuery' });
-  const { euiTheme } = useEuiTheme();
 
-  // Fixed-height scroll container so wide or long result sets scroll instead of stretching the page.
-  const scrollableTable = useMemo(
-    () => css`
-      height: 40vh;
-      overflow: auto;
-      border: ${euiTheme.border.thin};
-      border-radius: ${euiTheme.border.radius.medium};
-    `,
-    [euiTheme]
+  // Columns arrive ordered by the route (entity.id first, last_seen last) and are kept as-is.
+  const tableColumns = useMemo(
+    () => (result === undefined ? [] : toTableColumns(result.columns)),
+    [result]
   );
+  const tableRows = useMemo(() => (result === undefined ? [] : toPreviewRows(result)), [result]);
 
   const run = async () => {
     setIsRunning(true);
@@ -126,24 +230,6 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
       setIsRunning(false);
     }
   };
-
-  // Columns arrive ordered by the route (entity.id first, last_seen last) and are kept as-is.
-  const rowColumns: Array<EuiBasicTableColumn<InventoryRow>> =
-    result?.columns.map((column) => ({
-      field: column.name,
-      name: column.name,
-      truncateText: true,
-      align: isNumericColumn(column) ? 'right' : 'left',
-      // Column names contain dots ("entity.id"), so the value is read by key rather than by path.
-      render: (_value: unknown, row: InventoryRow) => {
-        const text = formatCellValue(row[column.name]);
-        return text === undefined ? (
-          <EuiTextColor color="subdued">{EMPTY_CELL}</EuiTextColor>
-        ) : (
-          <span title={text}>{text}</span>
-        );
-      },
-    })) ?? [];
 
   if (!isAvailable) {
     return (
@@ -366,17 +452,31 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
           </EuiText>
           <EuiSpacer size="xs" />
           <div css={scrollableTable}>
-            <EuiBasicTable
+            <EuiInMemoryTable
               tableCaption={i18n.translate('xpack.entityInventory.preview.rowsCaption', {
                 defaultMessage: 'Entities of type {type}',
                 values: { type },
               })}
-              items={result.rows}
-              columns={rowColumns}
+              items={tableRows}
+              itemId="id"
+              columns={tableColumns}
               tableLayout="auto"
-              compressed
-              stickyHeader
               responsiveBreakpoint={false}
+              sorting={true}
+              search={{
+                box: {
+                  incremental: true,
+                  placeholder: i18n.translate('xpack.entityInventory.preview.searchPlaceholder', {
+                    defaultMessage: 'Filter the returned rows',
+                  }),
+                },
+              }}
+              executeQueryOptions={{ defaultFields: ['searchText'] }}
+              pagination={
+                tableRows.length > DEFAULT_PAGE_SIZE
+                  ? { initialPageSize: DEFAULT_PAGE_SIZE, pageSizeOptions: PAGE_SIZE_OPTIONS }
+                  : false
+              }
               noItemsMessage={i18n.translate('xpack.entityInventory.preview.noRows', {
                 defaultMessage: 'No entities in the window',
               })}
