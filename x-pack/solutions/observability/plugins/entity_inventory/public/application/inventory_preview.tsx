@@ -72,6 +72,14 @@ const isNumericColumn = ({ kind, esType }: InventoryColumn): boolean =>
 
 const EMPTY_CELL = '—';
 
+/** The longest single ES `took`: the Elasticsearch share of the wall time, since queries run concurrently. */
+const slowestQueryMs = (result: InventoryListResponse): number | undefined => {
+  const tooks = result.queries
+    .map(({ tookMs }) => tookMs)
+    .filter((t): t is number => t !== undefined);
+  return tooks.length > 0 ? Math.max(...tooks) : undefined;
+};
+
 const yesNo = (value: boolean): string =>
   value
     ? i18n.translate('xpack.entityInventory.preview.yes', { defaultMessage: 'yes' })
@@ -267,7 +275,16 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
                 titleSize="s"
                 title={formatCellValue(result.tookMs)}
                 description={i18n.translate('xpack.entityInventory.preview.stat.took', {
-                  defaultMessage: 'Took (ms)',
+                  defaultMessage: 'Wall time (ms)',
+                })}
+              />
+            </EuiFlexItem>
+            <EuiFlexItem>
+              <EuiStat
+                titleSize="s"
+                title={formatCellValue(slowestQueryMs(result))}
+                description={i18n.translate('xpack.entityInventory.preview.stat.slowestQuery', {
+                  defaultMessage: 'Slowest query, ES took (ms)',
                 })}
               />
             </EuiFlexItem>
@@ -276,11 +293,19 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
                 titleSize="s"
                 title={formatCellValue(result.esTookMs)}
                 description={i18n.translate('xpack.entityInventory.preview.stat.esTook', {
-                  defaultMessage: 'ES took (ms)',
+                  defaultMessage: 'Cumulative ES took (ms)',
                 })}
               />
             </EuiFlexItem>
           </EuiFlexGroup>
+          <EuiSpacer size="s" />
+          <EuiText size="xs" color="subdued">
+            {i18n.translate('xpack.entityInventory.preview.timingsHint', {
+              defaultMessage:
+                'The {count} queries run concurrently: wall time is what the request waited for, cumulative ES took is the sum of Elasticsearch work across all of them.',
+              values: { count: result.queries.length },
+            })}
+          </EuiText>
           <EuiSpacer size="l" />
 
           {result.errors.length > 0 && (
