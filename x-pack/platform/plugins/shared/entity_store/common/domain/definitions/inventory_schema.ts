@@ -103,9 +103,11 @@ export type InventoryMetricAggregation = z.infer<typeof inventoryMetricAggregati
 
 /**
  * A named metric: one field aggregated one way per entity. Across sources the same `name` is the
- * same measurement in the same unit; `scale` multiplies the aggregated value so pipelines that
- * report in different units line up (ECS nanocores to cores: `scale: 1e-9`), and `unit` documents
- * the resulting unit (`cores`, `bytes`, `percent`) for display and for the consistency check.
+ * same measurement in the same unit; `scale` multiplies the aggregated value and `offset` is then
+ * added, so pipelines that report in different units or conventions line up (ECS nanocores to
+ * cores: `scale: 1e-9`; OTel idle-cpu fraction to busy fraction: `scale: -1, offset: 1`), and
+ * `unit` documents the resulting unit (`cores`, `bytes`, `ratio`) for display and for the
+ * consistency check.
  */
 export const inventoryMetricSchema = z
   .strictObject({
@@ -118,12 +120,19 @@ export const inventoryMetricSchema = z
         message: 'scale must be a finite, non-zero number',
       })
       .optional(),
+    offset: z
+      .number()
+      .refine((value) => Number.isFinite(value), { message: 'offset must be a finite number' })
+      .optional(),
     unit: z.string().min(1).max(MAX_UNIT_LENGTH).optional(),
   })
   .refine(
     (metric) =>
-      !((metric.agg === 'count_distinct' || metric.agg === 'count') && metric.scale !== undefined),
-    { message: 'scale does not apply to count or count_distinct', path: ['scale'] }
+      !(
+        (metric.agg === 'count_distinct' || metric.agg === 'count') &&
+        (metric.scale !== undefined || metric.offset !== undefined)
+      ),
+    { message: 'scale and offset do not apply to count or count_distinct', path: ['scale'] }
   );
 export type InventoryMetric = z.infer<typeof inventoryMetricSchema>;
 

@@ -63,7 +63,9 @@ resolved to the newest value per entity, and each source's `metrics` are `{ name
 `agg` one of `avg | min | max | sum | count | count_distinct | last` (`avg`/`min`/`max`/`sum` are
 window aggregates with identical results under both engines; `count` counts documents carrying the
 field, e.g. log lines; `last` is the newest sample), plus optional
-`scale` (a multiplier applied after aggregation, e.g. `1e-9` from nanocores to cores) and `unit`.
+`scale` (a multiplier applied after aggregation, e.g. `1e-9` from nanocores to cores), `offset`
+(added after scaling, e.g. `scale: -1, offset: 1` turns an idle fraction into a busy fraction) and
+`unit`.
 Across sources the same metric `name` is the same measurement in the same unit: shared names must
 share `agg` and `unit`, and `scale` is how a pipeline's field is brought into that unit. Fields that do
 not alias across pipelines are declared per source as `attributes: [{ name, field, valueLabels? }]`

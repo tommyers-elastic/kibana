@@ -198,18 +198,32 @@ export const hostDefinition: EntityDefinition = {
     attributes: ['host.os.name', 'host.os.platform', 'host.architecture'],
     sources: [
       {
+        // OTel host gauges carry a `state` dimension; filter to one state and normalise.
+        index: 'metrics-hostmetricsreceiver.otel-default',
+        filter: 'state == "idle"',
+        metrics: [
+          {
+            name: 'cpu_pct',
+            field: 'system.cpu.utilization',
+            agg: 'avg',
+            scale: -1,
+            offset: 1,
+            unit: 'ratio',
+          },
+        ],
+      },
+      {
         index: 'metrics-hostmetricsreceiver.otel-default',
         metrics: [
-          { name: 'cpu_pct', field: 'system.cpu.utilization', agg: 'avg' },
-          { name: 'load_1m', field: 'system.cpu.load_average.1m', agg: 'avg' },
+          { name: 'load_1m', field: 'system.cpu.load_average.1m', agg: 'avg', unit: 'load' },
         ],
       },
       {
         index: 'metrics-system.*',
         filter: 'metricset.name IN ("cpu", "load")',
         metrics: [
-          { name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' },
-          { name: 'load_1m', field: 'system.load.1', agg: 'avg' },
+          { name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg', unit: 'ratio' },
+          { name: 'load_1m', field: 'system.load.1', agg: 'avg', unit: 'load' },
         ],
       },
     ],

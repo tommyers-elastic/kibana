@@ -6,7 +6,8 @@ Object {
 FROM metrics-hostmetricsreceiver.otel-default, metrics-system.* METADATA _index
 | WHERE @timestamp >= ?from AND @timestamp < ?to
     AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
-    AND (((_index LIKE \\"metrics-hostmetricsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-hostmetricsreceiver.otel-default-*\\") AND (\`system.cpu.utilization\` IS NOT NULL OR \`system.cpu.load_average.1m\` IS NOT NULL))
+    AND (((_index LIKE \\"metrics-hostmetricsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-hostmetricsreceiver.otel-default-*\\") AND (state == \\"idle\\") AND (\`system.cpu.utilization\` IS NOT NULL))
+      OR ((_index LIKE \\"metrics-hostmetricsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-hostmetricsreceiver.otel-default-*\\") AND (\`system.cpu.load_average.1m\` IS NOT NULL))
       OR ((_index LIKE \\"metrics-system.*\\" OR _index LIKE \\".ds-metrics-system.*-*\\") AND (metricset.name IN (\\"cpu\\", \\"load\\")) AND (\`system.cpu.total.norm.pct\` IS NOT NULL OR \`system.load.1\` IS NOT NULL)))
 | STATS BY \`host.id\`, \`host.name\`, \`host.hostname\`
 | STATS \`count\` = COUNT(*)",
@@ -77,6 +78,7 @@ Object {
       ],
       "kind": "metric",
       "name": "cpu_pct",
+      "unit": "ratio",
     },
     Object {
       "fields": Array [
@@ -85,6 +87,7 @@ Object {
       ],
       "kind": "metric",
       "name": "load_1m",
+      "unit": "load",
     },
     Object {
       "kind": "last_seen",
@@ -115,15 +118,16 @@ Object {
   "esql": "SET unmapped_fields=\\"nullify\\";
 FROM metrics-hostmetricsreceiver.otel-default
 | WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (state == \\"idle\\")
     AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
-    AND (\`system.cpu.utilization\` IS NOT NULL OR \`system.cpu.load_average.1m\` IS NOT NULL)
+    AND (\`system.cpu.utilization\` IS NOT NULL)
 | STATS \`cpu_pct\` = AVG(\`system.cpu.utilization\`),
-    \`load_1m\` = AVG(\`system.cpu.load_average.1m\`),
     \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
     \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
     \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
     \`last_seen\` = MAX(@timestamp)
     BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL \`cpu_pct\` = \`cpu_pct\` * -1.0 + 1.0
 | EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
  host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
  host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
@@ -131,7 +135,7 @@ FROM metrics-hostmetricsreceiver.otel-default
  host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
  host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
  entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
-| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`load_1m\`, \`last_seen\`
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`last_seen\`
 | SORT \`last_seen\` DESC NULLS LAST
 | LIMIT 10000",
   "params": Array [
@@ -150,15 +154,16 @@ Object {
   "esql": "SET unmapped_fields=\\"nullify\\";
 TS metrics-hostmetricsreceiver.otel-default
 | WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (state == \\"idle\\")
     AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
-    AND (\`system.cpu.utilization\` IS NOT NULL OR \`system.cpu.load_average.1m\` IS NOT NULL)
+    AND (\`system.cpu.utilization\` IS NOT NULL)
 | STATS \`cpu_pct\` = AVG(AVG_OVER_TIME(\`system.cpu.utilization\`)),
-    \`load_1m\` = AVG(AVG_OVER_TIME(\`system.cpu.load_average.1m\`)),
     \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
     \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
     \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
     \`last_seen\` = MAX(@timestamp)
     BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL \`cpu_pct\` = \`cpu_pct\` * -1.0 + 1.0
 | EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
  host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
  host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
@@ -166,7 +171,7 @@ TS metrics-hostmetricsreceiver.otel-default
  host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
  host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
  entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
-| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`load_1m\`, \`last_seen\`
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`cpu_pct\`, \`last_seen\`
 | SORT \`last_seen\` DESC NULLS LAST
 | LIMIT 10000",
   "params": Array [
@@ -180,7 +185,75 @@ TS metrics-hostmetricsreceiver.otel-default
 }
 `;
 
-exports[`generator host list query for source 1 (metrics-system.*) under TS and FROM: FROM 1`] = `
+exports[`generator host list query for source 1 (metrics-hostmetricsreceiver.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM metrics-hostmetricsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (\`system.cpu.load_average.1m\` IS NOT NULL)
+| STATS \`load_1m\` = AVG(\`system.cpu.load_average.1m\`),
+    \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
+    \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
+    \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`load_1m\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator host list query for source 1 (metrics-hostmetricsreceiver.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS metrics-hostmetricsreceiver.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (\`host.id\` IS NOT NULL OR \`host.name\` IS NOT NULL OR \`host.hostname\` IS NOT NULL)
+    AND (\`system.cpu.load_average.1m\` IS NOT NULL)
+| STATS \`load_1m\` = AVG(AVG_OVER_TIME(\`system.cpu.load_average.1m\`)),
+    \`host.os.name\` = LAST(\`host.os.name\`, @timestamp) WHERE \`host.os.name\` IS NOT NULL,
+    \`host.os.platform\` = LAST(\`host.os.platform\`, @timestamp) WHERE \`host.os.platform\` IS NOT NULL,
+    \`host.architecture\` = LAST(\`host.architecture\`, @timestamp) WHERE \`host.architecture\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`host.id\`, \`host.name\`, \`host.hostname\`
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| KEEP \`entity.id\`, \`host.id\`, \`host.name\`, \`host.hostname\`, \`host.os.name\`, \`host.os.platform\`, \`host.architecture\`, \`load_1m\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator host list query for source 2 (metrics-system.*) under TS and FROM: FROM 1`] = `
 Object {
   "esql": "SET unmapped_fields=\\"nullify\\";
 FROM metrics-system.*
@@ -216,7 +289,7 @@ FROM metrics-system.*
 }
 `;
 
-exports[`generator host list query for source 1 (metrics-system.*) under TS and FROM: TS 1`] = `
+exports[`generator host list query for source 2 (metrics-system.*) under TS and FROM: TS 1`] = `
 Object {
   "esql": "SET unmapped_fields=\\"nullify\\";
 TS metrics-system.*

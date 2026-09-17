@@ -354,7 +354,7 @@ describe('InventoryService', () => {
       identity: { 'host.name': 'kind-worker' },
     });
     expect(response.rows).toHaveLength(1);
-    expect(response.queries.map((q) => q.engine)).toEqual(['TS', 'FROM']);
+    expect(response.queries.map((q) => q.engine)).toEqual(['TS', 'TS', 'FROM']);
     const requests = esql.query.mock.calls.map(
       ([request]) => request as { query: string; params: unknown[] }
     );
@@ -364,7 +364,7 @@ describe('InventoryService', () => {
       { to: RANGE.to },
       { id_0: 'kind-worker' },
     ]);
-    expect(requests[1].query).not.toContain('_OVER_TIME');
+    expect(requests[2].query).not.toContain('_OVER_TIME');
   });
 
   it('counts documents in the window per distinct source pattern, isolating failures', async () => {

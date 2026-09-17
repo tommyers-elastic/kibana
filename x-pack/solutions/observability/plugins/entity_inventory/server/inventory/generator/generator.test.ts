@@ -147,7 +147,7 @@ describe('generator', () => {
     expect(identity.presenceFilter).toBe(
       '(`host.id` IS NOT NULL OR `host.name` IS NOT NULL OR `host.hostname` IS NOT NULL)'
     );
-    const source = getInventory(hostDefinition).sources[1];
+    const source = getInventory(hostDefinition).sources[2];
     const { esql } = buildSourceQuery(
       hostDefinition,
       identity,
@@ -184,6 +184,34 @@ describe('generator', () => {
       })
     ).toBe('(`transaction.duration.summary` IS NOT NULL)');
     expect(metricPresenceFilter({ index: 'x' })).toBeUndefined();
+  });
+
+  it('applies scale and offset on the aggregated rows', () => {
+    const identity = resolveIdentityPlan(hostDefinition);
+    const source = {
+      index: 'metrics-hostmetricsreceiver.otel-default',
+      filter: 'state == "idle"',
+      metrics: [
+        {
+          name: 'cpu_pct',
+          field: 'system.cpu.utilization',
+          agg: 'avg' as const,
+          scale: -1,
+          offset: 1,
+        },
+        { name: 'mem_gb', field: 'system.memory.usage', agg: 'avg' as const, scale: 1e-9 },
+      ],
+    };
+    const { esql } = buildSourceQuery(
+      hostDefinition,
+      identity,
+      { source, engine: 'TS' },
+      listOptions
+    );
+    expect(esql).toContain(
+      '| EVAL `cpu_pct` = `cpu_pct` * -1.0 + 1.0, `mem_gb` = `mem_gb` * 1.0E-9'
+    );
+    expect(esql.indexOf('| EVAL `cpu_pct`')).toBeGreaterThan(esql.indexOf('| STATS'));
   });
 
   it('maps metric aggregations per engine', () => {

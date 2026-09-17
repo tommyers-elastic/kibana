@@ -60,16 +60,26 @@ const numberLiteral = (value: number): string => {
   return `${mantissa.includes('.') ? mantissa : `${mantissa}.0`}E${exponent}`;
 };
 
-/** `scale` multiplies the aggregated value (on the entity rows, not per document). */
+/** `scale` multiplies and `offset` shifts the aggregated value (on the entity rows, not per document). */
 const scaleAssignments = (source: InventorySource): string[] =>
   (source.metrics ?? [])
-    .filter((metric) => metric.scale !== undefined && metric.scale !== 1)
-    .map(
+    .filter(
       (metric) =>
-        `${quoteIdentifier(metric.name)} = ${quoteIdentifier(metric.name)} * ${numberLiteral(
-          metric.scale as number
-        )}`
-    );
+        (metric.scale !== undefined && metric.scale !== 1) ||
+        (metric.offset !== undefined && metric.offset !== 0)
+    )
+    .map((metric) => {
+      const name = quoteIdentifier(metric.name);
+      const scaled =
+        metric.scale !== undefined && metric.scale !== 1
+          ? `${name} * ${numberLiteral(metric.scale)}`
+          : name;
+      const shifted =
+        metric.offset !== undefined && metric.offset !== 0
+          ? `${scaled} + ${numberLiteral(metric.offset)}`
+          : scaled;
+      return `${name} = ${shifted}`;
+    });
 
 /** `LAST(f, @timestamp)` does not skip null rows in either engine, so every attribute filters them. */
 const attributeExpression = (field: string): string => {

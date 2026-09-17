@@ -363,6 +363,31 @@ describe('inventorySourceSchema', () => {
     ).toBe(true);
   });
 
+  it('accepts scale with offset (busy = 1 - idle) and rejects offset on counts', () => {
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        filter: 'state == "idle"',
+        metrics: [
+          {
+            name: 'cpu_pct',
+            field: 'system.cpu.utilization',
+            agg: 'avg',
+            scale: -1,
+            offset: 1,
+            unit: 'ratio',
+          },
+        ],
+      }).success
+    ).toBe(true);
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        metrics: [{ name: 'n', field: 'f', agg: 'count', offset: 1 }],
+      }).success
+    ).toBe(false);
+  });
+
   it('rejects a zero or non-finite scale and scale on count_distinct', () => {
     const base = { index: 'metrics-*' };
     expect(
