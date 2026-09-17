@@ -27,7 +27,8 @@ interface AuthoringConversationFlyoutProps {
 }
 
 const greeting = i18n.translate('xpack.entityInventory.authoring.greeting', {
-  defaultMessage: 'Which entities do you want to see in the inventory?',
+  defaultMessage:
+    'Name the entity type you want in the inventory, for example "Kubernetes jobs" or "hosts from the system integration". I will inspect the telemetry, propose a definition with the evidence, and preview it before saving.',
 });
 
 const loadingLabel = i18n.translate('xpack.entityInventory.authoring.loading', {
