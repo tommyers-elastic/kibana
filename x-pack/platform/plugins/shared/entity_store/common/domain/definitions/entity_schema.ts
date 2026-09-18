@@ -10,7 +10,7 @@ import { z } from '@kbn/zod/v4';
 import type { Condition } from '@kbn/streamlang';
 import { ALL_BUILT_IN_ENTITY_TYPES, BuiltInEntityType } from './built_in_entity_types';
 import { identityCoreSchema } from './identity_core_schema';
-import { identityTupleToIdentityField } from './identity_tuple';
+import { identityTupleToIdentityField, type InventoryIdentityMode } from './identity_tuple';
 import {
   inventoryExtensionSchema,
   type BuiltInInventoryExtension,
@@ -78,7 +78,10 @@ const assertIdentityConsistency = (
   if (!definition.inventory) {
     return;
   }
-  const expected = identityTupleToIdentityField(definition.inventory.identity);
+  const expected = identityTupleToIdentityField(
+    definition.inventory.identity,
+    definition.inventory.identityMode
+  );
   if (!isEqual(definition.identityField, expected)) {
     ctx.addIssue({
       code: 'custom',
@@ -168,6 +171,20 @@ export function getInventoryIdentity(
 ): string[] | undefined {
   const { inventory } = definition;
   return inventory !== undefined && 'identity' in inventory ? inventory.identity : undefined;
+}
+
+/**
+ * How an authored inventory identity is read (`tuple` by default); `undefined` for built-in
+ * extensions, whose identity is the core ranking.
+ */
+export function getInventoryIdentityMode(
+  definition: Pick<EntityDefinitionWithoutId, 'inventory'>
+): InventoryIdentityMode | undefined {
+  const { inventory } = definition;
+  if (inventory === undefined || !('identity' in inventory)) {
+    return undefined;
+  }
+  return inventory.identityMode ?? 'tuple';
 }
 
 export {

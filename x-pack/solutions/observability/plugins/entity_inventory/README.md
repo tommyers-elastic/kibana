@@ -116,9 +116,11 @@ TS metrics-kubernetes.pod-*
 ```
 
 - **Identity** is grouped on raw mapped fields and the id is computed on the aggregated rows with
-  the store's EUID compiler. Authored types group by their tuple; built-in types group by every
-  field their ranking references (`host.id`, `host.name`, `host.hostname`) and the compiler picks
-  the id per row, so ids match Security's. Computing the id per document is 200x slower.
+  the store's EUID compiler. Tuple identities group by all their fields; ranked identities (built-in
+  types such as `host`, and authored types with `identityMode: "ranked"`, e.g. a claim id carried as
+  `halcyon.claim_id` in traces and `claim_id` in logs) group by every alternative and the compiler
+  picks the first present one per row, so the same value under different field names yields one
+  entity that the merge unions across sources. Computing the id per document is 200x slower.
 - **Existence per source**: a source with metrics lists the entities that reported at least one
   of them in the window (explicit in `WHERE`, which is also what `TS` does implicitly); a source
   without metrics lists every identity occurrence. Type-level existence is the union. Only value

@@ -1,5 +1,227 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`generator claim count query 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM traces-generic.otel-default, logs-generic.otel-default METADATA _index
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (\`halcyon.claim_id\` IS NOT NULL OR \`claim_id\` IS NOT NULL)
+    AND (((_index LIKE \\"traces-generic.otel-default\\" OR _index LIKE \\".ds-traces-generic.otel-default-*\\") AND (halcyon.claim_id IS NOT NULL) AND (\`@timestamp\` IS NOT NULL))
+      OR ((_index LIKE \\"logs-generic.otel-default\\" OR _index LIKE \\".ds-logs-generic.otel-default-*\\") AND (claim_id IS NOT NULL) AND (\`score\` IS NOT NULL)))
+| STATS BY \`halcyon.claim_id\`, \`claim_id\`
+| EVAL halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
+ claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
+ halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
+ claim_id_present_or_null = CASE(claim_id_present, TO_STRING(claim_id)),
+ entity.id = CONCAT(\\"claim:\\", COALESCE(halcyon_claim_id_present_or_null, claim_id_present_or_null))
+| STATS \`count\` = COUNT_DISTINCT(\`entity.id\`)",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator claim identity plan and columns 1`] = `
+Object {
+  "columns": Array [
+    Object {
+      "kind": "entity_id",
+      "name": "entity.id",
+    },
+    Object {
+      "fields": Array [
+        "halcyon.claim_id",
+      ],
+      "kind": "identity",
+      "name": "halcyon.claim_id",
+    },
+    Object {
+      "fields": Array [
+        "claim_id",
+      ],
+      "kind": "identity",
+      "name": "claim_id",
+    },
+    Object {
+      "fields": Array [
+        "halcyon.template",
+      ],
+      "kind": "attribute",
+      "name": "template",
+    },
+    Object {
+      "fields": Array [
+        "risk_band",
+      ],
+      "kind": "attribute",
+      "name": "risk_band",
+    },
+    Object {
+      "fields": Array [
+        "@timestamp",
+      ],
+      "kind": "metric",
+      "name": "spans",
+      "unit": "count",
+    },
+    Object {
+      "fields": Array [
+        "score",
+      ],
+      "kind": "metric",
+      "name": "fraud_score",
+      "unit": "ratio",
+    },
+    Object {
+      "kind": "last_seen",
+      "name": "last_seen",
+    },
+  ],
+  "identity": Object {
+    "entityIdEvaluation": "halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
+ claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
+ halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
+ claim_id_present_or_null = CASE(claim_id_present, TO_STRING(claim_id)),
+ entity.id = CONCAT(\\"claim:\\", COALESCE(halcyon_claim_id_present_or_null, claim_id_present_or_null))",
+    "fields": Array [
+      "halcyon.claim_id",
+      "claim_id",
+    ],
+    "kind": "ranking",
+    "presenceFilter": "(\`halcyon.claim_id\` IS NOT NULL OR \`claim_id\` IS NOT NULL)",
+  },
+}
+`;
+
+exports[`generator claim list query for source 0 (traces-generic.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM traces-generic.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (halcyon.claim_id IS NOT NULL)
+    AND (\`halcyon.claim_id\` IS NOT NULL OR \`claim_id\` IS NOT NULL)
+    AND (\`@timestamp\` IS NOT NULL)
+| STATS \`spans\` = COUNT(\`@timestamp\`),
+    \`template\` = LAST(\`halcyon.template\`, @timestamp) WHERE \`halcyon.template\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`halcyon.claim_id\`, \`claim_id\`
+| EVAL halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
+ claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
+ halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
+ claim_id_present_or_null = CASE(claim_id_present, TO_STRING(claim_id)),
+ entity.id = CONCAT(\\"claim:\\", COALESCE(halcyon_claim_id_present_or_null, claim_id_present_or_null))
+| KEEP \`entity.id\`, \`halcyon.claim_id\`, \`claim_id\`, \`template\`, \`spans\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator claim list query for source 0 (traces-generic.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS traces-generic.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (halcyon.claim_id IS NOT NULL)
+    AND (\`halcyon.claim_id\` IS NOT NULL OR \`claim_id\` IS NOT NULL)
+    AND (\`@timestamp\` IS NOT NULL)
+| STATS \`spans\` = SUM(COUNT_OVER_TIME(\`@timestamp\`)),
+    \`template\` = LAST(\`halcyon.template\`, @timestamp) WHERE \`halcyon.template\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`halcyon.claim_id\`, \`claim_id\`
+| EVAL halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
+ claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
+ halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
+ claim_id_present_or_null = CASE(claim_id_present, TO_STRING(claim_id)),
+ entity.id = CONCAT(\\"claim:\\", COALESCE(halcyon_claim_id_present_or_null, claim_id_present_or_null))
+| KEEP \`entity.id\`, \`halcyon.claim_id\`, \`claim_id\`, \`template\`, \`spans\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator claim list query for source 1 (logs-generic.otel-default) under TS and FROM: FROM 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+FROM logs-generic.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (claim_id IS NOT NULL)
+    AND (\`halcyon.claim_id\` IS NOT NULL OR \`claim_id\` IS NOT NULL)
+    AND (\`score\` IS NOT NULL)
+| STATS \`fraud_score\` = LAST(\`score\`, @timestamp) WHERE \`score\` IS NOT NULL,
+    \`risk_band\` = LAST(\`risk_band\`, @timestamp) WHERE \`risk_band\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`halcyon.claim_id\`, \`claim_id\`
+| EVAL halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
+ claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
+ halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
+ claim_id_present_or_null = CASE(claim_id_present, TO_STRING(claim_id)),
+ entity.id = CONCAT(\\"claim:\\", COALESCE(halcyon_claim_id_present_or_null, claim_id_present_or_null))
+| KEEP \`entity.id\`, \`halcyon.claim_id\`, \`claim_id\`, \`risk_band\`, \`fraud_score\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
+exports[`generator claim list query for source 1 (logs-generic.otel-default) under TS and FROM: TS 1`] = `
+Object {
+  "esql": "SET unmapped_fields=\\"nullify\\";
+TS logs-generic.otel-default
+| WHERE @timestamp >= ?from AND @timestamp < ?to
+    AND (claim_id IS NOT NULL)
+    AND (\`halcyon.claim_id\` IS NOT NULL OR \`claim_id\` IS NOT NULL)
+    AND (\`score\` IS NOT NULL)
+| STATS \`fraud_score\` = LAST(\`score\`, @timestamp) WHERE \`score\` IS NOT NULL,
+    \`risk_band\` = LAST(\`risk_band\`, @timestamp) WHERE \`risk_band\` IS NOT NULL,
+    \`last_seen\` = MAX(@timestamp)
+    BY \`halcyon.claim_id\`, \`claim_id\`
+| EVAL halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
+ claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
+ halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
+ claim_id_present_or_null = CASE(claim_id_present, TO_STRING(claim_id)),
+ entity.id = CONCAT(\\"claim:\\", COALESCE(halcyon_claim_id_present_or_null, claim_id_present_or_null))
+| KEEP \`entity.id\`, \`halcyon.claim_id\`, \`claim_id\`, \`risk_band\`, \`fraud_score\`, \`last_seen\`
+| SORT \`last_seen\` DESC NULLS LAST
+| LIMIT 10000",
+  "params": Array [
+    Object {
+      "from": "2026-09-16T08:30:00.000Z",
+    },
+    Object {
+      "to": "2026-09-16T08:45:00.000Z",
+    },
+  ],
+}
+`;
+
 exports[`generator host count query 1`] = `
 Object {
   "esql": "SET unmapped_fields=\\"nullify\\";
@@ -10,7 +232,14 @@ FROM metrics-hostmetricsreceiver.otel-default, metrics-system.* METADATA _index
       OR ((_index LIKE \\"metrics-hostmetricsreceiver.otel-default\\" OR _index LIKE \\".ds-metrics-hostmetricsreceiver.otel-default-*\\") AND (\`system.cpu.load_average.1m\` IS NOT NULL))
       OR ((_index LIKE \\"metrics-system.*\\" OR _index LIKE \\".ds-metrics-system.*-*\\") AND (metricset.name IN (\\"cpu\\", \\"load\\")) AND (\`system.cpu.total.norm.pct\` IS NOT NULL OR \`system.load.1\` IS NOT NULL)))
 | STATS BY \`host.id\`, \`host.name\`, \`host.hostname\`
-| STATS \`count\` = COUNT(*)",
+| EVAL host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
+ host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
+ host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
+ host_id_present_or_null = CASE(host_id_present, TO_STRING(host.id)),
+ host_name_present_or_null = CASE(host_name_present, TO_STRING(host.name)),
+ host_hostname_present_or_null = CASE(host_hostname_present, TO_STRING(host.hostname)),
+ entity.id = CONCAT(\\"host:\\", COALESCE(host_id_present_or_null, host_name_present_or_null, host_hostname_present_or_null))
+| STATS \`count\` = COUNT_DISTINCT(\`entity.id\`)",
   "params": Array [
     Object {
       "from": "2026-09-16T08:30:00.000Z",

@@ -17,7 +17,8 @@ import {
   k8sDeploymentInventoryDefinition,
   k8sPodInventoryDefinition,
 } from '../definitions/__fixtures__/inventory_definitions';
-import { getInventoryIdentity } from '../definitions/entity_schema';
+import { entityDefinitionInputSchema, getInventoryIdentity } from '../definitions/entity_schema';
+import { buildInventoryEntityDefinition } from '../definitions/inventory_definition';
 import {
   getEuidDslDocumentsContainsIdFilterFromDefinition,
   getEuidDslFilterBasedOnDocumentFromDefinition,
@@ -53,6 +54,51 @@ const deploymentDoc = {
 const podDoc = {
   kubernetes: { pod: { uid: '5f3c1e2a-0000-4000-8000-000000000001', name: 'p1' } },
 };
+
+describe('ranked authored identity', () => {
+  const claim = buildInventoryEntityDefinition({
+    type: 'claim',
+    name: 'claim',
+    inventory: {
+      identity: ['halcyon.claim_id', 'claim_id'],
+      identityMode: 'ranked',
+      sources: [{ index: 'traces-generic.otel-default' }, { index: 'logs-generic.otel-default' }],
+    },
+  });
+
+  it('derives a first-present-field ranking with an any-of documents filter', () => {
+    expect(claim.identityField).toEqual({
+      euidRanking: {
+        branches: [{ ranking: [[{ field: 'halcyon.claim_id' }], [{ field: 'claim_id' }]] }],
+      },
+      documentsFilter: {
+        or: [
+          {
+            and: [
+              { field: 'halcyon.claim_id', exists: true },
+              { field: 'halcyon.claim_id', neq: '' },
+            ],
+          },
+          {
+            and: [
+              { field: 'claim_id', exists: true },
+              { field: 'claim_id', neq: '' },
+            ],
+          },
+        ],
+      },
+    });
+    expect(entityDefinitionInputSchema.safeParse(claim).success).toBe(true);
+  });
+
+  it('gives the same id whichever field carries the value', () => {
+    expect(getEuidFromDefinition(claim, { halcyon: { claim_id: 'CLM-1' } })).toBe('claim:CLM-1');
+    expect(getEuidFromDefinition(claim, { claim_id: 'CLM-1' })).toBe('claim:CLM-1');
+    expect(getEuidEsqlEvaluationFromDefinition(claim, 'entity.id')).toContain(
+      'halcyon_claim_id_present_or_null'
+    );
+  });
+});
 
 describe('EUID compiler over Observability inventory definitions', () => {
   describe('composite identity (k8s.deployment)', () => {

@@ -6,7 +6,7 @@
  */
 
 import type { EntityDefinition } from '@kbn/entity-store/common';
-import { getInventoryIdentity } from '@kbn/entity-store/common';
+import { getInventoryIdentity, getInventoryIdentityMode } from '@kbn/entity-store/common';
 import { euid } from '@kbn/entity-store/common/euid_helpers';
 import { ENTITY_ID_COLUMN, type InventoryIdentityDescriptor } from '../../../common';
 import { quoteIdentifier } from './esql_syntax';
@@ -19,10 +19,11 @@ export interface IdentityPlan extends InventoryIdentityDescriptor {
 }
 
 /**
- * How to group and identify entities of a definition. Authored definitions carry a literal tuple:
- * every field must be present and the rows group by all of them. Built-in types carry a field
- * ranking (`host.id`, else `host.name`, ...): rows group by every field the ranking references and
- * the compiler's expression picks the id per row, so ids match Security's per-document ids.
+ * How to group and identify entities of a definition. Authored tuple identities: every field must
+ * be present and the rows group by all of them. Ranked identities (built-in types such as `host`,
+ * or authored definitions with `identityMode: "ranked"`): rows group by every field the ranking
+ * references and the compiler's expression picks the first present one per row, so the same
+ * identifier carried under different field names by different sources yields one id.
  * Identity is grouped on raw mapped fields and never computed per document (200x slower).
  */
 export const resolveIdentityPlan = (definition: EntityDefinition): IdentityPlan => {
@@ -31,7 +32,7 @@ export const resolveIdentityPlan = (definition: EntityDefinition): IdentityPlan 
     ENTITY_ID_COLUMN
   );
   const tuple = getInventoryIdentity(definition);
-  if (tuple) {
+  if (tuple && getInventoryIdentityMode(definition) !== 'ranked') {
     return {
       kind: 'tuple',
       fields: tuple,

@@ -16,22 +16,39 @@ import { isLiteralFieldPath } from './inventory_schema';
  */
 export const IDENTITY_TUPLE_SEPARATOR = '/';
 
+/** How the inventory `identity` list is read: a tuple of required fields, or ranked alternatives. */
+export type InventoryIdentityMode = 'tuple' | 'ranked';
+
 /**
  * Normalises the inventory authoring form of an identity (an ordered list of literal field paths)
  * into the store's identity form so the EUID compiler needs no changes.
  *
  * - One field becomes the compiler's single-field fast path (`{ singleField }`).
- * - Several fields become one ranking branch with one composition joined by
+ * - `tuple` (default): several fields become one ranking branch with one composition joined by
  *   {@link IDENTITY_TUPLE_SEPARATOR}, plus a `documentsFilter` requiring every field to be present.
+ * - `ranked`: several fields become one branch with one single-field composition per field, in
+ *   priority order (the first present, non-empty field is the id), plus a `documentsFilter`
+ *   requiring any of them: the same shape as the built-in `host` identity. For the same identifier
+ *   value carried under different field names by different sources.
  *
  * Throws when a field is not a literal path (expressions, wildcards and whitespace are rejected)
  * or when the list is empty or contains duplicates.
  */
-export function identityTupleToIdentityField(identity: readonly string[]): EntityIdentity {
+export function identityTupleToIdentityField(
+  identity: readonly string[],
+  mode: InventoryIdentityMode = 'tuple'
+): EntityIdentity {
   assertValidIdentityTuple(identity);
 
   if (identity.length === 1) {
     return { singleField: identity[0] };
+  }
+
+  if (mode === 'ranked') {
+    return {
+      euidRanking: { branches: [{ ranking: identity.map((field) => [{ field }]) }] },
+      documentsFilter: { or: identity.map((field) => isNotEmptyCondition(field)) },
+    };
   }
 
   const composition: EuidAttribute[] = identity.flatMap((field, index) =>

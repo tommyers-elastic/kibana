@@ -156,6 +156,33 @@ export const deploymentDefinition: EntityDefinition = withId(
   })
 );
 
+/** Authored ranked identity: the same claim id under two field names in two streams. */
+export const claimDefinition: EntityDefinition = withId(
+  buildInventoryEntityDefinition({
+    type: 'claim',
+    name: 'Insurance claims from traces and logs',
+    inventory: {
+      label: 'Claim',
+      identity: ['halcyon.claim_id', 'claim_id'],
+      identityMode: 'ranked',
+      sources: [
+        {
+          index: 'traces-generic.otel-default',
+          filter: 'halcyon.claim_id IS NOT NULL',
+          metrics: [{ name: 'spans', field: '@timestamp', agg: 'count', unit: 'count' }],
+          attributes: [{ name: 'template', field: 'halcyon.template' }],
+        },
+        {
+          index: 'logs-generic.otel-default',
+          filter: 'claim_id IS NOT NULL',
+          metrics: [{ name: 'fraud_score', field: 'score', agg: 'last', unit: 'ratio' }],
+          attributes: [{ name: 'risk_band', field: 'risk_band' }],
+        },
+      ],
+    },
+  })
+);
+
 /** Built-in style: field ranking identity (Security's host), inventory extension without identity. */
 export const hostDefinition: EntityDefinition = {
   id: 'security_host_default',
@@ -230,6 +257,12 @@ export const hostDefinition: EntityDefinition = {
   },
 };
 
-export const ALL_FIXTURES = [podDefinition, nodeDefinition, deploymentDefinition, hostDefinition];
+export const ALL_FIXTURES = [
+  podDefinition,
+  nodeDefinition,
+  deploymentDefinition,
+  hostDefinition,
+  claimDefinition,
+];
 
 export const RANGE = { from: '2026-09-16T08:30:00.000Z', to: '2026-09-16T08:45:00.000Z' };

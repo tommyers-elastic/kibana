@@ -106,6 +106,18 @@ describe('inventoryExtensionSchema', () => {
     );
   });
 
+  it('accepts a ranked identity mode', () => {
+    const result = inventoryExtensionSchema.safeParse({
+      identity: ['halcyon.claim_id', 'claim_id'],
+      identityMode: 'ranked',
+      sources: [{ index: 'traces-generic.otel-default' }, { index: 'logs-generic.otel-default' }],
+    });
+    expect(result.error?.issues).toBeUndefined();
+    expect(
+      inventoryExtensionSchema.safeParse({ ...minimalInventory, identityMode: 'any' }).success
+    ).toBe(false);
+  });
+
   it('requires at least one source', () => {
     expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, sources: [] }).success).toBe(
       false

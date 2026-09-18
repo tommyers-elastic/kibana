@@ -287,6 +287,14 @@ export const inventoryExtensionSchema = z
       .min(1)
       .max(MAX_IDENTITY_FIELDS)
       .refine(uniqueStrings, { message: 'identity fields must be unique' }),
+    /**
+     * `tuple` (default): every listed field must be present and together they form the id
+     * (`namespace/name`). `ranked`: the fields are alternatives in priority order and the first
+     * present one is the id, so sources that carry the same identifier under different field names
+     * (`halcyon.claim_id` in traces, `claim_id` in logs) resolve to one entity. Same mechanism as
+     * the built-in `host` identity (`host.id`, else `host.name`, ...).
+     */
+    identityMode: z.enum(['tuple', 'ranked']).optional(),
   })
   .superRefine((inventory, ctx) => {
     const identity = new Set(inventory.identity);

@@ -8,6 +8,7 @@
 import {
   ALL_FIXTURES,
   RANGE,
+  claimDefinition,
   deploymentDefinition,
   hostDefinition,
   podDefinition,
@@ -54,7 +55,8 @@ describe('generator', () => {
           expect(from).toMatchSnapshot('FROM');
           for (const { esql } of [ts, from]) {
             expect(esql).not.toMatch(/NOW\(\)/);
-            expect(esql).not.toMatch(/_id\b/);
+            // Never aggregate over the `_id` metadata field (identity fields such as `claim_id` are fine).
+            expect(esql).not.toMatch(/\b_id\b/);
             // No EVAL before STATS: identity is grouped on raw fields, the id is computed after.
             expect(esql.indexOf('| EVAL')).toBeGreaterThan(esql.indexOf('| STATS'));
             expect(esql.startsWith('SET unmapped_fields="nullify";')).toBe(true);
@@ -212,6 +214,50 @@ describe('generator', () => {
       '| EVAL `cpu_pct` = `cpu_pct` * -1.0 + 1.0, `mem_gb` = `mem_gb` * 1.0E-9'
     );
     expect(esql.indexOf('| EVAL `cpu_pct`')).toBeGreaterThan(esql.indexOf('| STATS'));
+  });
+
+  it('authored ranked identities group by every alternative and resolve the first present one', () => {
+    const identity = resolveIdentityPlan(claimDefinition);
+    expect(identity.kind).toBe('ranking');
+    expect(identity.fields).toEqual(['halcyon.claim_id', 'claim_id']);
+    expect(identity.presenceFilter).toBe(
+      '(`halcyon.claim_id` IS NOT NULL OR `claim_id` IS NOT NULL)'
+    );
+    const [traces, logs] = getInventory(claimDefinition).sources;
+    const t = buildSourceQuery(
+      claimDefinition,
+      identity,
+      { source: traces, engine: 'FROM' },
+      listOptions
+    ).esql;
+    const l = buildSourceQuery(
+      claimDefinition,
+      identity,
+      { source: logs, engine: 'FROM' },
+      listOptions
+    ).esql;
+    for (const esql of [t, l]) {
+      expect(esql).toContain('BY `halcyon.claim_id`, `claim_id`');
+      expect(esql).toContain('CONCAT("claim:"');
+    }
+  });
+
+  it('counts ranked identities by resolved id, tuples by group', () => {
+    const ranked = buildCountQuery(
+      claimDefinition,
+      resolveIdentityPlan(claimDefinition),
+      getInventory(claimDefinition).sources,
+      RANGE
+    ).esql;
+    expect(ranked).toContain('| STATS BY `halcyon.claim_id`, `claim_id`\n| EVAL ');
+    expect(ranked).toContain('| STATS `count` = COUNT_DISTINCT(`entity.id`)');
+    const tuple = buildCountQuery(
+      podDefinition,
+      resolveIdentityPlan(podDefinition),
+      getInventory(podDefinition).sources,
+      RANGE
+    ).esql;
+    expect(tuple).toContain('| STATS BY `kubernetes.pod.uid`\n| STATS `count` = COUNT(*)');
   });
 
   it('maps metric aggregations per engine', () => {

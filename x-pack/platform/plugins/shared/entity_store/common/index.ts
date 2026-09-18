@@ -144,7 +144,8 @@ export type {
   InventorySourceAttribute,
   InventoryValueLabels,
 } from './domain/definitions/entity_schema';
-export { getInventoryIdentity } from './domain/definitions/entity_schema';
+export { getInventoryIdentity, getInventoryIdentityMode } from './domain/definitions/entity_schema';
+export type { InventoryIdentityMode } from './domain/definitions/identity_tuple';
 export {
   buildInventoryEntityDefinition,
   type InventoryEntityDefinition,

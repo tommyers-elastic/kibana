@@ -34,7 +34,7 @@ export function buildInventoryEntityDefinition({
   return {
     type,
     name,
-    identityField: identityTupleToIdentityField(inventory.identity),
+    identityField: identityTupleToIdentityField(inventory.identity, inventory.identityMode),
     materialisation: { mode: 'none' },
     inventory,
   };

@@ -7,6 +7,7 @@
 
 import type { EntityDefinition, InventorySource } from '@kbn/entity-store/common';
 import { Parser } from '@elastic/esql';
+import { ENTITY_ID_COLUMN } from '../../../common';
 import { backingIndexLikePatterns, quoteIdentifier, quoteString } from './esql_syntax';
 import type { IdentityPlan } from './identity';
 import { assertSafeIndexPattern, sourcePredicates, timeParams } from './source_query';
@@ -29,6 +30,10 @@ const TIME_PREDICATE = '@timestamp >= ?from AND @timestamp < ?to';
  * | STATS BY <identity fields>
  * | STATS count = COUNT(*)
  * ```
+ *
+ * A ranked identity groups by every alternative field, so the same entity seen with different
+ * fields present in different sources forms several groups; the id is then computed per group and
+ * counted distinctly, exactly as the lists merge rows by `entity.id`.
  */
 export const buildCountQuery = (
   definition: EntityDefinition,
@@ -62,12 +67,21 @@ export const buildCountQuery = (
       ? perSource[0]
       : [`(${perSource.map((predicates) => `(${predicates.join(' AND ')})`).join('\n      OR ')})`];
 
+  const countStage =
+    identity.kind === 'ranking'
+      ? [
+          `| EVAL ${identity.entityIdEvaluation}`,
+          `| STATS ${quoteIdentifier(COUNT_COLUMN)} = COUNT_DISTINCT(${quoteIdentifier(
+            ENTITY_ID_COLUMN
+          )})`,
+        ]
+      : [`| STATS ${quoteIdentifier(COUNT_COLUMN)} = COUNT(*)`];
   const lines = [
     'SET unmapped_fields="nullify";',
     `FROM ${indices.join(', ')}${sources.length > 1 ? ' METADATA _index' : ''}`,
     `| WHERE ${[TIME_PREDICATE, identity.presenceFilter, ...sourceBranch].join('\n    AND ')}`,
     `| STATS BY ${by}`,
-    `| STATS ${quoteIdentifier(COUNT_COLUMN)} = COUNT(*)`,
+    ...countStage,
   ];
   const esql = lines.join('\n');
   const { errors } = Parser.parse(esql);
