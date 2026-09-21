@@ -228,5 +228,14 @@ excluded and reported; attributes or metrics whose field is unmapped in a source
 - Ranked (built-in) identities split an entity when its documents differ in which ranking fields
   they carry, exactly as Security's per-document ranking does; the fix is upstream (emit the
   top-ranked field on every pipeline).
-- Same-source duplicates of a ranked identity (groups that resolve to the same id) merge with the
-  same newest-wins rule, so a window aggregate is that of the newest group, not of both.
+- Ranked identities group by all raw identity fields before computing `entity.id`. Within one
+  source, documents with the same `host.id` but different or missing fallback fields such as
+  `host.name` can therefore produce separate groups that resolve to the same entity. The merge
+  keeps the first non-null metric value encountered; it does not recombine those groups' aggregates.
+  For example, groups with counts of 10 and 20 yield one of those counts rather than 30. Attribute
+  recency and intentional metric precedence across sources remain as described above.
+  We expect this to be uncommon with consistent telemetry and have not demonstrated it in the
+  POC data. Correction is deferred until a concrete occurrence justifies the complexity and
+  performance investigation: computing the EUID per document was substantially slower in local
+  benchmarks, while a second aggregation would need metric-specific handling (including averages
+  and distinct counts) and has not been benchmarked.
