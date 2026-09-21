@@ -6,6 +6,7 @@
  */
 
 import type { HttpStart } from '@kbn/core/public';
+import type { QueryDslQueryContainer } from '@elastic/elasticsearch/lib/api/types';
 import {
   ENTITY_INVENTORY_ROUTES,
   type InventoryDocumentCountsResponse,
@@ -20,6 +21,7 @@ export interface InventoryRangeRequest {
 
 export interface InventoryListRequest extends InventoryRangeRequest {
   limit: number;
+  documentFilter?: QueryDslQueryContainer;
 }
 
 export interface InventoryApi {

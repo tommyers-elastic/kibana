@@ -375,7 +375,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
     }
   );
 
-  apiTest('counts exactly across sources and honours a query DSL filter', async ({ apiClient }) => {
+  apiTest('counts across sources and honours documentFilter', async ({ apiClient }) => {
     const all = await apiClient.post(count('invtest.pod'), {
       headers,
       responseType: 'json',
@@ -388,7 +388,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
     const payments = await apiClient.post(count('invtest.pod'), {
       headers,
       responseType: 'json',
-      body: { ...WINDOW_15M, filter: { term: { 'kubernetes.namespace': 'payments' } } },
+      body: { ...WINDOW_15M, documentFilter: { term: { 'kubernetes.namespace': 'payments' } } },
     });
     expect((payments.body as InventoryCountResponse).count).toBe(3);
 
@@ -402,7 +402,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
     const filteredList = await apiClient.post(list('invtest.pod'), {
       headers,
       responseType: 'json',
-      body: { ...WINDOW_15M, filter: { term: { 'kubernetes.namespace': 'payments' } } },
+      body: { ...WINDOW_15M, documentFilter: { term: { 'kubernetes.namespace': 'payments' } } },
     });
     const filteredBody: InventoryListResponse = filteredList.body;
     expect(filteredBody.rows.map((row) => row['kubernetes.pod.uid']).sort()).toStrictEqual([
@@ -476,7 +476,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
     const badFilter = await apiClient.post(count('invtest.pod'), {
       headers,
       responseType: 'json',
-      body: { ...WINDOW_15M, filter: { term: {}, range: {} } },
+      body: { ...WINDOW_15M, documentFilter: { term: {}, range: {} } },
     });
     expect(badFilter.statusCode).toBe(400);
   });

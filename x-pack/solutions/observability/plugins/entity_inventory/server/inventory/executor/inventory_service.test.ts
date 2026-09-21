@@ -9,7 +9,12 @@ import type { ElasticsearchClient } from '@kbn/core/server';
 import type { Logger } from '@kbn/logging';
 import type { EntityDefinitionRegistry } from '@kbn/entity-store/server';
 import type { ESQLSearchResponse } from '@kbn/es-types';
-import { RANGE, hostDefinition, podDefinition } from '../__fixtures__/definitions';
+import {
+  RANGE,
+  hostDefinition,
+  podDefinition,
+  deploymentDefinition,
+} from '../__fixtures__/definitions';
 import { InventoryService } from './inventory_service';
 import { InventoryRequestError, InventoryTypeNotFoundError } from './errors';
 import { SourceMetadataResolver } from './source_metadata';
@@ -103,6 +108,97 @@ describe('InventoryService', () => {
     'metrics-kubernetes.state_pod-*': 'time_series',
     'metrics-k8sclusterreceiver.otel-default': 'time_series',
   };
+
+  it('rejects a source missing part of every identity composition without warning about its filter', async () => {
+    const { es, esql } = fakeEs(() => table([]), podModes, ['kubernetes.namespace']);
+    const response = await service(es, [deploymentDefinition]).list('k8s.deployment', {
+      ...RANGE,
+      documentFilter: { term: { environment: 'prod' } },
+    });
+    expect(response.errors).toContainEqual(
+      expect.objectContaining({
+        message: expect.stringContaining('no complete identity composition'),
+      })
+    );
+    expect(response.documentFilterWarnings).toEqual([]);
+    expect(esql.query).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    'requires coexisting composite fields (complete: %s)',
+    async (complete) => {
+      const { es, esql } = fakeEs(() => table([]), podModes, []);
+      jest.spyOn(es.indices, 'getSettings').mockResolvedValue({
+        first: { settings: { index: { mode: 'standard' } } },
+        second: { settings: { index: { mode: 'standard' } } },
+      });
+      jest.spyOn(es, 'fieldCaps').mockResolvedValue({
+        indices: ['first', 'second'],
+        fields: {
+          'kubernetes.namespace': {
+            keyword: {
+              type: 'keyword',
+              searchable: true,
+              aggregatable: true,
+              indices: complete ? ['first', 'second'] : ['first'],
+            },
+          },
+          'kubernetes.deployment.name': {
+            keyword: { type: 'keyword', searchable: true, aggregatable: true, indices: ['second'] },
+          },
+        },
+      });
+      const response = await service(es, [deploymentDefinition]).list('k8s.deployment', {
+        ...RANGE,
+        documentFilter: { term: { environment: 'prod' } },
+      });
+      expect(response.errors).toHaveLength(complete ? 0 : 2);
+      expect(esql.query).toHaveBeenCalledTimes(complete ? 3 : 0);
+      expect(response.documentFilterWarnings).toEqual(
+        complete
+          ? [
+              expect.objectContaining({
+                code: 'source_excluded',
+                eligibleIndexCount: 1,
+                excludedIndices: ['second'],
+                sourcePatterns: expect.arrayContaining([
+                  'metrics-kubeletstatsreceiver.otel-default',
+                  'metrics-kubernetes.state_deployment-*',
+                ]),
+              }),
+            ]
+          : []
+      );
+    }
+  );
+
+  it('warns only for resolved sources and leaves source and count requests unchanged', async () => {
+    const modes = { 'metrics-kubeletstatsreceiver.otel-default': 'time_series' };
+    const { es, esql } = fakeEs(
+      (query) => (query.includes('METADATA') ? table([{ count: 0 }]) : table([])),
+      modes,
+      POD_FIELDS
+    );
+    const inventory = service(es);
+    await inventory.list('k8s.pod', RANGE);
+    const originalQueries = esql.query.mock.calls.map(([request]) => request.query);
+    esql.query.mockClear();
+    const documentFilter = { term: { environment: 'prod' } };
+    const response = await inventory.list('k8s.pod', { ...RANGE, documentFilter });
+    expect(response.documentFilterWarnings).toEqual([
+      expect.objectContaining({
+        sourcePatterns: ['metrics-kubeletstatsreceiver.otel-default'],
+        code: 'source_excluded',
+        fields: ['environment'],
+        columns: expect.arrayContaining(['cpu_cores', 'mem_bytes']),
+      }),
+    ]);
+    expect(response.errors).toHaveLength(3);
+    expect(esql.query.mock.calls.map(([request]) => request.query)).toEqual(originalQueries);
+    for (const [request] of esql.query.mock.calls) {
+      expect(request).toEqual(expect.objectContaining({ filter: documentFilter }));
+    }
+  });
 
   it('lists types with identity, columns and sources', async () => {
     const { es } = fakeEs(() => table([]), {}, []);
@@ -394,11 +490,11 @@ describe('InventoryService', () => {
     expect(first.params).toEqual([{ from: RANGE.from }, { to: RANGE.to }]);
   });
 
-  it('counts with the caller filter passed as the request filter', async () => {
+  it('counts with documentFilter passed as the Elasticsearch request filter', async () => {
     const { es, esql } = fakeEs(() => table([{ count: 42 }]), podModes, POD_FIELDS);
     const response = await service(es).count('k8s.pod', {
       ...RANGE,
-      filter: { term: { 'kubernetes.namespace': 'payments' } },
+      documentFilter: { term: { 'kubernetes.namespace': 'payments' } },
     });
     expect(response.count).toBe(42);
     expect(esql.query).toHaveBeenCalledTimes(1);

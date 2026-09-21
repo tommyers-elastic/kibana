@@ -40,13 +40,12 @@ export const sortSchema = z.strictObject({
 });
 
 /**
- * A query DSL container: one root clause. It is passed to Elasticsearch as the ES|QL request
- * `filter`, never interpolated into query text. Bounded to a single, non-empty root key.
+ * A document-level query DSL clause applied before aggregation through the ES|QL request `filter`.
  */
-export const dslFilterSchema = z
+export const documentFilterSchema = z
   .record(z.string().min(1).max(64), z.unknown())
-  .refine((filter) => Object.keys(filter).length === 1, {
-    message: 'filter must be a single query DSL clause',
+  .refine((documentFilter) => Object.keys(documentFilter).length === 1, {
+    message: 'documentFilter must be a single query DSL clause',
   });
 
 export const listBodySchema = z
@@ -54,7 +53,7 @@ export const listBodySchema = z
     ...rangeShape,
     limit: z.number().int().min(1).max(ESQL_MAX_ROWS).default(DEFAULT_LIST_LIMIT),
     sort: sortSchema.optional(),
-    filter: dslFilterSchema.optional(),
+    documentFilter: documentFilterSchema.optional(),
   })
   .superRefine(assertRange);
 
@@ -78,6 +77,6 @@ export const rangeBodySchema = z.strictObject(rangeShape).superRefine(assertRang
 export const countBodySchema = z
   .strictObject({
     ...rangeShape,
-    filter: dslFilterSchema.optional(),
+    documentFilter: documentFilterSchema.optional(),
   })
   .superRefine(assertRange);

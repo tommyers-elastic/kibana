@@ -13,6 +13,7 @@
     "@kbn/code-editor",
     "@kbn/config-schema",
     "@kbn/entity-store",
+    "@kbn/es-query",
     "@kbn/es-types",
     "@kbn/i18n",
     "@kbn/i18n-react",

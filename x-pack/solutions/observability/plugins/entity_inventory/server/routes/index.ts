@@ -59,20 +59,20 @@ const listRoute = createEntityInventoryServerRoute({
     ...internal,
     summary: 'List live entities of a type',
     description:
-      'One row per entity seen in the window across the type’s sources, with identity, attributes, metrics, last_seen and entity.id; sortable, truncation-aware, with the generated ES|QL.',
+      'One row per entity seen in the window across the type’s sources, with identity, attributes, metrics, last_seen and entity.id; sortable, truncation-aware, with the generated ES|QL. documentFilter is a query DSL clause applied to documents in every source before aggregation, affecting entity membership, attributes, metrics and total.',
   },
   security: readAuthz,
   params: z.object({ path: typePathSchema, body: listBodySchema }),
   handler: async ({ request, params, getInventoryService }) => {
     const service = await getInventoryService(request);
-    const { from, to, limit, sort, filter } = params.body;
+    const { from, to, limit, sort, documentFilter } = params.body;
     try {
       return await service.list(params.path.type, {
         from,
         to,
         limit,
         sort,
-        filter: filter as QueryDslQueryContainer | undefined,
+        documentFilter: documentFilter as QueryDslQueryContainer | undefined,
       });
     } catch (error) {
       return rethrow(error);
@@ -106,18 +106,19 @@ const countRoute = createEntityInventoryServerRoute({
   options: {
     ...internal,
     summary: 'Count live entities of a type',
-    description: 'Exact distinct entity count across the type’s sources for the window.',
+    description:
+      'Exact distinct entity count across the type’s sources for the window. documentFilter is a query DSL clause applied to documents in every source before counting entities.',
   },
   security: readAuthz,
   params: z.object({ path: typePathSchema, body: countBodySchema }),
   handler: async ({ request, params, getInventoryService }) => {
     const service = await getInventoryService(request);
-    const { from, to, filter } = params.body;
+    const { from, to, documentFilter } = params.body;
     try {
       return await service.count(params.path.type, {
         from,
         to,
-        filter: filter as QueryDslQueryContainer | undefined,
+        documentFilter: documentFilter as QueryDslQueryContainer | undefined,
       });
     } catch (error) {
       return rethrow(error);

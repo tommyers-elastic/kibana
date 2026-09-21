@@ -49,19 +49,24 @@ import { executeEsql, rowsToObjects, toSourceError } from './esql_client';
 import { applyValueLabels, mergeRows, sortRows } from './merge';
 import { InventoryRequestError, InventoryTypeNotFoundError, SourceNotFoundError } from './errors';
 import type { SourceMetadataResolver } from './source_metadata';
+import {
+  analyzeDocumentFilter,
+  groupDocumentFilterWarnings,
+  type SourceDocumentFilterWarning,
+} from './document_filter';
 
 export interface ListRequest extends TimeRange {
   limit?: number;
   sort?: InventorySort;
-  /** Caller's pre-aggregation filter as query DSL; applied to every source and to the count. */
-  filter?: QueryDslQueryContainer;
+  /** Query DSL on source documents before aggregation; affects membership, attributes, metrics and count. */
+  documentFilter?: QueryDslQueryContainer;
 }
 
 export interface DetailRequest extends TimeRange {
   identity: Record<string, string>;
 }
 
-export type CountRequest = Pick<ListRequest, 'from' | 'to' | 'filter'>;
+export type CountRequest = Pick<ListRequest, 'from' | 'to' | 'documentFilter'>;
 
 interface InventoryServiceDeps {
   esClient: ElasticsearchClient;
@@ -73,6 +78,7 @@ interface InventoryServiceDeps {
 
 interface ResolvedSource extends SourcePlan {
   unavailable: InventoryUnavailableColumn[];
+  documentFilterWarnings: SourceDocumentFilterWarning[];
 }
 
 interface Resolution {
@@ -128,7 +134,7 @@ export class InventoryService {
     const started = performance.now();
     const limit = Math.min(request.limit ?? DEFAULT_LIST_LIMIT, ESQL_MAX_ROWS);
     const sort = request.sort ?? DEFAULT_SORT;
-    const resolution = await this.resolve(type);
+    const resolution = await this.resolve(type, request.documentFilter);
     this.assertSortable(resolution.columns, sort);
     const range = { from: request.from, to: request.to };
     const pushDownSort = resolution.sources.length === 1;
@@ -153,8 +159,8 @@ export class InventoryService {
         : undefined;
 
     const [sourceResults, countResult] = await Promise.all([
-      this.runSourceQueries(queries, request.filter),
-      countQuery ? this.runCount(countQuery, request.filter) : Promise.resolve(undefined),
+      this.runSourceQueries(queries, request.documentFilter),
+      countQuery ? this.runCount(countQuery, request.documentFilter) : Promise.resolve(undefined),
     ]);
 
     const inputs = sourceResults.flatMap(({ plan, rows }) =>
@@ -188,6 +194,9 @@ export class InventoryService {
       esTookMs: sumTook(queriesInfo),
       queries: queriesInfo,
       unavailableColumns: resolution.unavailableColumns,
+      documentFilterWarnings: groupDocumentFilterWarnings(
+        resolution.sources.flatMap((source) => source.documentFilterWarnings)
+      ),
       errors: [
         ...resolution.errors,
         ...sourceResults.flatMap(({ error }) => (error ? [error] : [])),
@@ -268,7 +277,7 @@ export class InventoryService {
       resolution.sources.map(({ source }) => source),
       { from: request.from, to: request.to }
     );
-    const result = await this.runCount(query, request.filter);
+    const result = await this.runCount(query, request.documentFilter);
     return {
       type,
       count: result.count,
@@ -343,7 +352,10 @@ export class InventoryService {
   }
 
   /** Loads the definition and resolves every source's engine and mapped fields, isolating failures. */
-  private async resolve(type: string): Promise<Resolution> {
+  private async resolve(
+    type: string,
+    documentFilter?: QueryDslQueryContainer
+  ): Promise<Resolution> {
     const record = await this.deps.registry.getDefinition(type);
     if (!record || !record.definition.inventory) {
       throw new InventoryTypeNotFoundError(type);
@@ -352,17 +364,34 @@ export class InventoryService {
     const identity = resolveIdentityPlan(definition);
     const columns = buildColumns(definition, identity);
     const inventory = getInventory(definition);
+    const filterAnalysis = analyzeDocumentFilter(documentFilter);
+    const metadataResults = await this.deps.metadata.resolveMany(
+      this.deps.esClient,
+      inventory.sources.map((source) => ({
+        index: source.index,
+        fields: [
+          ...new Set([...declaredFields(definition, identity, source), ...filterAnalysis.fields]),
+        ],
+      }))
+    );
 
     const settled = await Promise.allSettled(
-      inventory.sources.map(async (source): Promise<ResolvedSource> => {
-        const fields = [...new Set(declaredFields(definition, identity, source))];
-        const metadata = await this.deps.metadata.resolve(this.deps.esClient, source.index, fields);
-        const identityMapped = identity.fields.some((field) => metadata.mappedFields.has(field));
-        if (!identityMapped) {
+      inventory.sources.map(async (source, index): Promise<ResolvedSource> => {
+        const result = metadataResults[index];
+        if (result.status === 'rejected') throw result.reason;
+        const metadata = result.value;
+        const eligibleIndices = new Map(
+          [...metadata.mappedFieldsByIndex].filter(([, mapped]) =>
+            identity.compositions.some((composition) =>
+              composition.every((field) => mapped.has(field))
+            )
+          )
+        );
+        if (eligibleIndices.size === 0) {
           throw new Error(
-            `none of the identity fields (${identity.fields.join(', ')}) is mapped in "${
-              source.index
-            }"`
+            `no complete identity composition (${identity.compositions
+              .map((composition) => composition.join(' + '))
+              .join(' or ')}) is mapped in any concrete index of "${source.index}"`
           );
         }
         const unavailable: InventoryUnavailableColumn[] = [];
@@ -381,7 +410,12 @@ export class InventoryService {
             unavailable.push({ index: source.index, column: name, field });
           }
         }
-        return { source, engine: metadata.engine, unavailable };
+        const documentFilterWarnings = filterAnalysis.warningFor(source.index, eligibleIndices, [
+          ...(inventory.attributes ?? []),
+          ...(source.attributes ?? []).map(({ name }) => name),
+          ...(source.metrics ?? []).map(({ name }) => name),
+        ]);
+        return { source, engine: metadata.engine, unavailable, documentFilterWarnings };
       })
     );
 
@@ -422,7 +456,7 @@ export class InventoryService {
 
   private async runSourceQueries(
     queries: Array<{ plan: SourcePlan; query: GeneratedQuery }>,
-    filter?: QueryDslQueryContainer
+    documentFilter?: QueryDslQueryContainer
   ): Promise<
     Array<{
       plan: SourcePlan;
@@ -444,7 +478,7 @@ export class InventoryService {
           const { response } = await executeEsql(
             this.deps.esClient,
             query,
-            filter,
+            documentFilter,
             this.deps.signal
           );
           const rows = rowsToObjects(response);
@@ -469,7 +503,7 @@ export class InventoryService {
 
   private async runCount(
     query: GeneratedQuery,
-    filter?: QueryDslQueryContainer
+    documentFilter?: QueryDslQueryContainer
   ): Promise<{ count: number | null; info: InventoryQueryInfo; error?: InventorySourceError }> {
     const info: InventoryQueryInfo = {
       index: '*',
@@ -478,7 +512,12 @@ export class InventoryService {
       params: Object.assign({}, ...query.params),
     };
     try {
-      const { response } = await executeEsql(this.deps.esClient, query, filter, this.deps.signal);
+      const { response } = await executeEsql(
+        this.deps.esClient,
+        query,
+        documentFilter,
+        this.deps.signal
+      );
       info.tookMs = response.took;
       info.documentsFound = response.documents_found;
       const countIndex = response.columns.findIndex(({ name }) => name === COUNT_COLUMN);

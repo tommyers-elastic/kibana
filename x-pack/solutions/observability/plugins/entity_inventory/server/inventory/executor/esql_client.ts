@@ -19,14 +19,14 @@ export interface EsqlResult {
 
 /**
  * Runs one generated query. Named parameters travel as request parameters, never interpolated; an
- * optional query DSL `filter` (the caller's pre-aggregation filter) is applied by Elasticsearch
- * before the pipeline. The client's response type lacks `documents_found`; `ESQLSearchResponse`
+ * optional query DSL `documentFilter` is applied by Elasticsearch before the pipeline.
+ * The client's response type lacks `documents_found`; `ESQLSearchResponse`
  * from `@kbn/es-types` has it.
  */
 export const executeEsql = async (
   esClient: ElasticsearchClient,
   { esql, params }: GeneratedQuery,
-  filter?: QueryDslQueryContainer,
+  documentFilter?: QueryDslQueryContainer,
   signal?: AbortSignal
 ): Promise<EsqlResult> => {
   const started = performance.now();
@@ -35,7 +35,7 @@ export const executeEsql = async (
       query: esql,
       // The client types named parameters as positional values; the wire format is the same.
       params: params as unknown as FieldValue[],
-      ...(filter ? { filter } : {}),
+      ...(documentFilter ? { filter: documentFilter } : {}),
     },
     { signal }
   )) as unknown as ESQLSearchResponse;

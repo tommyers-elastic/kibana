@@ -82,15 +82,49 @@ dedicated authoring assistant into Agent Builder. Everything lives under `server
 | route | purpose |
 | --- | --- |
 | `GET /internal/entity_inventory/types` | types with an inventory extension: label, identity, output columns, sources |
-| `POST /internal/entity_inventory/entities/{type}/_list` | `{ from, to, limit?, sort?, filter? }` → rows, exact `total`, `truncated`, timings, generated queries |
+| `POST /internal/entity_inventory/entities/{type}/_list` | `{ from, to, limit?, sort?, documentFilter? }` → rows, exact `total`, `truncated`, timings, generated queries |
 | `POST /internal/entity_inventory/entities/{type}/_detail` | `{ from, to, identity: { field: value } }` → the same shape for one entity |
-| `POST /internal/entity_inventory/entities/{type}/_count` | `{ from, to, filter? }` → exact distinct count |
+| `POST /internal/entity_inventory/entities/{type}/_count` | `{ from, to, documentFilter? }` → exact distinct count |
 | `POST /internal/entity_inventory/entities/{type}/_document_counts` | `{ from, to }` → documents in the window per source pattern, before any predicate (the denominator for a list query's `documentsFound`; kept out of the list's timings) |
 
 `from`/`to` are absolute ISO instants (the generator never uses `NOW()`); `limit` is 1 to 10,000;
-`sort` names any output column; `filter` is one query DSL clause applied as the ES|QL request
-`filter` (never interpolated). Every response returns the generated ES|QL per query with its
-parameters, ES `took`, `documents_found` and row count, plus end-to-end `tookMs`.
+`sort` names any output column. `documentFilter` is one query DSL clause against source document
+fields, passed as the ES|QL request `filter` (never interpolated). It applies to every source before
+aggregation and to the count query, alongside the time window and definition-level source predicates.
+Only matching documents contribute to entity membership, attributes, metrics and counts. For example,
+filtering on `stream: stderr` counts and aggregates matching stderr documents; sources whose documents
+do not match contribute nothing, even if they describe the same entity. Output metric names and
+attribute display labels are not source document fields.
+
+The definition's per-source `filter` remains an ES|QL expression selecting documents for that source.
+The preview UI's "Filter the returned rows" search runs locally over the merged rows already fetched
+(up to 10,000), without changing their aggregates or the API total. There is no API `entityFilter`.
+
+The preview's optional "Document filter (KQL)" input sends `documentFilter` when Run is clicked.
+List responses include advisory `documentFilterWarnings` identifying sources, unmapped fields,
+excluded concrete indices and potentially affected columns. A warning distinguishes exclusion of
+every identity-capable index in a source from exclusion of only some of those indices. It does not
+skip the source or rewrite the filter. Count query generation is unchanged.
+Equivalent warnings are grouped by identity-capable backing indices and per-index exclusion reasons;
+`sourcePatterns` and affected columns retain the union of the contributing sources. Partially
+overlapping coverage remains separate.
+
+Metadata resolution shares settings lookups by source pattern and requests field capabilities once
+for the union of resolved backing indices and required fields. Each source receives its own subset
+for validation and engine selection. Settings and field capabilities have separate short-lived
+caches. If the batched field-capabilities request fails, it retries by pattern to isolate failures.
+
+Source validation requires every field of at least one identity composition to be mapped together
+in at least one concrete index. Filter warnings consider only indices satisfying that condition.
+The mapping analysis supports positive `term`, `terms`, `range`, `exists`, `prefix`, `wildcard`,
+`regexp`, `match` and `match_phrase` clauses, combined with `bool.must`, `filter` and `should`
+(default or nonnegative integer `minimum_should_match`). Negations, opaque clauses, wildcard field
+names and complex `minimum_should_match` expressions are not used to prove exclusions. Analysis is
+bounded to 256 nodes and 16 nesting levels. No warning does not guarantee complete coverage: mappings
+do not establish that fields are populated on every document, and unsupported clauses remain opaque.
+
+Every response returns the generated ES|QL per query with its parameters, ES `took`, `documents_found`
+and row count, plus end-to-end `tookMs`.
 
 ## Query shapes
 

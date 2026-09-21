@@ -15,6 +15,7 @@ import {
   EuiCodeBlock,
   EuiDescriptionList,
   EuiFieldNumber,
+  EuiFieldText,
   EuiFlexGroup,
   EuiFlexItem,
   EuiFormRow,
@@ -29,6 +30,7 @@ import {
   type EuiBasicTableColumn,
 } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
+import { fromKueryExpression, toElasticsearchQuery } from '@kbn/es-query';
 import { KbnDangerCallout, KbnInfoCallout, KbnWarningCallout } from '@kbn/ui-callout';
 import type {
   InventoryColumn,
@@ -239,6 +241,22 @@ const queryItems = (query: InventoryQueryInfo, count?: InventoryDocumentCount) =
 export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewProps) => {
   const [range, setRange] = useState<RelativeRange>('15m');
   const [limit, setLimit] = useState<number>(DEFAULT_PREVIEW_LIMIT);
+  const [documentFilterText, setDocumentFilterText] = useState('');
+  const documentFilterInput = useMemo(() => {
+    try {
+      return {
+        filter: documentFilterText.trim()
+          ? toElasticsearchQuery(fromKueryExpression(documentFilterText))
+          : undefined,
+      };
+    } catch {
+      return {
+        error: i18n.translate('xpack.entityInventory.preview.documentFilterErrorMessage', {
+          defaultMessage: 'Enter a valid KQL document filter.',
+        }),
+      };
+    }
+  }, [documentFilterText]);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<InventoryListResponse | undefined>();
   const [error, setError] = useState<DescribedError | undefined>();
@@ -259,6 +277,7 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
   const tableRows = useMemo(() => (result === undefined ? [] : toPreviewRows(result)), [result]);
 
   const run = async () => {
+    if (documentFilterInput.error) return;
     const runId = ++runIdRef.current;
     const isCurrent = () => runId === runIdRef.current;
     const { from, to } = relativeRangeToAbsolute(range);
@@ -289,7 +308,12 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
       });
 
     try {
-      const listResult = await api.list(type, { from, to, limit });
+      const listResult = await api.list(type, {
+        from,
+        to,
+        limit,
+        documentFilter: documentFilterInput.filter,
+      });
       if (isCurrent()) {
         setResult(listResult);
       }
@@ -382,6 +406,7 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
               iconType="play"
               onClick={run}
               isLoading={isRunning}
+              isDisabled={Boolean(documentFilterInput.error)}
               size="s"
             >
               {i18n.translate('xpack.entityInventory.preview.runButton', {
@@ -391,6 +416,30 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
           </EuiFormRow>
         </EuiFlexItem>
       </EuiFlexGroup>
+      <EuiSpacer size="m" />
+      <EuiFormRow
+        fullWidth
+        label={i18n.translate('xpack.entityInventory.preview.documentFilterLabel', {
+          defaultMessage: 'Document filter (KQL)',
+        })}
+        helpText={i18n.translate('xpack.entityInventory.preview.documentFilterDescription', {
+          defaultMessage:
+            'Optional. Filters source documents before aggregation, changing which entities, attributes and metrics contribute. Use source field names.',
+        })}
+        isInvalid={Boolean(documentFilterInput.error)}
+        error={documentFilterInput.error}
+      >
+        <EuiFieldText
+          fullWidth
+          data-test-subj="entityInventoryDocumentFilter"
+          value={documentFilterText}
+          isInvalid={Boolean(documentFilterInput.error)}
+          onChange={(event) => setDocumentFilterText(event.target.value)}
+          placeholder={i18n.translate('xpack.entityInventory.preview.documentFilterPlaceholder', {
+            defaultMessage: 'environment: prod',
+          })}
+        />
+      </EuiFormRow>
       <EuiSpacer size="l" />
 
       {error && (
@@ -567,6 +616,63 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
                       {statusCode !== undefined
                         ? `${index}: [${statusCode}] ${message}`
                         : `${index}: ${message}`}
+                    </li>
+                  ))}
+                </ul>
+              </KbnWarningCallout>
+              <EuiSpacer size="m" />
+            </>
+          )}
+
+          {(result.documentFilterWarnings?.length ?? 0) > 0 && (
+            <>
+              <KbnWarningCallout
+                size="s"
+                data-test-subj="entityInventoryDocumentFilterWarnings"
+                title={i18n.translate('xpack.entityInventory.preview.documentFilterWarningsTitle', {
+                  defaultMessage: 'Document filter excludes some data sources',
+                })}
+              >
+                <ul>
+                  {result.documentFilterWarnings?.map((warning, index) => (
+                    <li key={`${warning.sourcePatterns.join(',')}-${index}`}>
+                      {warning.code === 'source_excluded'
+                        ? i18n.translate(
+                            'xpack.entityInventory.preview.documentFilterSourceDescription',
+                            {
+                              defaultMessage:
+                                '{source}: the filter cannot match any index with a complete identity because required fields are unmapped: {fields}.',
+                              values: {
+                                source: warning.sourcePatterns.join(', '),
+                                fields: warning.fields.join(', '),
+                              },
+                            }
+                          )
+                        : i18n.translate(
+                            'xpack.entityInventory.preview.documentFilterIndicesDescription',
+                            {
+                              defaultMessage:
+                                '{source}: the filter cannot match {excluded} of {total} indices with a complete identity because required fields are unmapped: {fields}.',
+                              values: {
+                                source: warning.sourcePatterns.join(', '),
+                                excluded: warning.excludedIndices.length,
+                                total: warning.eligibleIndexCount,
+                                fields: warning.fields.join(', '),
+                              },
+                            }
+                          )}
+                      {warning.columns.length > 0 && (
+                        <p>
+                          {i18n.translate(
+                            'xpack.entityInventory.preview.documentFilterColumnsDescription',
+                            {
+                              defaultMessage:
+                                'Attributes and metrics that may be affected: {columns}.',
+                              values: { columns: warning.columns.join(', ') },
+                            }
+                          )}
+                        </p>
+                      )}
                     </li>
                   ))}
                 </ul>

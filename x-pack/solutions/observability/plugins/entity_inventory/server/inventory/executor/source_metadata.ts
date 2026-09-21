@@ -16,11 +16,12 @@ export interface SourceMetadata {
   engine: InventoryEngine;
   /** Declared fields that are mapped in at least one concrete index. */
   mappedFields: Set<string>;
+  mappedFieldsByIndex: Map<string, Set<string>>;
 }
 
-interface CacheEntry {
+interface CacheEntry<T> {
   expiresAt: number;
-  value: Promise<SourceMetadata>;
+  value: Promise<T>;
 }
 
 interface SettingsResponse {
@@ -37,39 +38,124 @@ interface SettingsResponse {
 const indexMode = (entry: SettingsResponse[string]): string =>
   entry.settings?.index?.mode ?? entry.defaults?.index?.mode ?? 'standard';
 
-/**
- * Resolves, per source pattern, what the generator cannot know from the definition: which engine
- * the pattern supports and which declared fields exist. Two cheap calls (`_settings/index.mode`
- * and `_field_caps`), cached per pattern and field set for a short TTL. The cache is shared across
- * users; it holds index names and field names only.
- */
+interface SourceIndices {
+  indices: string[];
+  engine: InventoryEngine;
+}
+
+interface MetadataRequest {
+  index: string;
+  fields: string[];
+}
+
+/** Shares index resolution and field capabilities across sources while retaining per-source results. */
 export class SourceMetadataResolver {
-  private readonly cache = new Map<string, CacheEntry>();
+  private readonly indexCache = new Map<string, CacheEntry<SourceIndices>>();
+  private readonly fieldCache = new Map<string, CacheEntry<Map<string, Set<string>>>>();
 
   constructor(private readonly ttlMs: number) {}
 
-  resolve(esClient: ElasticsearchClient, index: string, fields: string[]): Promise<SourceMetadata> {
-    const key = `${index}|${[...fields].sort().join(',')}`;
-    const now = Date.now();
-    const cached = this.cache.get(key);
-    if (cached && cached.expiresAt > now) {
-      return cached.value;
-    }
-    const value = this.load(esClient, index, fields);
-    this.cache.set(key, { expiresAt: now + this.ttlMs, value });
-    value.catch(() => this.cache.delete(key));
-    return value;
-  }
-
-  clear(): void {
-    this.cache.clear();
-  }
-
-  private async load(
+  async resolve(
     esClient: ElasticsearchClient,
     index: string,
     fields: string[]
   ): Promise<SourceMetadata> {
+    const [result] = await this.resolveMany(esClient, [{ index, fields }]);
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  }
+
+  async resolveMany(
+    esClient: ElasticsearchClient,
+    requests: MetadataRequest[]
+  ): Promise<Array<PromiseSettledResult<SourceMetadata>>> {
+    const patterns = [...new Set(requests.map(({ index }) => index))];
+    const resolutions = await Promise.allSettled(
+      patterns.map((index) =>
+        this.cached(this.indexCache, index, () => this.loadIndices(esClient, index))
+      )
+    );
+    const byPattern = new Map(patterns.map((pattern, index) => [pattern, resolutions[index]]));
+    const indices = [
+      ...new Set(
+        resolutions.flatMap((result) => (result.status === 'fulfilled' ? result.value.indices : []))
+      ),
+    ].sort();
+    const fields = [
+      ...new Set(
+        requests.flatMap((request) =>
+          byPattern.get(request.index)?.status === 'fulfilled' ? request.fields : []
+        )
+      ),
+    ].sort();
+
+    let sharedFields: Map<string, Set<string>> | undefined;
+    try {
+      sharedFields = await this.resolveFields(esClient, indices, fields);
+    } catch {
+      // Retry per pattern to isolate a field-caps failure to its sources, as before batching.
+    }
+    const fallbackByPattern = new Map<string, Promise<Map<string, Set<string>>>>();
+    return Promise.allSettled(
+      requests.map(async (request): Promise<SourceMetadata> => {
+        const resolution = byPattern.get(request.index);
+        if (!resolution) throw new SourceNotFoundError(request.index);
+        if (resolution.status === 'rejected') throw resolution.reason;
+        const { indices: sourceIndices, engine } = resolution.value;
+        let allFields = sharedFields;
+        if (!allFields) {
+          let fallback = fallbackByPattern.get(request.index);
+          if (!fallback) {
+            const sourceFields = [
+              ...new Set(
+                requests
+                  .filter(({ index }) => index === request.index)
+                  .flatMap((item) => item.fields)
+              ),
+            ].sort();
+            fallback = this.resolveFields(esClient, sourceIndices, sourceFields);
+            fallbackByPattern.set(request.index, fallback);
+          }
+          allFields = await fallback;
+        }
+        const mappedFieldsByIndex = new Map(
+          sourceIndices.map((index) => [
+            index,
+            new Set(request.fields.filter((field) => allFields.get(index)?.has(field))),
+          ])
+        );
+        return {
+          indices: sourceIndices,
+          engine,
+          mappedFieldsByIndex,
+          mappedFields: new Set([...mappedFieldsByIndex.values()].flatMap((mapped) => [...mapped])),
+        };
+      })
+    );
+  }
+
+  clear(): void {
+    this.indexCache.clear();
+    this.fieldCache.clear();
+  }
+
+  private cached<T>(
+    cache: Map<string, CacheEntry<T>>,
+    key: string,
+    load: () => Promise<T>
+  ): Promise<T> {
+    const now = Date.now();
+    const cached = cache.get(key);
+    if (cached && cached.expiresAt > now) return cached.value;
+    const value = load();
+    cache.set(key, { expiresAt: now + this.ttlMs, value });
+    value.catch(() => {
+      if (cache.get(key)?.value === value) cache.delete(key);
+    });
+    return value;
+  }
+
+  private async loadIndices(esClient: ElasticsearchClient, index: string): Promise<SourceIndices> {
     const settings = (await esClient.indices.getSettings({
       index,
       name: 'index.mode',
@@ -79,31 +165,42 @@ export class SourceMetadataResolver {
       expand_wildcards: ['open', 'hidden'],
     })) as SettingsResponse;
     const indices = Object.keys(settings).sort();
-    if (indices.length === 0) {
-      throw new SourceNotFoundError(index);
-    }
-    const engine: InventoryEngine = indices.every(
-      (name) => indexMode(settings[name]) === 'time_series'
-    )
+    if (indices.length === 0) throw new SourceNotFoundError(index);
+    const engine = indices.every((name) => indexMode(settings[name]) === 'time_series')
       ? 'TS'
       : 'FROM';
+    return { indices, engine };
+  }
 
-    const mappedFields = new Set<string>();
-    if (fields.length > 0) {
+  private resolveFields(
+    esClient: ElasticsearchClient,
+    indices: string[],
+    fields: string[]
+  ): Promise<Map<string, Set<string>>> {
+    const key = JSON.stringify([indices, fields]);
+    return this.cached(this.fieldCache, key, async () => {
+      const mappedFieldsByIndex = new Map(indices.map((index) => [index, new Set<string>()]));
+      if (indices.length === 0 || fields.length === 0) return mappedFieldsByIndex;
       const caps = await esClient.fieldCaps({
-        index,
+        index: indices,
         fields,
+        include_unmapped: true,
         ignore_unavailable: true,
         allow_no_indices: true,
         expand_wildcards: ['open', 'hidden'],
         filters: '-metadata',
       });
       for (const [field, types] of Object.entries(caps.fields)) {
-        if (fields.includes(field) && Object.keys(types).some((type) => type !== 'unmapped')) {
-          mappedFields.add(field);
+        if (!fields.includes(field)) continue;
+        const unmappedIndices = new Set(types.unmapped?.indices ?? []);
+        for (const [type, capabilities] of Object.entries(types)) {
+          if (type === 'unmapped') continue;
+          for (const name of capabilities.indices ?? indices) {
+            if (!unmappedIndices.has(name)) mappedFieldsByIndex.get(name)?.add(field);
+          }
         }
       }
-    }
-    return { indices, engine, mappedFields };
+      return mappedFieldsByIndex;
+    });
   }
 }

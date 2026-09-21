@@ -114,6 +114,16 @@ export interface InventoryUnavailableColumn {
 
 export type InventoryRow = Record<string, unknown>;
 
+export interface InventoryDocumentFilterWarning {
+  sourcePatterns: string[];
+  code: 'source_excluded' | 'indices_excluded';
+  fields: string[];
+  excludedIndices: string[];
+  /** Only indices with a complete identity composition are considered. */
+  eligibleIndexCount: number;
+  columns: string[];
+}
+
 /**
  * Which source supplied each merged attribute or metric value of a row, keyed by `entity.id` then
  * column name (the source's index pattern). Only columns that came from a source are listed.
@@ -133,6 +143,7 @@ export interface InventoryListResponse {
   esTookMs: number;
   queries: InventoryQueryInfo[];
   unavailableColumns: InventoryUnavailableColumn[];
+  documentFilterWarnings?: InventoryDocumentFilterWarning[];
   errors: InventorySourceError[];
 }
 
