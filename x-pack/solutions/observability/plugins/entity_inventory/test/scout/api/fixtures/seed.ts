@@ -215,7 +215,6 @@ export const POD_DEFINITION = {
   materialisation: { mode: 'none' },
   inventory: {
     label: 'Test pod',
-    identity: ['kubernetes.pod.uid'],
     attributes: POD_ATTRIBUTES,
     sources: [
       {
@@ -257,7 +256,6 @@ export const POD_SINGLE_DEFINITION = {
   identityField: { singleField: 'kubernetes.pod.uid' },
   materialisation: { mode: 'none' },
   inventory: {
-    identity: ['kubernetes.pod.uid'],
     attributes: POD_ATTRIBUTES,
     sources: [{ index: METRICS_INDEX, metrics: POD_METRICS }],
   },
@@ -270,7 +268,6 @@ export const POD_STANDARD_DEFINITION = {
   identityField: { singleField: 'kubernetes.pod.uid' },
   materialisation: { mode: 'none' },
   inventory: {
-    identity: ['kubernetes.pod.uid'],
     attributes: POD_ATTRIBUTES,
     sources: [{ index: STANDARD_INDEX, metrics: POD_METRICS }],
   },
@@ -309,7 +306,6 @@ export const GROUP_DEFINITION = {
   },
   materialisation: { mode: 'none' },
   inventory: {
-    identity: ['kubernetes.namespace', 'kubernetes.node.name'],
     sources: [
       {
         index: METRICS_INDEX,

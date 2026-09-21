@@ -327,7 +327,11 @@ export class InventoryService {
     return {
       type: definition.type,
       label: inventory.label ?? definition.type,
-      identity: { kind: identity.kind, fields: identity.fields },
+      identity: {
+        kind: identity.kind,
+        fields: identity.fields,
+        compositions: identity.compositions,
+      },
       columns: buildColumns(definition, identity),
       sources: inventory.sources.map(({ index, filter }) => ({
         index,

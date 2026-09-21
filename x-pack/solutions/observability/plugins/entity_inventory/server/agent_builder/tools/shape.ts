@@ -13,8 +13,7 @@ import type {
   EntityDefinitionRecord,
   EntityDefinitionSource,
 } from '@kbn/entity-store/common';
-import { getInventoryIdentity } from '@kbn/entity-store/common';
-import { euid } from '@kbn/entity-store/common/euid_helpers';
+import { getInventoryIdentityPlan } from '@kbn/entity-store/common';
 import {
   DynamicDefinitionsDisabledError,
   EntityDefinitionAlreadyExistsError,
@@ -24,7 +23,11 @@ import {
   InventoryExtensionAlreadyExistsError,
   InventoryExtensionCodeRegisteredError,
 } from '@kbn/entity-store/server';
-import type { InventoryIdentityDescriptor, InventoryListResponse } from '../../../common';
+import {
+  formatIdentityCompositions,
+  type InventoryIdentityDescriptor,
+  type InventoryListResponse,
+} from '../../../common';
 
 /** What the tool user may do with a record through the definitions API. */
 export type DocumentKind = 'definition' | 'extension' | 'read_only';
@@ -56,14 +59,10 @@ export interface DefinitionDocumentResult {
   document: Record<string, unknown>;
 }
 
-/** The authored tuple, or the fields a built-in's ranking may fall back through. */
+/** Read from `identityField`: one composition is a tuple, several are ranked alternatives. */
 export const describeIdentity = (definition: EntityDefinition): InventoryIdentityDescriptor => {
-  const tuple = getInventoryIdentity(definition);
-  if (tuple) {
-    return { kind: 'tuple', fields: tuple };
-  }
-  const { identitySourceFields } = euid.fromDefinition.getEuidSourceFields(definition);
-  return { kind: 'ranking', fields: identitySourceFields };
+  const { compositions, fields } = getInventoryIdentityPlan(definition);
+  return { kind: compositions.length === 1 ? 'tuple' : 'ranking', fields, compositions };
 };
 
 const editability = (
@@ -156,9 +155,34 @@ const asRecord = (value: unknown): Record<string, unknown> | undefined =>
 const asStrings = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 
+/** Field compositions of an unvalidated `identityField` block; empty when the shape is not recognised. */
+const identityCompositionsOf = (identityField: unknown): string[][] => {
+  const block = asRecord(identityField);
+  if (!block) {
+    return [];
+  }
+  if (typeof block.singleField === 'string') {
+    return [[block.singleField]];
+  }
+  const branches = asRecord(block.euidRanking)?.branches;
+  if (!Array.isArray(branches)) {
+    return [];
+  }
+  return branches.flatMap((branch) => {
+    const ranking = asRecord(branch)?.ranking;
+    return Array.isArray(ranking)
+      ? ranking.map((composition) =>
+          (Array.isArray(composition) ? composition : [])
+            .map(asRecord)
+            .flatMap((part) => (typeof part?.field === 'string' ? [part.field] : []))
+        )
+      : [];
+  });
+};
+
 /**
- * Markdown summary of a candidate document for the confirmation dialog: kind, type, identity,
- * attributes and every source with its index, filter and metric names. Tolerates any shape, since
+ * Markdown summary of a candidate document for the confirmation dialog: kind, type, identity
+ * (from `identityField`), attributes and every source with its index, filter and metric names. Tolerates any shape, since
  * the document has not been validated when the user is asked.
  */
 export const summarizeDocument = (document: Record<string, unknown>): string => {
@@ -173,9 +197,13 @@ export const summarizeDocument = (document: Record<string, unknown>): string => 
   if (typeof inventory?.label === 'string') {
     lines.push(`Label: ${inventory.label}`);
   }
-  const identity = asStrings(inventory?.identity);
-  if (identity.length > 0) {
-    lines.push(`Identity: ${identity.map((field) => `\`${field}\``).join(' + ')}`);
+  const compositions = identityCompositionsOf(document.identityField);
+  if (compositions.length > 0) {
+    lines.push(
+      `Identity: ${formatIdentityCompositions(
+        compositions.map((composition) => composition.map((field) => `\`${field}\``))
+      )}`
+    );
   }
   const attributes = asStrings(inventory?.attributes);
   if (attributes.length > 0) {
@@ -311,15 +339,17 @@ export const shapePreview = (
   })),
   rows: response.rows,
   provenance: response.provenance,
-  queries: response.queries.map(({ index, engine, tookMs, documentsFound, rows, capped, esql }) => ({
-    index,
-    engine,
-    ...(tookMs !== undefined ? { tookMs } : {}),
-    ...(documentsFound !== undefined ? { documentsFound } : {}),
-    ...(rows !== undefined ? { rows } : {}),
-    ...(capped ? { capped } : {}),
-    esql,
-  })),
+  queries: response.queries.map(
+    ({ index, engine, tookMs, documentsFound, rows, capped, esql }) => ({
+      index,
+      engine,
+      ...(tookMs !== undefined ? { tookMs } : {}),
+      ...(documentsFound !== undefined ? { documentsFound } : {}),
+      ...(rows !== undefined ? { rows } : {}),
+      ...(capped ? { capped } : {}),
+      esql,
+    })
+  ),
   errors: response.errors,
   unavailableColumns: response.unavailableColumns,
   esTookMs: response.esTookMs,

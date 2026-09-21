@@ -11,7 +11,8 @@ describe('buildAskAiMessage', () => {
   it('quotes the type and embeds the pretty-printed document in a json code block', () => {
     const message = buildAskAiMessage('k8s.pod', {
       type: 'k8s.pod',
-      inventory: { identity: ['kubernetes.pod.uid'], sources: [{ index: 'metrics-*' }] },
+      identityField: { singleField: 'kubernetes.pod.uid' },
+      inventory: { sources: [{ index: 'metrics-*' }] },
     });
 
     expect(message).toBe(
@@ -20,10 +21,10 @@ describe('buildAskAiMessage', () => {
         '```json',
         '{',
         '  "type": "k8s.pod",',
+        '  "identityField": {',
+        '    "singleField": "kubernetes.pod.uid"',
+        '  },',
         '  "inventory": {',
-        '    "identity": [',
-        '      "kubernetes.pod.uid"',
-        '    ],',
         '    "sources": [',
         '      {',
         '        "index": "metrics-*"',

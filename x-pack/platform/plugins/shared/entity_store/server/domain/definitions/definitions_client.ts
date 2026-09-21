@@ -11,10 +11,7 @@ import type {
   BuiltInInventoryExtensionDocument,
   EntityDefinitionWithoutId,
 } from '../../../common/domain/definitions/entity_schema';
-import {
-  getInventoryIdentity,
-  isBuiltInInventoryExtensionDocument,
-} from '../../../common/domain/definitions/entity_schema';
+import { isBuiltInInventoryExtensionDocument } from '../../../common/domain/definitions/entity_schema';
 import {
   isBuiltInEntityType,
   type BuiltInEntityType,
@@ -298,13 +295,11 @@ const extensionRecord = (
   });
 };
 
-/** The identity core is `identityField` (and its authoring form `inventory.identity`). */
+/** `identityField` is the single identity declaration; anything else may change freely. */
 const identityChanged = (
   before: EntityDefinitionWithoutId,
   after: EntityDefinitionWithoutId
-): boolean =>
-  !isEqual(before.identityField, after.identityField) ||
-  !isEqual(getInventoryIdentity(before), getInventoryIdentity(after));
+): boolean => !isEqual(before.identityField, after.identityField);
 
 function assertNotReserved(type: string, codeDefinitions: CodeDefinitionsRegistry): void {
   assertRegistrableDefinition(

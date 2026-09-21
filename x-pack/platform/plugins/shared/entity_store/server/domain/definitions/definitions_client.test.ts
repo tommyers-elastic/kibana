@@ -17,7 +17,7 @@ import {
   k8sPodInventoryDefinition,
 } from '../../../common/domain/definitions/__fixtures__/inventory_definitions';
 import { buildInventoryEntityDefinition } from '../../../common/domain/definitions/inventory_definition';
-import { getInventoryIdentity } from '../../../common/domain/definitions/entity_schema';
+import { getInventoryIdentityPlan } from '../../../common/domain/definitions/entity_schema';
 import { hostEntityDefinition } from '../../../common/domain/definitions/host';
 import { getEntityDefinition as getBuiltInEntityDefinition } from '../../../common/domain/definitions/registry';
 import {
@@ -195,11 +195,11 @@ describe('EntityDefinitionsClient', () => {
     });
 
     it('keeps createdAt and stamps updatedAt when identity is unchanged', async () => {
-      const relabelled = buildInventoryEntityDefinition({
-        type: 'k8s.deployment',
+      const relabelled = {
+        ...k8sDeploymentInventoryDefinition,
         name: 'renamed',
-        inventory: { ...k8sDeploymentInventoryDefinition.inventory!, label: 'Deployments' },
-      });
+        inventory: { ...k8sDeploymentInventoryDefinition.inventory, label: 'Deployments' },
+      };
       const record = await client.replace('k8s.deployment', relabelled);
 
       expect(soClient.update).toHaveBeenCalledWith(
@@ -223,14 +223,8 @@ describe('EntityDefinitionsClient', () => {
       const reidentified = buildInventoryEntityDefinition({
         type: 'k8s.deployment',
         name: k8sDeploymentInventoryDefinition.name,
-        inventory: {
-          ...k8sDeploymentInventoryDefinition.inventory!,
-          identity: [
-            'kubernetes.cluster.name',
-            'kubernetes.namespace',
-            'kubernetes.deployment.name',
-          ],
-        },
+        identity: ['kubernetes.cluster.name', 'kubernetes.namespace', 'kubernetes.deployment.name'],
+        inventory: k8sDeploymentInventoryDefinition.inventory,
       });
       await expect(client.replace('k8s.deployment', reidentified)).rejects.toThrow(
         EntityDefinitionIdentityChangedError
@@ -238,7 +232,7 @@ describe('EntityDefinitionsClient', () => {
       expect(soClient.update).not.toHaveBeenCalled();
 
       const record = await client.replace('k8s.deployment', reidentified, { force: true });
-      expect(getInventoryIdentity(record.definition)).toHaveLength(3);
+      expect(getInventoryIdentityPlan(record.definition).fields).toHaveLength(3);
     });
 
     it('rejects a body whose type differs from the path', async () => {

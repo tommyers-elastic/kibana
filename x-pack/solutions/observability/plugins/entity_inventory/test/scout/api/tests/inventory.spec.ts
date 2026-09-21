@@ -108,7 +108,11 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
       const pod = types.find((type) => type.type === 'invtest.pod');
       expect(pod).toBeDefined();
       expect(pod?.label).toBe('Test pod');
-      expect(pod?.identity).toStrictEqual({ kind: 'tuple', fields: ['kubernetes.pod.uid'] });
+      expect(pod?.identity).toStrictEqual({
+        kind: 'tuple',
+        fields: ['kubernetes.pod.uid'],
+        compositions: [['kubernetes.pod.uid']],
+      });
       expect(pod?.columns.map(({ name, kind }) => `${kind}:${name}`)).toStrictEqual([
         'entity_id:entity.id',
         'identity:kubernetes.pod.uid',
@@ -132,6 +136,7 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
       expect(group?.identity).toStrictEqual({
         kind: 'tuple',
         fields: ['kubernetes.namespace', 'kubernetes.node.name'],
+        compositions: [['kubernetes.namespace', 'kubernetes.node.name']],
       });
     }
   );

@@ -115,12 +115,17 @@ TS metrics-kubernetes.pod-*
 | LIMIT 10000
 ```
 
-- **Identity** is grouped on raw mapped fields and the id is computed on the aggregated rows with
-  the store's EUID compiler. Tuple identities group by all their fields; ranked identities (built-in
-  types such as `host`, and authored types with `identityMode: "ranked"`, e.g. a claim id carried as
-  `halcyon.claim_id` in traces and `claim_id` in logs) group by every alternative and the compiler
-  picks the first present one per row, so the same value under different field names yields one
-  entity that the merge unions across sources. Computing the id per document is 200x slower.
+- **Identity** is read from the definition's `identityField`, the single identity declaration of
+  every type (`getInventoryIdentityPlan` in the store: one field list per ranking composition).
+  Rows are grouped on the raw mapped fields and the id is computed on the aggregated rows with the
+  store's EUID compiler. One composition is a tuple: every field required, `k8s.deployment` by
+  `kubernetes.namespace + kubernetes.deployment.name`. Several compositions are a ranking (built-in
+  types such as `host`, and authored alternatives such as a claim id carried as `halcyon.claim_id`
+  in traces and `claim_id` in logs): rows group by every alternative and the compiler picks the
+  first present one per row, so the same value under different field names yields one entity that
+  the merge unions across sources. The store validates authored inventory definitions to the subset
+  served here (literal fields, one unconditional branch, no field evaluations, the derived presence
+  `documentsFilter`). Computing the id per document is 200x slower.
 - **Existence per source**: a source with metrics lists the entities that reported at least one
   of them in the window (explicit in `WHERE`, which is also what `TS` does implicitly); a source
   without metrics lists every identity occurrence. Type-level existence is the union. Only value

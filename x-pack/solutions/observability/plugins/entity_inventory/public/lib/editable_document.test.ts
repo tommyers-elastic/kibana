@@ -26,7 +26,6 @@ const apiRecord = {
     materialisation: { mode: 'none' },
     inventory: {
       label: 'K8s Pod',
-      identity: ['kubernetes.pod.uid'],
       sources: [{ index: 'metrics-kubernetes.pod-*' }, { index: 'metrics-k8s.otel-*' }],
     },
   },
@@ -108,7 +107,10 @@ describe('getTemplate', () => {
       type: expect.any(String),
       identityField: { singleField: expect.any(String) },
       materialisation: { mode: 'none' },
-      inventory: { identity: expect.any(Array), sources: expect.any(Array) },
+      inventory: { sources: expect.any(Array) },
+    });
+    expect(getTemplate('definition')).not.toMatchObject({
+      inventory: { identity: expect.anything() },
     });
     expect(getTemplate('extension')).toMatchObject({ extends: 'host' });
     expect(getTemplate('extension', 'user')).toMatchObject({ extends: 'user' });

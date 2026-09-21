@@ -14,7 +14,7 @@ plus optional, independently validated **solution extensions**. The core is what
   name: '...',
   identityField: { ... },                 // singleField | { euidRanking, documentsFilter, fieldEvaluations? }
   materialisation?: { mode: 'extraction', fields, ... } | { mode: 'none' },
-  inventory?: { identity, sources, ... },
+  inventory?: { label?, attributes?, sources },
 }
 ```
 
@@ -22,7 +22,7 @@ plus optional, independently validated **solution extensions**. The core is what
 | --- | --- | --- |
 | Identity core (`type`, `name`, `identityField`) | `identity_core_schema.ts` | EUID compiler (all five backends), extraction, CRUD |
 | Materialisation extension | `materialisation_schema.ts` | Logs extraction, component templates, CRUD field validation, single-document creation |
-| Inventory extension (`identity`, `attributes`, `sources[].{index, filter, metrics, attributes}`, `label`) | `inventory_schema.ts` | Inventory query generation (later stage) |
+| Inventory extension (`label`, `attributes`, `sources[].{index, filter, metrics, attributes}`) | `inventory_schema.ts` | Inventory query generation (`entityInventory` plugin) |
 
 ### Materialisation modes
 
@@ -40,23 +40,36 @@ plus optional, independently validated **solution extensions**. The core is what
 iterates; accessors such as `getMaterialisation()`, `getEntityFields()` and `getPostAggFilter()` in
 `entity_schema.ts` read the extension safely for either mode.
 
-### Identity tuple authoring form (inventory definitions)
+### Identity of inventory definitions: `identityField`, restricted to what the generator serves
 
-Observability definitions author identity as an ordered list of **literal, mapped field paths**:
+`identityField` is the single identity declaration of every type, authored and built-in alike; the
+inventory extension never repeats it. The inventory query generator groups rows `BY` the raw
+identity fields and computes the id on the aggregated rows with the EUID compiler, so a definition
+that carries `inventory` is validated (`assertInventoryIdentityIsServable` in `entity_schema.ts`) to
+the subset it can serve:
 
-```ts
-inventory: { identity: ['kubernetes.namespace', 'kubernetes.deployment.name'], ... }
-```
+- `{ singleField }` with a **literal, mapped field path** (no expressions, wildcards, quoting or
+  whitespace: `isLiteralFieldPath`), or
+- `{ euidRanking, documentsFilter }` with **exactly one branch**, no `when`, no `fieldEvaluations`,
+  every composition starting with a literal `field` part and containing only literal `field` parts
+  and `sep` parts, and `documentsFilter` **equal to the derived presence filter**: every field of a
+  composition present and non-empty
+  (`isNotEmptyCondition`, joined with `and` for a composite composition), any composition (`or`
+  when there are several). The 400 message prints the expected block.
+- `skipTypePrepend` is not allowed: inventory ids keep the `<type>:` prefix.
+- Attributes (top-level and per-source `name`s) and metric `name`s may not repeat an identity field.
+- Inventory identities may reference at most eight distinct fields across all compositions, matching
+  the inventory detail API limit. This restriction does not apply to definitions without inventory.
 
-`identityTupleToIdentityField()` (`identity_tuple.ts`) normalises this into the store's identity
-form so the compiler needs no changes: one field becomes `{ singleField }`; several fields become one
-ranking composition joined by `/` plus a `documentsFilter` requiring every field. The resulting id is
-`<type>:<v1>/<v2>` (e.g. `k8s.deployment:payments/checkout-api`); values are not escaped, so a value
-containing `/` is ambiguous, exactly as `@` already is for `user`. Expressions, wildcards, quoting and
-whitespace are rejected: identity must push down to the index. The raw list is kept on
-`inventory.identity` because the query generator groups `BY` these fields, and `entitySchema` checks
-that `identityField` and `inventory.identity` agree. `buildInventoryEntityDefinition()` assembles a
-complete non-materialised definition from the authoring form.
+Three shapes follow: a single field (`k8s.pod` by `kubernetes.pod.uid`); a composite tuple, one
+composition joined by `/` (`k8s.deployment:payments/checkout-api`, values are not escaped, so a
+value containing `/` is ambiguous exactly as `@` already is for `user`); and ranked alternatives,
+one single-field composition per alternative with an `or` filter, the shape of the built-in `host`,
+for the same identifier carried under different field names by different sources (the first
+present field is the id). `getInventoryIdentityPlan(definition)` reads any `identityField` as
+`{ compositions: string[][], fields: string[] }` for the generator. `identityTupleToIdentityField()`
+(`identity_tuple.ts`) and `buildInventoryEntityDefinition()` are fixture and test helpers that spell
+out the block for a tuple; they are not part of the schema.
 
 Authors declare what they need, not how it is fetched: `attributes` is a list of literal field paths
 resolved to the newest value per entity, and each source's `metrics` are `{ name, field, agg }` with
@@ -141,13 +154,12 @@ Observability `host` inventory that keeps Security's `host:` entity ids) with an
 document**: `{ "extends": <built-in type>, "inventory": <BuiltInInventoryExtension> }`
 (`builtInInventoryExtensionDocumentSchema`, strict). A document with `type` is a full definition
 (identity required); a document with `extends` is an extension and carries no `type`, identity or
-materialisation. The inventory part is `builtInInventoryExtensionSchema`: the inventory extension
-without `identity`. The built-in's identity and materialisation are never changed; its
+materialisation. The inventory part is `builtInInventoryExtensionSchema`, the same schema as the
+authored extension. The built-in's identity and materialisation are never changed; its
 `identityField` is the identity, so the query generator groups by the fields that ranking
 references and entity ids stay the built-in's. Attributes may not be identity fields of the
-built-in (rejected at registration, as `attributes` repeating `identity` is for authored
-definitions); `getInventoryIdentity(definition)` returns the authored tuple or `undefined` for a
-built-in.
+built-in (rejected at registration, as attributes repeating `identityField` are for authored
+definitions); `getInventoryIdentityPlan(definition)` reads either identity the same way.
 
 Extensions are registered in two ways, layered code-first:
 

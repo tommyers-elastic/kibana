@@ -221,7 +221,7 @@ export const DefinitionsTable = ({
       itemId="type"
       columns={columns}
       loading={isLoading}
-      tableLayout="auto"
+      tableLayout="fixed"
       sorting={{ sort: { field: 'type', direction: 'asc' } }}
       search={{
         box: {

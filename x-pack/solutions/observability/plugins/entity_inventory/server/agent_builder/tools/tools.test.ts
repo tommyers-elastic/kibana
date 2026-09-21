@@ -172,7 +172,10 @@ describe('preview_inventory tool', () => {
       to: expect.any(String),
       limit: 5,
     });
-    const [, { from, to }] = list.mock.calls[0] as unknown as [string, { from: string; to: string }];
+    const [, { from, to }] = list.mock.calls[0] as unknown as [
+      string,
+      { from: string; to: string }
+    ];
     expect(Date.parse(to) - Date.parse(from)).toBe(30 * 60_000);
     expect(result.data).toMatchObject({
       type: 'k8s.pod',
@@ -180,9 +183,9 @@ describe('preview_inventory tool', () => {
       returnedRows: 1,
       queries: [{ index: 'metrics-*', engine: 'TS', esql: 'TS metrics-*' }],
     });
-    expect((result.data as { queries: Array<Record<string, unknown>> }).queries[0]).not.toHaveProperty(
-      'params'
-    );
+    expect(
+      (result.data as { queries: Array<Record<string, unknown>> }).queries[0]
+    ).not.toHaveProperty('params');
   });
 
   it('reports a disabled inventory as a result, not a throw', async () => {
@@ -228,7 +231,6 @@ describe('save_definition tool', () => {
     identityField: { singleField: 'kubernetes.pod.uid' },
     materialisation: { mode: 'none' },
     inventory: {
-      identity: ['kubernetes.pod.uid'],
       sources: [{ index: 'metrics-*' }],
     },
   };
@@ -271,7 +273,10 @@ describe('save_definition tool', () => {
 
     expect(deps.getDefinitionsClient).toHaveBeenCalledWith(request);
     expect(client.create).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'k8s.pod', identityField: { singleField: 'kubernetes.pod.uid' } })
+      expect.objectContaining({
+        type: 'k8s.pod',
+        identityField: { singleField: 'kubernetes.pod.uid' },
+      })
     );
     expect(client.replace).not.toHaveBeenCalled();
     expect(result.type).toBe(ToolResultType.other);
@@ -292,9 +297,13 @@ describe('save_definition tool', () => {
       context
     );
 
-    expect(client.replace).toHaveBeenCalledWith('k8s.pod', expect.objectContaining({ type: 'k8s.pod' }), {
-      force: true,
-    });
+    expect(client.replace).toHaveBeenCalledWith(
+      'k8s.pod',
+      expect.objectContaining({ type: 'k8s.pod' }),
+      {
+        force: true,
+      }
+    );
   });
 
   it('explains conflicts as actionable errors', async () => {

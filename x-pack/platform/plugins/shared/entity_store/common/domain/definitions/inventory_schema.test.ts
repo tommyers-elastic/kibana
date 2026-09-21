@@ -16,7 +16,6 @@ import {
 } from './inventory_schema';
 
 const minimalInventory = {
-  identity: ['kubernetes.pod.uid'],
   sources: [{ index: 'metrics-kubeletstatsreceiver.otel-default' }],
 };
 
@@ -34,26 +33,15 @@ describe('inventoryExtensionSchema', () => {
     }
   );
 
-  it('rejects an empty identity', () => {
-    expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, identity: [] }).success).toBe(
-      false
-    );
-  });
-
-  it('rejects duplicate identity fields', () => {
-    const result = inventoryExtensionSchema.safeParse({
-      ...minimalInventory,
-      identity: ['kubernetes.pod.uid', 'kubernetes.pod.uid'],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it.each(['COUNT(*)', 'kubernetes.*', 'kubernetes pod', '`quoted`'])(
-    'rejects identity field "%s" that is not a literal path',
-    (field) => {
-      expect(
-        inventoryExtensionSchema.safeParse({ ...minimalInventory, identity: [field] }).success
-      ).toBe(false);
+  it.each([
+    ['identity', ['kubernetes.pod.uid']],
+    ['identityMode', 'ranked'],
+  ])(
+    'rejects the removed key %s: identityField is the single identity declaration',
+    (key, value) => {
+      const result = inventoryExtensionSchema.safeParse({ ...minimalInventory, [key]: value });
+      expect(result.success).toBe(false);
+      expect(result.error?.issues[0].message).toMatch(new RegExp(`Unrecognized key.*${key}`));
     }
   );
 
@@ -71,15 +59,6 @@ describe('inventoryExtensionSchema', () => {
     });
     expect(result.error?.issues).toBeUndefined();
     expect(result.success).toBe(true);
-  });
-
-  it('rejects an attribute that repeats an identity field', () => {
-    const result = inventoryExtensionSchema.safeParse({
-      ...minimalInventory,
-      attributes: ['kubernetes.pod.uid'],
-    });
-    expect(result.success).toBe(false);
-    expect(result.error?.issues[0].path).toEqual(['attributes', 0]);
   });
 
   it.each(['COUNT(*)', 'kubernetes.*', 'pod name'])(
@@ -104,18 +83,6 @@ describe('inventoryExtensionSchema', () => {
     expect(inventoryExtensionSchema.safeParse({ ...minimalInventory, [key]: value }).success).toBe(
       false
     );
-  });
-
-  it('accepts a ranked identity mode', () => {
-    const result = inventoryExtensionSchema.safeParse({
-      identity: ['halcyon.claim_id', 'claim_id'],
-      identityMode: 'ranked',
-      sources: [{ index: 'traces-generic.otel-default' }, { index: 'logs-generic.otel-default' }],
-    });
-    expect(result.error?.issues).toBeUndefined();
-    expect(
-      inventoryExtensionSchema.safeParse({ ...minimalInventory, identityMode: 'any' }).success
-    ).toBe(false);
   });
 
   it('requires at least one source', () => {
@@ -144,9 +111,8 @@ describe('inventoryExtensionSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects a per-source attribute name that repeats an identity field or a top-level attribute', () => {
+  it('rejects a per-source attribute name that repeats a top-level attribute', () => {
     const result = inventoryExtensionSchema.safeParse({
-      identity: ['uid'],
       attributes: ['name'],
       sources: [
         {
@@ -160,9 +126,9 @@ describe('inventoryExtensionSchema', () => {
     });
     expect(result.success).toBe(false);
     expect(result.error?.issues.map(({ path }) => path)).toEqual([
-      ['sources', 0, 'attributes', 0, 'name'],
       ['sources', 0, 'attributes', 1, 'name'],
     ]);
+    expect(result.error?.issues[0].message).toContain('repeats a top-level attribute');
   });
 
   it('accepts the same metric name across sources with scale and unit, and rejects inconsistent agg or unit', () => {
@@ -222,7 +188,8 @@ describe('inventoryExtensionSchema', () => {
 describe('builtInInventoryExtensionSchema', () => {
   const minimalBuiltInExtension = { sources: [{ index: 'metrics-system.cpu-*' }] };
 
-  it('accepts label, attributes and sources without an identity', () => {
+  it('is the authored extension schema: label, attributes and sources, never an identity', () => {
+    expect(builtInInventoryExtensionSchema).toBe(inventoryExtensionSchema);
     const result = builtInInventoryExtensionSchema.safeParse({
       label: 'Hosts',
       attributes: ['host.os.name', 'cloud.provider'],

@@ -33,7 +33,7 @@ const schema = z.object({
       message: `a document has at most ${MAX_DOCUMENT_KEYS} top-level keys`,
     })
     .describe(
-      'The definition document as a JSON object: either a full definition ({ "type", "name", "identityField", "materialisation": { "mode": "none" }, "inventory": { "label", "identity", "attributes", "sources" } }) or an extension of a built-in type ({ "extends": "host" | "service" | "user" | "generic", "inventory": { "label", "attributes", "sources" } }). Never include an "id".'
+      'The definition document as a JSON object: either a full definition ({ "type", "name", "identityField", "materialisation": { "mode": "none" }, "inventory": { "label", "attributes", "sources" } }; identityField is the only identity declaration: { "singleField" } or one ranking branch of literal fields with its presence documentsFilter) or an extension of a built-in type ({ "extends": "host" | "service" | "user" | "generic", "inventory": { "label", "attributes", "sources" } }). Never include an "id".'
     ),
   replace: z
     .boolean()
@@ -45,7 +45,7 @@ const schema = z.object({
     .boolean()
     .default(false)
     .describe(
-      'Only with replace: true. Allows a replace that changes the identity (identityField / inventory.identity), which renames every entity id of the type. Set it only after the user has explicitly accepted that.'
+      'Only with replace: true. Allows a replace that changes identityField, which renames every entity id of the type. Set it only after the user has explicitly accepted that.'
     ),
 });
 

@@ -83,6 +83,14 @@ Object {
     },
   ],
   "identity": Object {
+    "compositions": Array [
+      Array [
+        "halcyon.claim_id",
+      ],
+      Array [
+        "claim_id",
+      ],
+    ],
     "entityIdEvaluation": "halcyon_claim_id_present = TO_STRING(halcyon.claim_id) IS NOT NULL AND TO_STRING(halcyon.claim_id) != \\"\\",
  claim_id_present = TO_STRING(claim_id) IS NOT NULL AND TO_STRING(claim_id) != \\"\\",
  halcyon_claim_id_present_or_null = CASE(halcyon_claim_id_present, TO_STRING(halcyon.claim_id)),
@@ -324,6 +332,17 @@ Object {
     },
   ],
   "identity": Object {
+    "compositions": Array [
+      Array [
+        "host.id",
+      ],
+      Array [
+        "host.name",
+      ],
+      Array [
+        "host.hostname",
+      ],
+    ],
     "entityIdEvaluation": "host_id_present = TO_STRING(host.id) IS NOT NULL AND TO_STRING(host.id) != \\"\\",
  host_name_present = TO_STRING(host.name) IS NOT NULL AND TO_STRING(host.name) != \\"\\",
  host_hostname_present = TO_STRING(host.hostname) IS NOT NULL AND TO_STRING(host.hostname) != \\"\\",
@@ -637,6 +656,12 @@ Object {
     },
   ],
   "identity": Object {
+    "compositions": Array [
+      Array [
+        "kubernetes.namespace",
+        "kubernetes.deployment.name",
+      ],
+    ],
     "entityIdEvaluation": "kubernetes_namespace_present = TO_STRING(kubernetes.namespace) IS NOT NULL AND TO_STRING(kubernetes.namespace) != \\"\\",
  kubernetes_deployment_name_present = TO_STRING(kubernetes.deployment.name) IS NOT NULL AND TO_STRING(kubernetes.deployment.name) != \\"\\",
  kubernetes_namespace_present_or_null = CASE(kubernetes_namespace_present, TO_STRING(kubernetes.namespace)),
@@ -833,6 +858,11 @@ Object {
     },
   ],
   "identity": Object {
+    "compositions": Array [
+      Array [
+        "kubernetes.node.name",
+      ],
+    ],
     "entityIdEvaluation": "entity.id = CONCAT(\\"k8s.node:\\", TO_STRING(kubernetes.node.name))",
     "fields": Array [
       "kubernetes.node.name",
@@ -1039,6 +1069,11 @@ Object {
     },
   ],
   "identity": Object {
+    "compositions": Array [
+      Array [
+        "kubernetes.pod.uid",
+      ],
+    ],
     "entityIdEvaluation": "entity.id = CONCAT(\\"k8s.pod:\\", TO_STRING(kubernetes.pod.uid))",
     "fields": Array [
       "kubernetes.pod.uid",

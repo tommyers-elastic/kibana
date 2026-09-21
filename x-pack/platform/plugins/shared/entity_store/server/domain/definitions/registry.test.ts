@@ -18,7 +18,7 @@ import {
 } from '../../../common/domain/definitions/__fixtures__/inventory_definitions';
 import { ALL_BUILT_IN_ENTITY_TYPES } from '../../../common/domain/definitions/built_in_entity_types';
 import { hostEntityDefinition } from '../../../common/domain/definitions/host';
-import { getInventoryIdentity } from '../../../common/domain/definitions/entity_schema';
+import { getInventoryIdentityPlan } from '../../../common/domain/definitions/entity_schema';
 import { getEntityDefinition as getBuiltInEntityDefinition } from '../../../common/domain/definitions/registry';
 import {
   ENTITY_DEFINITION_SAVED_OBJECT_TYPE,
@@ -204,7 +204,10 @@ describe('EntityDefinitionRegistry', () => {
     });
     expect(host?.definition.identityField).toBe(builtIn.identityField);
     expect(host?.definition.materialisation).toBe(builtIn.materialisation);
-    expect(getInventoryIdentity(host!.definition)).toBeUndefined();
+    expect(getInventoryIdentityPlan(host!.definition)).toEqual({
+      compositions: [['host.id'], ['host.name'], ['host.hostname']],
+      fields: ['host.id', 'host.name', 'host.hostname'],
+    });
     expect(await registry.getInventoryExtension('host')).toEqual({
       inventory: hostInventoryExtension,
       source: 'code',

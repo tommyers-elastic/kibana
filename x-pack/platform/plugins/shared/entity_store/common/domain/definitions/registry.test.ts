@@ -66,10 +66,8 @@ describe('materialised entity types', () => {
     const inventoryOnly = buildInventoryEntityDefinition({
       type: 'k8s.pod',
       name: 'pod',
-      inventory: {
-        identity: ['kubernetes.pod.uid'],
-        sources: [{ index: 'metrics-*' }],
-      },
+      identity: ['kubernetes.pod.uid'],
+      inventory: { sources: [{ index: 'metrics-*' }] },
     });
     const bareCore = {
       type: 'k8s.node',

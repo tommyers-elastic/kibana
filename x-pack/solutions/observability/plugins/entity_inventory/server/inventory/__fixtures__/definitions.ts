@@ -5,18 +5,17 @@
  * 2.0.
  */
 
-import type { EntityDefinition } from '@kbn/entity-store/common';
+import type { EntityDefinition, EntityDefinitionWithoutId } from '@kbn/entity-store/common';
 import { buildInventoryEntityDefinition } from '@kbn/entity-store/common';
 
 /**
  * Test fixtures mirroring `entity_inventory_definitions/*.json` at the repository root: the three
- * ported k8s types (authored tuple identities, OTel and ECS sources) and a host-like type with the
- * built-in field ranking as identity and a built-in style inventory extension.
+ * ported k8s types (tuple identities built with the store's fixture helper, OTel and ECS sources),
+ * an authored ranked identity spelled out as its `identityField` block, and a host-like type with
+ * the built-in field ranking as identity and a built-in style inventory extension.
  */
 
-const withId = (
-  definition: ReturnType<typeof buildInventoryEntityDefinition>
-): EntityDefinition => ({
+const withId = (definition: EntityDefinitionWithoutId): EntityDefinition => ({
   ...definition,
   id: `registered_${definition.type}_default`,
 });
@@ -25,9 +24,9 @@ export const podDefinition: EntityDefinition = withId(
   buildInventoryEntityDefinition({
     type: 'k8s.pod',
     name: `Observability 'k8s.pod' inventory definition`,
+    identity: ['kubernetes.pod.uid'],
     inventory: {
       label: 'K8s Pod',
-      identity: ['kubernetes.pod.uid'],
       attributes: ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'],
       sources: [
         {
@@ -86,9 +85,9 @@ export const nodeDefinition: EntityDefinition = withId(
   buildInventoryEntityDefinition({
     type: 'k8s.node',
     name: `Observability 'k8s.node' inventory definition`,
+    identity: ['kubernetes.node.name'],
     inventory: {
       label: 'K8s Node',
-      identity: ['kubernetes.node.name'],
       sources: [
         {
           index: 'metrics-kubeletstatsreceiver.otel-default',
@@ -124,9 +123,9 @@ export const deploymentDefinition: EntityDefinition = withId(
   buildInventoryEntityDefinition({
     type: 'k8s.deployment',
     name: `Observability 'k8s.deployment' inventory definition`,
+    identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
     inventory: {
       label: 'K8s Deployment',
-      identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
       sources: [
         {
           index: 'metrics-kubeletstatsreceiver.otel-default',
@@ -156,32 +155,53 @@ export const deploymentDefinition: EntityDefinition = withId(
   })
 );
 
-/** Authored ranked identity: the same claim id under two field names in two streams. */
-export const claimDefinition: EntityDefinition = withId(
-  buildInventoryEntityDefinition({
-    type: 'claim',
-    name: 'Insurance claims from traces and logs',
-    inventory: {
-      label: 'Claim',
-      identity: ['halcyon.claim_id', 'claim_id'],
-      identityMode: 'ranked',
-      sources: [
+/**
+ * Authored ranked identity: the same claim id under two field names in two streams. One branch,
+ * one single-field composition per alternative, an any-of documents filter: the `host` shape.
+ */
+export const claimDefinition: EntityDefinition = withId({
+  type: 'claim',
+  name: 'Insurance claims from traces and logs',
+  identityField: {
+    euidRanking: {
+      branches: [{ ranking: [[{ field: 'halcyon.claim_id' }], [{ field: 'claim_id' }]] }],
+    },
+    documentsFilter: {
+      or: [
         {
-          index: 'traces-generic.otel-default',
-          filter: 'halcyon.claim_id IS NOT NULL',
-          metrics: [{ name: 'spans', field: '@timestamp', agg: 'count', unit: 'count' }],
-          attributes: [{ name: 'template', field: 'halcyon.template' }],
+          and: [
+            { field: 'halcyon.claim_id', exists: true },
+            { field: 'halcyon.claim_id', neq: '' },
+          ],
         },
         {
-          index: 'logs-generic.otel-default',
-          filter: 'claim_id IS NOT NULL',
-          metrics: [{ name: 'fraud_score', field: 'score', agg: 'last', unit: 'ratio' }],
-          attributes: [{ name: 'risk_band', field: 'risk_band' }],
+          and: [
+            { field: 'claim_id', exists: true },
+            { field: 'claim_id', neq: '' },
+          ],
         },
       ],
     },
-  })
-);
+  },
+  materialisation: { mode: 'none' },
+  inventory: {
+    label: 'Claim',
+    sources: [
+      {
+        index: 'traces-generic.otel-default',
+        filter: 'halcyon.claim_id IS NOT NULL',
+        metrics: [{ name: 'spans', field: '@timestamp', agg: 'count', unit: 'count' }],
+        attributes: [{ name: 'template', field: 'halcyon.template' }],
+      },
+      {
+        index: 'logs-generic.otel-default',
+        filter: 'claim_id IS NOT NULL',
+        metrics: [{ name: 'fraud_score', field: 'score', agg: 'last', unit: 'ratio' }],
+        attributes: [{ name: 'risk_band', field: 'risk_band' }],
+      },
+    ],
+  },
+});
 
 /** Built-in style: field ranking identity (Security's host), inventory extension without identity. */
 export const hostDefinition: EntityDefinition = {

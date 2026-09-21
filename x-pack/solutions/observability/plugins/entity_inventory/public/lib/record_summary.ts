@@ -6,6 +6,7 @@
  */
 
 import type { EntityDefinitionRecord } from '@kbn/entity-store/common';
+import { formatIdentityCompositions } from '../../common';
 
 /**
  * How a record is presented in the list: an API definition, a bare built-in, a built-in carrying
@@ -23,26 +24,24 @@ export const getRecordKind = ({ source, inventorySource }: EntityDefinitionRecor
   return inventorySource === undefined ? 'built_in' : 'built_in_extension';
 };
 
-const RANKING_PREFIX = 'ranking: ';
-
 /**
- * A one-line description of what identifies an entity: the authored tuple joined with " + ", a
- * single field, or "ranking: a, b, c" for the fields a built-in's ranking may fall back through.
+ * A one-line description of what identifies an entity, read from `identityField`: the fields of
+ * a composition joined with " + " (`kubernetes.namespace + kubernetes.deployment.name`), ranked
+ * alternatives joined with ", else " (`host.id, else host.name, else host.hostname`).
  */
 export const describeIdentity = ({ definition }: EntityDefinitionRecord): string => {
-  const { inventory, identityField } = definition;
-  if (inventory !== undefined && 'identity' in inventory && inventory.identity.length > 0) {
-    return inventory.identity.join(' + ');
-  }
+  const { identityField } = definition;
   if ('singleField' in identityField) {
     return identityField.singleField;
   }
-  const fields = identityField.euidRanking.branches.flatMap(({ ranking }) =>
-    ranking.flatMap((composition) =>
+  // Same reading as the store's `getInventoryIdentityPlan`, kept local so the page-load bundle
+  // does not import the schema module.
+  const compositions = identityField.euidRanking.branches.flatMap(({ ranking }) =>
+    ranking.map((composition) =>
       composition.flatMap((part) => ('field' in part ? [part.field] : []))
     )
   );
-  return `${RANKING_PREFIX}${[...new Set(fields)].join(', ')}`;
+  return formatIdentityCompositions(compositions);
 };
 
 /** Index patterns of the inventory sources, in declaration order (empty without an extension). */

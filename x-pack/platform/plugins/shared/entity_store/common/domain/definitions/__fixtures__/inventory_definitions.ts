@@ -7,7 +7,8 @@
 
 /**
  * Observability inventory definitions ported from the entity-query-benchmarking prototype
- * (`app/definitions.json`). Test fixtures only: nothing registers them yet.
+ * (`app/definitions.json`). Test fixtures only: nothing registers them yet. Built with the
+ * `buildInventoryEntityDefinition` helper, which spells out the core `identityField` for a tuple.
  *
  * Structural fields (identity, attributes) use canonical ECS names; the ECS<->OTel alias layer
  * makes them resolve on both pipeline shapes. Metrics do not alias (units differ), so every source
@@ -50,9 +51,9 @@ const ECS_POD_PHASE_LABELS = {
 export const k8sPodInventoryDefinition: InventoryEntityDefinition = buildInventoryEntityDefinition({
   type: 'k8s.pod',
   name: `Observability 'k8s.pod' inventory definition`,
+  identity: ['kubernetes.pod.uid'],
   inventory: {
     label: 'K8s Pod',
-    identity: ['kubernetes.pod.uid'],
     attributes: ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'],
     sources: [
       {
@@ -107,9 +108,9 @@ export const k8sNodeInventoryDefinition: InventoryEntityDefinition = buildInvent
   {
     type: 'k8s.node',
     name: `Observability 'k8s.node' inventory definition`,
+    identity: ['kubernetes.node.name'],
     inventory: {
       label: 'K8s Node',
-      identity: ['kubernetes.node.name'],
       sources: [
         {
           index: OTEL_KUBELETSTATS_INDEX,
@@ -149,9 +150,9 @@ export const k8sDeploymentInventoryDefinition: InventoryEntityDefinition =
   buildInventoryEntityDefinition({
     type: 'k8s.deployment',
     name: `Observability 'k8s.deployment' inventory definition`,
+    identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
     inventory: {
       label: 'K8s Deployment',
-      identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
       sources: [
         {
           // Pod-level documents: the deployment is derived from the pods that reference it.
@@ -186,9 +187,9 @@ export const k8sStatefulsetInventoryDefinition: InventoryEntityDefinition =
   buildInventoryEntityDefinition({
     type: 'k8s.statefulset',
     name: `Observability 'k8s.statefulset' inventory definition`,
+    identity: ['kubernetes.namespace', 'kubernetes.statefulset.name'],
     inventory: {
       label: 'K8s Statefulset',
-      identity: ['kubernetes.namespace', 'kubernetes.statefulset.name'],
       sources: [
         {
           index: OTEL_KUBELETSTATS_INDEX,

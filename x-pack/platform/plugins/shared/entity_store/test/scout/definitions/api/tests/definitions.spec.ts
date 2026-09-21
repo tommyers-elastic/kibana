@@ -21,6 +21,7 @@ import {
   ENTITY_DEFINITIONS_ROUTES,
   FF_ENABLE_DYNAMIC_DEFINITIONS,
   FF_ENABLE_ENTITY_STORE_V2,
+  getInventoryIdentityPlan,
   type EntityDefinitionRecord,
 } from '../../../../../common';
 import {
@@ -229,13 +230,32 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
     });
     expect(badType.statusCode).toBe(400);
 
-    const inconsistentIdentity = await apiClient.post(definitionsPath(), {
+    // A ranking whose documentsFilter is not the derived presence filter is not servable.
+    const unservableIdentity = await apiClient.post(definitionsPath(), {
+      headers,
+      responseType: 'json',
+      body: {
+        ...k8sPodInventoryDefinition,
+        identityField: {
+          euidRanking: { branches: [{ ranking: [[{ field: 'kubernetes.pod.uid' }]] }] },
+          documentsFilter: { always: {} },
+        },
+      },
+    });
+    expect(unservableIdentity.statusCode).toBe(400);
+    expect(unservableIdentity.body.message).toContain('identityField.documentsFilter');
+    expect(unservableIdentity.body.message).toContain('"field":"kubernetes.pod.uid"');
+
+    // Attributes are columns next to the identity and may not repeat it.
+    const identityAttribute = await apiClient.post(definitionsPath(), {
       headers,
       responseType: 'json',
       body: { ...k8sPodInventoryDefinition, identityField: { singleField: 'kubernetes.pod.name' } },
     });
-    expect(inconsistentIdentity.statusCode).toBe(400);
-    expect(inconsistentIdentity.body.message).toContain('identityField');
+    expect(identityAttribute.statusCode).toBe(400);
+    expect(identityAttribute.body.message).toContain(
+      'attribute "kubernetes.pod.name" is an identity field'
+    );
   });
 
   apiTest(
@@ -255,11 +275,11 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
       });
       expect(duplicate.statusCode).toBe(409);
 
-      const relabelled = buildInventoryEntityDefinition({
-        type: 'k8s.deployment',
+      const relabelled = {
+        ...k8sDeploymentInventoryDefinition,
         name: 'renamed',
-        inventory: { ...k8sDeploymentInventoryDefinition.inventory!, label: 'Deployments' },
-      });
+        inventory: { ...k8sDeploymentInventoryDefinition.inventory, label: 'Deployments' },
+      };
       const replaced = await apiClient.put(definitionsPath('k8s.deployment'), {
         headers,
         responseType: 'json',
@@ -275,14 +295,8 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
       const reidentified = buildInventoryEntityDefinition({
         type: 'k8s.deployment',
         name: 'renamed',
-        inventory: {
-          ...k8sDeploymentInventoryDefinition.inventory!,
-          identity: [
-            'kubernetes.cluster.name',
-            'kubernetes.namespace',
-            'kubernetes.deployment.name',
-          ],
-        },
+        identity: ['kubernetes.cluster.name', 'kubernetes.namespace', 'kubernetes.deployment.name'],
+        inventory: k8sDeploymentInventoryDefinition.inventory,
       });
       const blocked = await apiClient.put(definitionsPath('k8s.deployment'), {
         headers,
@@ -298,7 +312,7 @@ apiTest.describe('Entity definitions API', { tag: ENTITY_STORE_TAGS }, () => {
         body: reidentified,
       });
       expect(forced.statusCode).toBe(200);
-      expect(forced.body.definition.inventory.identity).toHaveLength(3);
+      expect(getInventoryIdentityPlan(forced.body.definition).fields).toHaveLength(3);
       expect(
         getEuidFromDefinition(forced.body.definition, {
           kubernetes: {

@@ -17,8 +17,11 @@ import {
   k8sDeploymentInventoryDefinition,
   k8sPodInventoryDefinition,
 } from '../definitions/__fixtures__/inventory_definitions';
-import { entityDefinitionInputSchema, getInventoryIdentity } from '../definitions/entity_schema';
-import { buildInventoryEntityDefinition } from '../definitions/inventory_definition';
+import {
+  entityDefinitionInputSchema,
+  getInventoryIdentityPlan,
+  type EntityDefinitionWithoutId,
+} from '../definitions/entity_schema';
 import {
   getEuidDslDocumentsContainsIdFilterFromDefinition,
   getEuidDslFilterBasedOnDocumentFromDefinition,
@@ -56,18 +59,12 @@ const podDoc = {
 };
 
 describe('ranked authored identity', () => {
-  const claim = buildInventoryEntityDefinition({
+  // The same claim id as `halcyon.claim_id` in traces and `claim_id` in logs: one unconditional
+  // branch, one single-field composition per alternative, an any-of documents filter (host shape).
+  const claim: EntityDefinitionWithoutId = {
     type: 'claim',
     name: 'claim',
-    inventory: {
-      identity: ['halcyon.claim_id', 'claim_id'],
-      identityMode: 'ranked',
-      sources: [{ index: 'traces-generic.otel-default' }, { index: 'logs-generic.otel-default' }],
-    },
-  });
-
-  it('derives a first-present-field ranking with an any-of documents filter', () => {
-    expect(claim.identityField).toEqual({
+    identityField: {
       euidRanking: {
         branches: [{ ranking: [[{ field: 'halcyon.claim_id' }], [{ field: 'claim_id' }]] }],
       },
@@ -87,8 +84,19 @@ describe('ranked authored identity', () => {
           },
         ],
       },
+    },
+    materialisation: { mode: 'none' },
+    inventory: {
+      sources: [{ index: 'traces-generic.otel-default' }, { index: 'logs-generic.otel-default' }],
+    },
+  };
+
+  it('is servable and reads as two single-field alternatives', () => {
+    expect(entityDefinitionInputSchema.safeParse(claim).error?.issues).toBeUndefined();
+    expect(getInventoryIdentityPlan(claim)).toEqual({
+      compositions: [['halcyon.claim_id'], ['claim_id']],
+      fields: ['halcyon.claim_id', 'claim_id'],
     });
-    expect(entityDefinitionInputSchema.safeParse(claim).success).toBe(true);
   });
 
   it('gives the same id whichever field carries the value', () => {
@@ -266,7 +274,7 @@ describe('EUID compiler over Observability inventory definitions', () => {
         expect(getEuidDslDocumentsContainsIdFilterFromDefinition(definition)).toBeDefined();
         expect(getEuidPainlessEvaluationFromDefinition(definition)).toContain('return');
         expect(getEuidSourceFieldsFromDefinition(definition).identitySourceFields).toEqual(
-          getInventoryIdentity(definition)
+          getInventoryIdentityPlan(definition).fields
         );
       });
     }

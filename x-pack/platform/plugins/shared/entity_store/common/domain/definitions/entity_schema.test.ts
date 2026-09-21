@@ -6,11 +6,14 @@
  */
 
 import { INVENTORY_DEFINITION_FIXTURES } from './__fixtures__/inventory_definitions';
+import { isNotEmptyCondition } from './common_fields';
 import {
   entityDefinitionInputSchema,
   entitySchema,
   euidRankingSchema,
   getEntityFields,
+  getInventoryIdentityPlan,
+  getInventoryPresenceFilter,
   getMaterialisation,
   getMaterialisationMode,
   getPostAggFilter,
@@ -19,6 +22,7 @@ import {
   isMaterialisedDefinition,
   setFieldsByConditionSchema,
 } from './entity_schema';
+import { hostEntityDefinition } from './host';
 import { buildInventoryEntityDefinition } from './inventory_definition';
 
 describe('setFieldsByConditionSchema', () => {
@@ -193,7 +197,11 @@ describe('entitySchema (identity core + extensions)', () => {
     expect(parsed).not.toHaveProperty('indexPatterns');
   });
 
-  describe('inventory extension consistency', () => {
+  describe('inventory identity must be servable by the query generator', () => {
+    const sources = [{ index: 'metrics-*' }];
+    const issuesOf = (definition: object) =>
+      entitySchema.safeParse({ id: 'x', ...definition }).error?.issues ?? [];
+
     it.each(INVENTORY_DEFINITION_FIXTURES.map((definition) => [definition.type, definition]))(
       'accepts the ported %s fixture',
       (type, definition) => {
@@ -204,23 +212,386 @@ describe('entitySchema (identity core + extensions)', () => {
       }
     );
 
-    it('rejects an identityField that does not match inventory.identity', () => {
-      const definition = buildInventoryEntityDefinition({
-        type: 'k8s.deployment',
-        name: 'deployment',
+    it('accepts ranked alternatives: one branch, single-field compositions, an any-of documents filter', () => {
+      const claim = {
+        type: 'claim',
+        name: 'claim',
+        identityField: {
+          euidRanking: {
+            branches: [{ ranking: [[{ field: 'halcyon.claim_id' }], [{ field: 'claim_id' }]] }],
+          },
+          documentsFilter: {
+            or: [isNotEmptyCondition('halcyon.claim_id'), isNotEmptyCondition('claim_id')],
+          },
+        },
+        inventory: { sources },
+      };
+      expect(issuesOf(claim)).toEqual([]);
+      expect(getInventoryIdentityPlan(claim)).toEqual({
+        compositions: [['halcyon.claim_id'], ['claim_id']],
+        fields: ['halcyon.claim_id', 'claim_id'],
+      });
+    });
+
+    it('accepts a ranking that mixes a composite and a single alternative', () => {
+      const mixed = {
+        ...core,
+        identityField: {
+          euidRanking: {
+            branches: [
+              {
+                ranking: [
+                  [{ field: 'cloud.account.id' }, { sep: '/' }, { field: 'cloud.instance.id' }],
+                  [{ field: 'host.id' }],
+                ],
+              },
+            ],
+          },
+          documentsFilter: {
+            or: [
+              {
+                and: [
+                  isNotEmptyCondition('cloud.account.id'),
+                  isNotEmptyCondition('cloud.instance.id'),
+                ],
+              },
+              isNotEmptyCondition('host.id'),
+            ],
+          },
+        },
+        inventory: { sources },
+      };
+      expect(issuesOf(mixed)).toEqual([]);
+      expect(getInventoryIdentityPlan(mixed)).toEqual({
+        compositions: [['cloud.account.id', 'cloud.instance.id'], ['host.id']],
+        fields: ['cloud.account.id', 'cloud.instance.id', 'host.id'],
+      });
+    });
+
+    it.each([0, 1])(
+      'rejects a leading separator in composition %i in both definition schemas',
+      (compositionIndex) => {
+        const compositions =
+          compositionIndex === 0 ? [['resource.id']] : [['primary.id'], ['resource.id']];
+        const definition = {
+          ...core,
+          identityField: {
+            euidRanking: {
+              branches: [
+                {
+                  ranking: compositions.map(([field], index) =>
+                    index === compositionIndex ? [{ sep: 'prefix/' }, { field }] : [{ field }]
+                  ),
+                },
+              ],
+            },
+            documentsFilter: getInventoryPresenceFilter(compositions),
+          },
+          inventory: { sources },
+        };
+        for (const result of [
+          entityDefinitionInputSchema.safeParse(definition),
+          entitySchema.safeParse(definition),
+        ]) {
+          expect(result.success).toBe(false);
+          expect(result.error?.issues).toEqual([
+            expect.objectContaining({
+              path: [
+                'identityField',
+                'euidRanking',
+                'branches',
+                0,
+                'ranking',
+                compositionIndex,
+                0,
+                'sep',
+              ],
+              message: 'an inventory identity composition must start with a field, not a separator',
+            }),
+          ]);
+        }
+      }
+    );
+
+    it('accepts separators between fields and after the last field', () => {
+      expect(
+        issuesOf({
+          ...core,
+          identityField: {
+            euidRanking: {
+              branches: [
+                {
+                  ranking: [
+                    [
+                      { field: 'resource.namespace' },
+                      { sep: '/' },
+                      { field: 'resource.id' },
+                      { sep: '/' },
+                    ],
+                  ],
+                },
+              ],
+            },
+            documentsFilter: getInventoryPresenceFilter([['resource.namespace', 'resource.id']]),
+          },
+          inventory: { sources },
+        })
+      ).toEqual([]);
+    });
+
+    it.each(['tuple', 'ranking'] as const)(
+      'limits a %s identity to eight distinct fields in both definition schemas',
+      (kind) => {
+        const fields = Array.from({ length: 9 }, (_, index) => `resource.key${index}`);
+        for (const count of [8, 9]) {
+          const selected = fields.slice(0, count);
+          const compositions = kind === 'tuple' ? [selected] : selected.map((field) => [field]);
+          const definition = {
+            ...core,
+            identityField: {
+              euidRanking: {
+                branches: [
+                  {
+                    ranking: compositions.map((composition) =>
+                      composition.map((field) => ({ field }))
+                    ),
+                  },
+                ],
+              },
+              documentsFilter: getInventoryPresenceFilter(compositions),
+            },
+            inventory: { sources },
+          };
+          const results = [
+            entityDefinitionInputSchema.safeParse(definition),
+            entitySchema.safeParse(definition),
+          ];
+          for (const result of results) {
+            expect(result.success).toBe(count === 8);
+            if (!result.success) {
+              expect(result.error.issues).toEqual([
+                expect.objectContaining({
+                  path: ['identityField'],
+                  message: 'inventory identity must have at most 8 distinct fields (got 9)',
+                }),
+              ]);
+            }
+          }
+          expect(
+            entityDefinitionInputSchema.safeParse({ ...definition, inventory: undefined }).success
+          ).toBe(true);
+        }
+      }
+    );
+
+    it('counts shared fields across ranking compositions only once', () => {
+      const fields = Array.from({ length: 8 }, (_, index) => `resource.key${index}`);
+      const compositions = [fields, [fields[0]]];
+      expect(
+        issuesOf({
+          ...core,
+          identityField: {
+            euidRanking: {
+              branches: [
+                {
+                  ranking: compositions.map((composition) =>
+                    composition.map((field) => ({ field }))
+                  ),
+                },
+              ],
+            },
+            documentsFilter: getInventoryPresenceFilter(compositions),
+          },
+          inventory: { sources },
+        })
+      ).toEqual([]);
+    });
+
+    it('does not restrict a definition without an inventory extension', () => {
+      expect(
+        issuesOf({
+          ...core,
+          identityField: {
+            euidRanking: {
+              branches: [
+                { when: { field: 'a', exists: true }, ranking: [[{ field: 'COALESCE(a, b)' }]] },
+                { ranking: [[{ field: 'b' }]] },
+              ],
+            },
+            documentsFilter: { always: {} },
+          },
+        })
+      ).toEqual([]);
+    });
+
+    it('rejects a documentsFilter that is not the derived presence filter and prints the expected block', () => {
+      const expected = {
+        and: [
+          isNotEmptyCondition('kubernetes.namespace'),
+          isNotEmptyCondition('kubernetes.deployment.name'),
+        ],
+      };
+      const issues = issuesOf({
+        ...core,
+        identityField: {
+          euidRanking: {
+            branches: [
+              {
+                ranking: [
+                  [
+                    { field: 'kubernetes.namespace' },
+                    { sep: '/' },
+                    { field: 'kubernetes.deployment.name' },
+                  ],
+                ],
+              },
+            ],
+          },
+          documentsFilter: isNotEmptyCondition('kubernetes.deployment.name'),
+        },
+        inventory: { sources },
+      });
+      expect(issues.map(({ path }) => path)).toEqual([['identityField', 'documentsFilter']]);
+      expect(issues[0].message).toBe(
+        `documentsFilter must be the presence filter of the ranking (every field of a composition present and non-empty, for any composition); expected ${JSON.stringify(
+          expected
+        )}`
+      );
+    });
+
+    it('rejects a singleField that is not a literal path', () => {
+      const issues = issuesOf({
+        ...core,
+        identityField: { singleField: 'COALESCE(a, b)' },
+        inventory: { sources },
+      });
+      expect(issues.map(({ path }) => path)).toEqual([['identityField', 'singleField']]);
+      expect(issues[0].message).toContain('literal field path');
+    });
+
+    it('rejects skipTypePrepend: inventory ids keep the type prefix', () => {
+      const issues = issuesOf({
+        ...core,
+        identityField: { singleField: 'kubernetes.pod.uid', skipTypePrepend: true },
+        inventory: { sources },
+      });
+      expect(issues.map(({ path }) => path)).toEqual([['identityField', 'skipTypePrepend']]);
+      expect(
+        issuesOf({
+          ...core,
+          identityField: { singleField: 'kubernetes.pod.uid', skipTypePrepend: false },
+          inventory: { sources },
+        })
+      ).toEqual([]);
+    });
+
+    it('rejects several branches, a conditional branch, field evaluations and non-literal fields, without checking the filter', () => {
+      const issues = issuesOf({
+        ...core,
+        identityField: {
+          euidRanking: {
+            branches: [
+              { when: { field: 'a', exists: true }, ranking: [[{ field: 'a' }]] },
+              { ranking: [[{ field: 'b c' }]] },
+            ],
+          },
+          fieldEvaluations: [
+            { destination: 'a', sources: [{ field: 'x' }], fallbackValue: null, whenClauses: [] },
+          ],
+          documentsFilter: { always: {} },
+        },
+        inventory: { sources },
+      });
+      expect(issues.map(({ path }) => path)).toEqual([
+        ['identityField', 'fieldEvaluations'],
+        ['identityField', 'euidRanking', 'branches'],
+        ['identityField', 'euidRanking', 'branches', 0, 'when'],
+        ['identityField', 'euidRanking', 'branches', 1, 'ranking', 0, 0, 'field'],
+      ]);
+      expect(issues[1].message).toBe('the inventory serves exactly one ranking branch, got 2');
+    });
+
+    it('rejects attributes and metrics that repeat an identity field', () => {
+      const issues = issuesOf({
+        ...core,
+        identityField: { singleField: 'claim_id' },
         inventory: {
-          identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
-          sources: [{ index: 'metrics-*' }],
+          attributes: ['claim_id'],
+          sources: [
+            { index: 'traces-*', attributes: [{ name: 'claim_id', field: 'halcyon.claim_id' }] },
+            { index: 'logs-*', metrics: [{ name: 'claim_id', field: 'x', agg: 'count' }] },
+          ],
         },
       });
-      const result = entitySchema.safeParse({
-        ...definition,
-        id: 'x',
-        identityField: { singleField: 'kubernetes.deployment.name' },
-      });
-      expect(result.success).toBe(false);
-      expect(result.error?.issues[0].path).toEqual(['identityField']);
+      expect(issues.map(({ path, message }) => [path, message])).toEqual([
+        [
+          ['inventory', 'sources', 0, 'attributes', 0, 'name'],
+          'attribute "claim_id" repeats a top-level attribute',
+        ],
+        [
+          ['inventory', 'sources', 0, 'attributes', 0, 'name'],
+          '"claim_id" is used as an attribute in one source and as a metric in another',
+        ],
+        [['inventory', 'attributes', 0], 'attribute "claim_id" is an identity field'],
+        [
+          ['inventory', 'sources', 0, 'attributes', 0, 'name'],
+          'attribute "claim_id" repeats an identity field',
+        ],
+        [
+          ['inventory', 'sources', 1, 'metrics', 0, 'name'],
+          'metric "claim_id" repeats an identity field',
+        ],
+      ]);
     });
+  });
+});
+
+describe('getInventoryIdentityPlan and getInventoryPresenceFilter', () => {
+  it('reads a single field as one composition', () => {
+    expect(getInventoryIdentityPlan({ identityField: { singleField: 'service.name' } })).toEqual({
+      compositions: [['service.name']],
+      fields: ['service.name'],
+    });
+    expect(getInventoryPresenceFilter([['service.name']])).toEqual(
+      isNotEmptyCondition('service.name')
+    );
+  });
+
+  it('reads a tuple fixture as one composite composition', () => {
+    const [, , deployment] = INVENTORY_DEFINITION_FIXTURES;
+    expect(getInventoryIdentityPlan(deployment)).toEqual({
+      compositions: [['kubernetes.namespace', 'kubernetes.deployment.name']],
+      fields: ['kubernetes.namespace', 'kubernetes.deployment.name'],
+    });
+  });
+
+  it('reads the built-in host ranking and derives its own documents filter', () => {
+    const plan = getInventoryIdentityPlan(hostEntityDefinition);
+    expect(plan).toEqual({
+      compositions: [['host.id'], ['host.name'], ['host.hostname']],
+      fields: ['host.id', 'host.name', 'host.hostname'],
+    });
+    if ('singleField' in hostEntityDefinition.identityField) {
+      throw new Error('expected a ranking');
+    }
+    expect(getInventoryPresenceFilter(plan.compositions)).toEqual(
+      hostEntityDefinition.identityField.documentsFilter
+    );
+  });
+
+  it('deduplicates fields across compositions in order of first appearance', () => {
+    expect(
+      getInventoryIdentityPlan({
+        identityField: {
+          euidRanking: {
+            branches: [
+              { ranking: [[{ field: 'a' }, { sep: ':' }, { field: 'b' }], [{ field: 'b' }]] },
+            ],
+          },
+          documentsFilter: { always: {} },
+        },
+      })
+    ).toEqual({ compositions: [['a', 'b'], ['b']], fields: ['a', 'b'] });
   });
 });
 
@@ -232,16 +603,24 @@ describe('entityDefinitionInputSchema (API body / setup registration)', () => {
     }
   });
 
-  it('applies the same identity consistency rule as entitySchema', () => {
+  it('applies the same servable-identity rule as entitySchema', () => {
     const [pod] = INVENTORY_DEFINITION_FIXTURES;
+    // `kubernetes.pod.name` is a top-level attribute of the pod fixture.
     const result = entityDefinitionInputSchema.safeParse({
       ...pod,
       identityField: { singleField: 'kubernetes.pod.name' },
     });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0].path).toEqual(['identityField']);
+      expect(result.error.issues[0].path).toEqual(['inventory', 'attributes', 0]);
     }
+    const built = buildInventoryEntityDefinition({
+      type: 'k8s.deployment',
+      name: 'deployment',
+      identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
+      inventory: { sources: [{ index: 'metrics-*' }] },
+    });
+    expect(entityDefinitionInputSchema.safeParse(built).success).toBe(true);
   });
 
   it('accepts a bare identity core and a materialised core alike (the registry decides what is registrable)', () => {

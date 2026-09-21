@@ -51,26 +51,38 @@ describe('getRecordKind', () => {
 });
 
 describe('describeIdentity', () => {
-  it('joins an authored identity tuple with " + "', () => {
+  it('joins the fields of a composite identity with " + "', () => {
     expect(
       describeIdentity(
         record({
-          inventory: {
-            identity: ['kubernetes.namespace', 'kubernetes.deployment.name'],
-            sources: [{ index: 'metrics-*' }],
+          identityField: {
+            euidRanking: {
+              branches: [
+                {
+                  ranking: [
+                    [
+                      { field: 'kubernetes.namespace' },
+                      { sep: '/' },
+                      { field: 'kubernetes.deployment.name' },
+                    ],
+                  ],
+                },
+              ],
+            },
+            documentsFilter: { and: [] },
           },
         })
       )
     ).toBe('kubernetes.namespace + kubernetes.deployment.name');
   });
 
-  it('falls back to the single identity field', () => {
+  it('shows a single identity field as is', () => {
     expect(describeIdentity(record({}))).toBe('kubernetes.pod.uid');
   });
 
-  it('lists the distinct fields of a ranking identity in order', () => {
+  it('joins ranked alternatives with ", else " in ranking order', () => {
     expect(describeIdentity(record({ identityField: hostRanking }))).toBe(
-      'ranking: host.id, host.name, host.hostname'
+      'host.id, else host.name, else host.hostname, else host.name + host.id'
     );
   });
 });
@@ -81,7 +93,6 @@ describe('getSourceIndices', () => {
       getSourceIndices(
         record({
           inventory: {
-            identity: ['a'],
             sources: [{ index: 'metrics-a-*' }, { index: 'metrics-b-*', filter: 'x == 1' }],
           },
         })

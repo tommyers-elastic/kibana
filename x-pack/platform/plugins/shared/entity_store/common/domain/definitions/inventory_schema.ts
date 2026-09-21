@@ -12,10 +12,12 @@ import { entityTypeNameSchema } from './identity_core_schema';
  * Inventory (Observability) extension of an entity definition.
  *
  * A definition carrying this extension is served live from telemetry: lists, counts and detail
- * views are ES|QL over the declared `sources`, grouped by the literal `identity` tuple. Nothing
- * here is read by the extraction engine; it is consumed by the inventory query generator.
+ * views are ES|QL over the declared `sources`, grouped by the fields of the core `identityField`
+ * (the single identity declaration of every type; see `assertInventoryIdentityIsServable` in
+ * `entity_schema.ts` for the subset the generator serves). Nothing here is read by the extraction
+ * engine; it is consumed by the inventory query generator.
  *
- * Authors declare *what* they need (identity, attributes, metrics per source), never *how* it is
+ * Authors declare *what* they need (attributes, metrics per source), never *how* it is
  * fetched. Engine selection (`TS` vs `FROM`), whether an attribute becomes a `BY` key or a
  * `LAST(...)` aggregate, null handling and `*_OVER_TIME` wrapping are query generator concerns.
  * Time windows and sort order are client concerns. Metadata lookup/write indices, edges and
@@ -30,7 +32,6 @@ const MAX_LABEL_LENGTH = 256;
 const MAX_INDEX_PATTERN_LENGTH = 256;
 const MAX_FILTER_LENGTH = 2000;
 const MAX_IDENTIFIER_LENGTH = 64;
-const MAX_IDENTITY_FIELDS = 8;
 const MAX_ATTRIBUTES = 64;
 const MAX_SOURCES = 16;
 const MAX_METRICS_PER_SOURCE = 64;
@@ -193,9 +194,10 @@ export const inventorySourceSchema = z
 export type InventorySource = z.infer<typeof inventorySourceSchema>;
 
 /**
- * The parts of an inventory extension that do not describe identity. Shared by the authored
- * extension (`inventoryExtensionSchema`, which adds `identity`) and the extension that another
- * plugin attaches to a built-in type (`builtInInventoryExtensionSchema`).
+ * The inventory extension never describes identity: the core `identityField` does, for authored
+ * definitions and built-in types alike. The same shape serves both the authored extension
+ * (`inventoryExtensionSchema`) and the extension another plugin or the API attaches to a built-in
+ * type (`builtInInventoryExtensionSchema`).
  */
 const inventoryExtensionShape = {
   /** Human readable type name for the UI. */
@@ -217,16 +219,17 @@ const inventoryExtensionShape = {
 
 /**
  * Output column names must be unambiguous across the whole extension: a per-source attribute name
- * may not be a metric name in another source, and may not repeat a top-level attribute or (where
- * known) an identity field, since every one of them becomes a column of the same row. Metrics
- * that share a name across sources are the same measurement: they must share `agg` and, where
- * declared, `unit` (use `scale` to bring a pipeline's field into that unit).
+ * may not be a metric name in another source and may not repeat a top-level attribute, since every
+ * one of them becomes a column of the same row. Metrics that share a name across sources are the
+ * same measurement: they must share `agg` and, where declared, `unit` (use `scale` to bring a
+ * pipeline's field into that unit). Clashes with the identity fields are a definition-level rule
+ * (`assertInventoryIdentityIsServable`), where `identityField` is known.
  */
 const assertOutputColumnsUnambiguous = (
-  inventory: { identity?: string[]; attributes?: string[]; sources: InventorySource[] },
+  inventory: { attributes?: string[]; sources: InventorySource[] },
   ctx: z.RefinementCtx
 ): void => {
-  const reserved = new Set([...(inventory.identity ?? []), ...(inventory.attributes ?? [])]);
+  const topLevelAttributes = new Set(inventory.attributes ?? []);
   const metricNames = new Set(
     inventory.sources.flatMap((source) => (source.metrics ?? []).map(({ name }) => name))
   );
@@ -256,11 +259,11 @@ const assertOutputColumnsUnambiguous = (
   }
   for (const [sourceIndex, source] of inventory.sources.entries()) {
     for (const [index, { name }] of (source.attributes ?? []).entries()) {
-      if (reserved.has(name)) {
+      if (topLevelAttributes.has(name)) {
         ctx.addIssue({
           code: 'custom',
           path: ['sources', sourceIndex, 'attributes', index, 'name'],
-          message: `attribute "${name}" repeats an identity field or a top-level attribute`,
+          message: `attribute "${name}" repeats a top-level attribute`,
         });
       }
       if (metricNames.has(name)) {
@@ -274,54 +277,26 @@ const assertOutputColumnsUnambiguous = (
   }
 };
 
+/**
+ * The inventory extension of an authored definition. Identity is not part of it: the definition's
+ * `identityField` is the single identity declaration, validated against what the query generator
+ * can serve in `entity_schema.ts`.
+ */
 export const inventoryExtensionSchema = z
-  .strictObject({
-    ...inventoryExtensionShape,
-    /**
-     * Ordered tuple of literal field paths that identifies an entity. The core `identityField` is
-     * derived from this list (see `identityTupleToIdentityField`); the list is kept here because
-     * the query generator groups `BY` these fields and needs them as a list, not a composition.
-     */
-    identity: z
-      .array(literalFieldPathSchema)
-      .min(1)
-      .max(MAX_IDENTITY_FIELDS)
-      .refine(uniqueStrings, { message: 'identity fields must be unique' }),
-    /**
-     * `tuple` (default): every listed field must be present and together they form the id
-     * (`namespace/name`). `ranked`: the fields are alternatives in priority order and the first
-     * present one is the id, so sources that carry the same identifier under different field names
-     * (`halcyon.claim_id` in traces, `claim_id` in logs) resolve to one entity. Same mechanism as
-     * the built-in `host` identity (`host.id`, else `host.name`, ...).
-     */
-    identityMode: z.enum(['tuple', 'ranked']).optional(),
-  })
-  .superRefine((inventory, ctx) => {
-    const identity = new Set(inventory.identity);
-    for (const [index, field] of (inventory.attributes ?? []).entries()) {
-      if (identity.has(field)) {
-        ctx.addIssue({
-          code: 'custom',
-          path: ['attributes', index],
-          message: `attribute "${field}" is already an identity field`,
-        });
-      }
-    }
-    assertOutputColumnsUnambiguous(inventory, ctx);
-  });
+  .strictObject(inventoryExtensionShape)
+  .superRefine(assertOutputColumnsUnambiguous);
 
 export type InventoryExtension = z.infer<typeof inventoryExtensionSchema>;
 
 /**
  * An inventory extension attached to a built-in (Security) type by another plugin through
- * `registerInventoryExtension`. It has no `identity`: the built-in core's `identityField` is the
- * identity, so entity ids stay `host:` / `user:` ids and the query generator groups by the fields
- * that ranking references. Attributes may not be identity fields of the built-in; that rule is
- * applied at registration, where the built-in definition is known.
+ * `registerInventoryExtension` or the definitions API. Same shape as the authored extension: the
+ * built-in core's `identityField` is the identity, so entity ids stay `host:` / `user:` ids and
+ * the query generator groups by the fields that ranking references. Attributes may not be
+ * identity fields of the built-in; that rule is applied at registration, where the built-in
+ * definition is known.
  */
-export const builtInInventoryExtensionSchema = z
-  .strictObject(inventoryExtensionShape)
-  .superRefine(assertOutputColumnsUnambiguous);
+export const builtInInventoryExtensionSchema = inventoryExtensionSchema;
 
 export type BuiltInInventoryExtension = z.infer<typeof builtInInventoryExtensionSchema>;
 

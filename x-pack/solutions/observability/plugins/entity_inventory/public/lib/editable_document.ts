@@ -84,7 +84,6 @@ export const DEFINITION_TEMPLATE: DefinitionDocument = {
   materialisation: { mode: 'none' },
   inventory: {
     label: 'My type',
-    identity: ['my.identity.field'],
     attributes: ['my.attribute.field'],
     sources: [
       {

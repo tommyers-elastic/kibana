@@ -16,7 +16,12 @@ import {
   entityDefinitionsApiBodySchema,
 } from '@kbn/entity-store/server';
 import type { InventoryListResponse } from '../../../common';
-import { hostDefinition, podDefinition } from '../../inventory/__fixtures__/definitions';
+import {
+  claimDefinition,
+  deploymentDefinition,
+  hostDefinition,
+  podDefinition,
+} from '../../inventory/__fixtures__/definitions';
 import {
   describeDefinitionError,
   describeIdentity,
@@ -42,17 +47,30 @@ const builtInHostWithApiExtension: EntityDefinitionRecord = {
 };
 
 describe('describeIdentity', () => {
-  it('returns the authored tuple', () => {
+  it('reads a single field and a composite tuple from identityField', () => {
     expect(describeIdentity(podDefinition)).toEqual({
       kind: 'tuple',
       fields: ['kubernetes.pod.uid'],
+      compositions: [['kubernetes.pod.uid']],
+    });
+    expect(describeIdentity(deploymentDefinition)).toEqual({
+      kind: 'tuple',
+      fields: ['kubernetes.namespace', 'kubernetes.deployment.name'],
+      compositions: [['kubernetes.namespace', 'kubernetes.deployment.name']],
     });
   });
 
-  it('returns the ranking fields of a built-in style identity', () => {
-    const identity = describeIdentity(hostDefinition);
-    expect(identity.kind).toBe('ranking');
-    expect(identity.fields).toEqual(expect.arrayContaining(['host.name']));
+  it('reads ranked alternatives, built-in and authored alike', () => {
+    expect(describeIdentity(hostDefinition)).toEqual({
+      kind: 'ranking',
+      fields: ['host.id', 'host.name', 'host.hostname'],
+      compositions: [['host.id'], ['host.name'], ['host.hostname']],
+    });
+    expect(describeIdentity(claimDefinition)).toEqual({
+      kind: 'ranking',
+      fields: ['halcyon.claim_id', 'claim_id'],
+      compositions: [['halcyon.claim_id'], ['claim_id']],
+    });
   });
 });
 
@@ -65,7 +83,11 @@ describe('summarizeEntityType', () => {
       label: 'K8s Pod',
       source: 'api',
       editable: 'definition',
-      identity: { kind: 'tuple', fields: ['kubernetes.pod.uid'] },
+      identity: {
+        kind: 'tuple',
+        fields: ['kubernetes.pod.uid'],
+        compositions: [['kubernetes.pod.uid']],
+      },
       attributes: ['kubernetes.pod.name', 'kubernetes.namespace', 'kubernetes.node.name'],
     });
     expect(summary.inventorySource).toBeUndefined();
@@ -88,9 +110,9 @@ describe('summarizeEntityType', () => {
     expect(summarizeEntityType({ definition: podDefinition, source: 'code' }).editable).toBe(
       'read_only'
     );
-    expect(
-      summarizeEntityType({ definition: hostDefinition, source: 'built_in' }).editable
-    ).toBe('read_only');
+    expect(summarizeEntityType({ definition: hostDefinition, source: 'built_in' }).editable).toBe(
+      'read_only'
+    );
   });
 });
 
@@ -128,7 +150,11 @@ describe('toDefinitionDocument', () => {
       readOnlyReason: 'code',
     });
     expect(
-      toDefinitionDocument({ definition: hostDefinition, source: 'built_in', inventorySource: 'code' })
+      toDefinitionDocument({
+        definition: hostDefinition,
+        source: 'built_in',
+        inventorySource: 'code',
+      })
     ).toMatchObject({ kind: 'read_only', readOnlyReason: 'built_in_code_extension' });
     expect(toDefinitionDocument({ definition: hostDefinition, source: 'built_in' })).toMatchObject({
       kind: 'read_only',
@@ -160,9 +186,9 @@ describe('formatIssues', () => {
       expect(message.length).toBeGreaterThan(0);
     }
 
-    expect(formatIssues([{ code: 'custom', path: [], message: 'nope', input: undefined }])).toEqual([
-      { path: '<root>', message: 'nope' },
-    ]);
+    expect(formatIssues([{ code: 'custom', path: [], message: 'nope', input: undefined }])).toEqual(
+      [{ path: '<root>', message: 'nope' }]
+    );
     expect(
       formatIssues([
         { code: 'custom', path: ['inventory', 'sources', 0, 'index'], message: 'bad', input: 1 },
@@ -175,15 +201,17 @@ describe('summarizeDocument', () => {
   it('summarises a definition with identity, attributes and every source', () => {
     const summary = summarizeDocument({
       type: 'k8s.pod',
+      identityField: { singleField: 'kubernetes.pod.uid' },
       inventory: {
         label: 'K8s Pod',
-        identity: ['kubernetes.pod.uid'],
         attributes: ['kubernetes.pod.name'],
         sources: [
           {
             index: 'metrics-kubernetes.pod-*',
             filter: 'metricset.name == "pod"',
-            metrics: [{ name: 'cpu_cores', field: 'kubernetes.pod.cpu.usage.nanocores', agg: 'avg' }],
+            metrics: [
+              { name: 'cpu_cores', field: 'kubernetes.pod.cpu.usage.nanocores', agg: 'avg' },
+            ],
             attributes: [{ name: 'phase', field: 'kubernetes.pod.status.phase' }],
           },
           { index: 'metrics-kubernetes.state_pod-*' },
@@ -232,9 +260,9 @@ describe('describeDefinitionError', () => {
       kind: 'validation',
       message: 'bad',
     });
-    expect(describeDefinitionError(new EntityDefinitionNotFoundError('t', 'default'))).toMatchObject(
-      { kind: 'not_found', hint: expect.stringContaining('replace: false') }
-    );
+    expect(
+      describeDefinitionError(new EntityDefinitionNotFoundError('t', 'default'))
+    ).toMatchObject({ kind: 'not_found', hint: expect.stringContaining('replace: false') });
     expect(
       describeDefinitionError(new EntityDefinitionAlreadyExistsError('t', 'default'))
     ).toMatchObject({ kind: 'conflict', hint: expect.stringContaining('replace: true') });

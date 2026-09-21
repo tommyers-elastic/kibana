@@ -6,11 +6,11 @@
  */
 
 import { z } from '@kbn/zod/v4';
+import { MAX_INVENTORY_IDENTITY_FIELDS } from '@kbn/entity-store/common';
 import { DEFAULT_LIST_LIMIT, ESQL_MAX_ROWS } from '../../common';
 
 const MAX_COLUMN_NAME_LENGTH = 512;
 const MAX_IDENTITY_VALUE_LENGTH = 1024;
-const MAX_IDENTITY_FIELDS = 8;
 
 /** Absolute ISO 8601 instants only; the generator never uses `NOW()`. */
 const isoDateSchema = z.iso.datetime({ offset: true }).max(64);
@@ -68,8 +68,8 @@ export const detailBodySchema = z
       )
       .refine((identity) => {
         const size = Object.keys(identity).length;
-        return size >= 1 && size <= MAX_IDENTITY_FIELDS;
-      }, `identity must have between 1 and ${MAX_IDENTITY_FIELDS} fields`),
+        return size >= 1 && size <= MAX_INVENTORY_IDENTITY_FIELDS;
+      }, `identity must have between 1 and ${MAX_INVENTORY_IDENTITY_FIELDS} fields`),
   })
   .superRefine(assertRange);
 

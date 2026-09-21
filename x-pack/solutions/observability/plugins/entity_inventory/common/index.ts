@@ -43,11 +43,25 @@ export interface InventoryColumn {
   unit?: string;
 }
 
-/** How a type identifies entities: the authored tuple, or the built-in type's field ranking. */
+/**
+ * How a type identifies entities, read from its `identityField`: `tuple` when there is one
+ * composition (every field required, e.g. `kubernetes.namespace + kubernetes.deployment.name`),
+ * `ranking` when there are several alternatives of which the first present one is the id (the
+ * built-in `host`: `host.id`, else `host.name`, ...). `fields` is every field in order of first
+ * appearance; `compositions` is one field list per composition, in ranking order.
+ */
 export interface InventoryIdentityDescriptor {
   kind: 'tuple' | 'ranking';
   fields: string[];
+  compositions: string[][];
 }
+
+/**
+ * One-line rendering of identity compositions: the fields of a composition joined with " + ",
+ * alternatives joined with ", else " (`host.id, else host.name, else host.hostname`).
+ */
+export const formatIdentityCompositions = (compositions: readonly (readonly string[])[]): string =>
+  compositions.map((composition) => composition.join(' + ')).join(', else ');
 
 export interface InventoryTypeDescriptor {
   type: string;

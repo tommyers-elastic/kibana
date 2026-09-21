@@ -12,29 +12,33 @@ import type { InventoryExtension } from './inventory_schema';
 export interface InventoryEntityDefinitionInput {
   type: string;
   name: string;
+  /** Ordered tuple of literal field paths; becomes the core `identityField` (see `identityTupleToIdentityField`). */
+  identity: readonly string[];
   inventory: InventoryExtension;
 }
 
-/** A non-materialised definition assembled from its inventory authoring form (identity included). */
+/** A non-materialised definition carrying an inventory extension. */
 export type InventoryEntityDefinition = EntityDefinitionWithoutId & {
   inventory: InventoryExtension;
 };
 
 /**
- * Assembles a non-materialised entity definition from its inventory authoring form: the identity
- * core is derived from `inventory.identity` and materialisation is switched off, so the definition
- * is fully usable by the EUID compiler and the inventory query generator but never gets extraction
- * tasks, component templates or install steps.
+ * Fixture and test helper, not schema: assembles a non-materialised entity definition from a
+ * tuple identity and an inventory extension. The identity core is derived with
+ * `identityTupleToIdentityField` and materialisation is switched off, so the definition is fully
+ * usable by the EUID compiler and the inventory query generator but never gets extraction tasks,
+ * component templates or install steps. Authored definitions declare `identityField` directly.
  */
 export function buildInventoryEntityDefinition({
   type,
   name,
+  identity,
   inventory,
 }: InventoryEntityDefinitionInput): InventoryEntityDefinition {
   return {
     type,
     name,
-    identityField: identityTupleToIdentityField(inventory.identity, inventory.identityMode),
+    identityField: identityTupleToIdentityField(identity),
     materialisation: { mode: 'none' },
     inventory,
   };
