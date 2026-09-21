@@ -18,12 +18,22 @@ project:
   sourceRoot: x-pack/solutions/observability/plugins/entity_inventory
 dependsOn:
   - '@kbn/core'
+  - '@kbn/agent-builder-browser'
+  - '@kbn/agent-builder-common'
+  - '@kbn/agent-builder-server'
+  - '@kbn/code-editor'
   - '@kbn/config-schema'
   - '@kbn/entity-store'
+  - '@kbn/es-query'
   - '@kbn/es-types'
+  - '@kbn/i18n'
+  - '@kbn/i18n-react'
   - '@kbn/logging'
+  - '@kbn/react-kibana-context-render'
+  - '@kbn/search-inference-endpoints'
   - '@kbn/server-route-repository'
   - '@kbn/spaces-plugin'
+  - '@kbn/ui-callout'
   - '@kbn/zod'
   - '@kbn/scout-oblt'
 tags:
@@ -35,6 +45,7 @@ tags:
 fileGroups:
   src:
     - common/**/*
+    - public/**/*
     - server/**/*
     - test/scout*/**/*
     - '!target/**/*'
