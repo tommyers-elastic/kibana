@@ -33,5 +33,4 @@ export const DEFINITION_AUTHORING_TOOL_IDS: readonly string[] = [
 
 export const DEFINITION_AUTHORING_SKILL_ID = 'observability.entity-inventory-definitions';
 export const DEFINITION_AUTHORING_AGENT_ID = 'observability.entity-inventory-definitions';
-export const DEFINITION_AUTHORING_AGENT_TYPE_ID =
-  'observability.entity-inventory-definitions-type';
+export const DEFINITION_AUTHORING_AGENT_TYPE_ID = 'observability.entity-inventory-definitions-type';

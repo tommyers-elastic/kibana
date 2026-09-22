@@ -25,11 +25,7 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 200;
 
 const schema = z.object({
-  type: z
-    .string()
-    .min(1)
-    .max(MAX_TYPE_LENGTH)
-    .describe('The entity type to list, e.g. "k8s.pod".'),
+  type: z.string().min(1).max(MAX_TYPE_LENGTH).describe('The entity type to list, e.g. "k8s.pod".'),
   minutes: z
     .number()
     .int()
@@ -45,11 +41,16 @@ const schema = z.object({
     .min(1)
     .max(MAX_LIMIT)
     .default(DEFAULT_LIMIT)
-    .describe(`Maximum rows to return (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}); the total is exact regardless.`),
+    .describe(
+      `Maximum rows to return (default ${DEFAULT_LIMIT}, max ${MAX_LIMIT}); the total is exact regardless.`
+    ),
 });
 
 /** `[now - minutes, now]` as the absolute ISO instants the inventory service requires. */
-export const windowEndingNow = (minutes: number, now = new Date()): { from: string; to: string } => ({
+export const windowEndingNow = (
+  minutes: number,
+  now = new Date()
+): { from: string; to: string } => ({
   from: new Date(now.getTime() - minutes * 60_000).toISOString(),
   to: now.toISOString(),
 });
@@ -96,7 +97,9 @@ Read back: rows from every intended source in queries[], no errors[], unavailabl
       }
       if (error instanceof InventoryRequestError || error instanceof InventoryDefinitionError) {
         return {
-          results: [createErrorResult({ message: error.message, metadata: { kind: 'validation' } })],
+          results: [
+            createErrorResult({ message: error.message, metadata: { kind: 'validation' } }),
+          ],
         };
       }
       const { message, kind, hint } = describeDefinitionError(error);

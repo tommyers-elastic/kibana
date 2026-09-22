@@ -13,7 +13,10 @@ import { createGetDefinitionTool } from './get_definition';
 import { createListTypesTool } from './list_types';
 import { createPreviewInventoryTool } from './preview_inventory';
 
-export const registerTools = (agentBuilder: AgentBuilderPluginSetup, deps: AgentBuilderToolDeps) => {
+export const registerTools = (
+  agentBuilder: AgentBuilderPluginSetup,
+  deps: AgentBuilderToolDeps
+) => {
   agentBuilder.tools.register(createListTypesTool(deps));
   agentBuilder.tools.register(createGetDefinitionTool(deps));
   agentBuilder.tools.register(createPreviewInventoryTool(deps));
