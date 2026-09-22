@@ -203,76 +203,108 @@ export const claimDefinition: EntityDefinition = withId({
   },
 });
 
+const hostIdentityField = {
+  euidRanking: {
+    branches: [
+      {
+        ranking: [[{ field: 'host.id' }], [{ field: 'host.name' }], [{ field: 'host.hostname' }]],
+      },
+    ],
+  },
+  documentsFilter: {
+    or: [
+      {
+        and: [
+          { field: 'host.id', exists: true },
+          { field: 'host.id', neq: '' },
+        ],
+      },
+      {
+        and: [
+          { field: 'host.name', exists: true },
+          { field: 'host.name', neq: '' },
+        ],
+      },
+      {
+        and: [
+          { field: 'host.hostname', exists: true },
+          { field: 'host.hostname', neq: '' },
+        ],
+      },
+    ],
+  },
+};
+
+const hostOtelCpu = {
+  name: 'cpu_pct',
+  field: 'system.cpu.utilization',
+  agg: 'avg' as const,
+  scale: -1,
+  offset: 1,
+  unit: 'ratio',
+};
+const hostOtelLoad = {
+  name: 'load_1m',
+  field: 'system.cpu.load_average.1m',
+  agg: 'avg' as const,
+  unit: 'load',
+};
+const hostEcsSource = {
+  index: 'metrics-system.*',
+  filter: 'metricset.name IN ("cpu", "load")',
+  metrics: [
+    { name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' as const, unit: 'ratio' },
+    { name: 'load_1m', field: 'system.load.1', agg: 'avg' as const, unit: 'load' },
+  ],
+};
+const hostAttributes = ['host.os.name', 'host.os.platform', 'host.architecture'];
+
 /** Built-in style: field ranking identity (Security's host), inventory extension without identity. */
 export const hostDefinition: EntityDefinition = {
   id: 'security_host_default',
   type: 'host',
   name: `Security 'host' Entity Store Definition`,
-  identityField: {
-    euidRanking: {
-      branches: [
-        {
-          ranking: [[{ field: 'host.id' }], [{ field: 'host.name' }], [{ field: 'host.hostname' }]],
-        },
-      ],
-    },
-    documentsFilter: {
-      or: [
-        {
-          and: [
-            { field: 'host.id', exists: true },
-            { field: 'host.id', neq: '' },
-          ],
-        },
-        {
-          and: [
-            { field: 'host.name', exists: true },
-            { field: 'host.name', neq: '' },
-          ],
-        },
-        {
-          and: [
-            { field: 'host.hostname', exists: true },
-            { field: 'host.hostname', neq: '' },
-          ],
-        },
-      ],
-    },
-  },
+  identityField: hostIdentityField,
   materialisation: { mode: 'none' },
   inventory: {
     label: 'Host',
-    attributes: ['host.os.name', 'host.os.platform', 'host.architecture'],
+    attributes: hostAttributes,
     sources: [
       {
         // OTel host gauges carry a `state` dimension; filter to one state and normalise.
         index: 'metrics-hostmetricsreceiver.otel-default',
         filter: 'state == "idle"',
-        metrics: [
-          {
-            name: 'cpu_pct',
-            field: 'system.cpu.utilization',
-            agg: 'avg',
-            scale: -1,
-            offset: 1,
-            unit: 'ratio',
-          },
-        ],
+        metrics: [hostOtelCpu],
       },
       {
         index: 'metrics-hostmetricsreceiver.otel-default',
-        metrics: [
-          { name: 'load_1m', field: 'system.cpu.load_average.1m', agg: 'avg', unit: 'load' },
-        ],
+        metrics: [hostOtelLoad],
       },
+      hostEcsSource,
+    ],
+  },
+};
+
+/**
+ * The same type with the OTel dimension declared on the metric instead of duplicating the source:
+ * one source whose `cpu_pct` is filtered to the idle state and whose `load_1m` is not. The
+ * generator must plan this into exactly `hostDefinition`'s three queries, in the same order.
+ */
+export const hostFilteredMetricsDefinition: EntityDefinition = {
+  id: 'security_host_default',
+  type: 'host',
+  name: `Security 'host' Entity Store Definition`,
+  identityField: hostIdentityField,
+  materialisation: { mode: 'none' },
+  inventory: {
+    label: 'Host',
+    attributes: hostAttributes,
+    sources: [
       {
-        index: 'metrics-system.*',
-        filter: 'metricset.name IN ("cpu", "load")',
-        metrics: [
-          { name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg', unit: 'ratio' },
-          { name: 'load_1m', field: 'system.load.1', agg: 'avg', unit: 'load' },
-        ],
+        index: 'metrics-hostmetricsreceiver.otel-default',
+        metrics: [{ ...hostOtelCpu, filter: 'state == "idle"' }, hostOtelLoad],
       },
+      hostEcsSource,
     ],
   },
 };

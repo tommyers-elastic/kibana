@@ -34,6 +34,13 @@ const MAX_FILTER_LENGTH = 2000;
 const MAX_IDENTIFIER_LENGTH = 64;
 const MAX_ATTRIBUTES = 64;
 const MAX_SOURCES = 16;
+/**
+ * A list runs one concurrent ES|QL query per query plan, and filtered metrics expand a source into
+ * several plans, so the source count alone no longer bounds them. Budget the expansion at twice the
+ * source cap: enough that a type can split two or three metrics several ways per pipeline, and
+ * still a bound a reviewer can reason about.
+ */
+const MAX_QUERY_PLANS = 32;
 const MAX_METRICS_PER_SOURCE = 64;
 const MAX_ATTRIBUTES_PER_SOURCE = 64;
 const MAX_VALUE_LABELS = 64;
@@ -69,12 +76,13 @@ const identifierSchema = z.string().min(1).max(MAX_IDENTIFIER_LENGTH).regex(IDEN
 });
 
 /**
- * Opaque ES|QL boolean expression narrowing a source to the documents of this type (e.g.
- * `metricset.name == "pod"`). The one piece of ES|QL an author writes: it encodes knowledge of the
- * data stream that cannot be inferred, and it is the biggest performance lever on list queries.
- * Validated for length only in this stage; the query generator owns its safe placement.
+ * Opaque ES|QL boolean expression narrowing a source, or a single metric of it, to the documents
+ * that carry what is being declared (e.g. `metricset.name == "pod"`, `state == "idle"`). The one
+ * piece of ES|QL an author writes: it encodes knowledge of the data stream that cannot be
+ * inferred, and it is the biggest performance lever on list queries. Validated for length only
+ * here; the query generator owns its safe placement and rejects command separators and comments.
  */
-const sourceFilterSchema = z.string().min(1).max(MAX_FILTER_LENGTH);
+const esqlFilterSchema = z.string().min(1).max(MAX_FILTER_LENGTH);
 
 const indexPatternSchema = z.string().min(1).max(MAX_INDEX_PATTERN_LENGTH);
 
@@ -109,12 +117,21 @@ export type InventoryMetricAggregation = z.infer<typeof inventoryMetricAggregati
  * cores: `scale: 1e-9`; OTel idle-cpu fraction to busy fraction: `scale: -1, offset: 1`), and
  * `unit` documents the resulting unit (`cores`, `bytes`, `ratio`) for display and for the
  * consistency check.
+ *
+ * `filter` narrows the metric to a subset of its source's documents, for pipelines that carry a
+ * dimension as an attribute of one field where others encode it in the field name (OTel
+ * `system.cpu.utilization` has a `state` dimension and network metrics a `direction`; the ECS
+ * integrations have `system.cpu.idle.pct` and `system.network.in.bytes`). The generator plans one
+ * query per distinct filter, so filtered metrics on one source cost exactly what the same metrics
+ * split across one source per filter cost: this is authoring sugar, not a query optimisation, and
+ * it exists so the filter sits next to the metric it qualifies.
  */
 export const inventoryMetricSchema = z
   .strictObject({
     name: identifierSchema,
     field: literalFieldPathSchema,
     agg: inventoryMetricAggregationSchema,
+    filter: esqlFilterSchema.optional(),
     scale: z
       .number()
       .refine((value) => Number.isFinite(value) && value !== 0, {
@@ -179,7 +196,7 @@ export type InventorySourceAttribute = z.infer<typeof inventorySourceAttributeSc
 export const inventorySourceSchema = z
   .strictObject({
     index: indexPatternSchema,
-    filter: sourceFilterSchema.optional(),
+    filter: esqlFilterSchema.optional(),
     metrics: z.array(inventoryMetricSchema).max(MAX_METRICS_PER_SOURCE).optional(),
     attributes: z.array(inventorySourceAttributeSchema).max(MAX_ATTRIBUTES_PER_SOURCE).optional(),
   })
@@ -278,13 +295,37 @@ const assertOutputColumnsUnambiguous = (
 };
 
 /**
+ * Queries a list runs for one source: one per distinct metric `filter`, since each is planned as
+ * its own `WHERE`. Metrics without a filter share one query, and a source with no metrics is one
+ * query. Grouping here is textual, so it is an upper bound on what the generator plans (which
+ * groups on the canonical form of the expression).
+ */
+const queryPlanCount = ({ metrics }: InventorySource): number =>
+  metrics && metrics.length > 0 ? new Set(metrics.map(({ filter }) => filter ?? '')).size : 1;
+
+const assertQueryPlanBudget = (
+  inventory: { sources: InventorySource[] },
+  ctx: z.RefinementCtx
+): void => {
+  const plans = inventory.sources.reduce((total, source) => total + queryPlanCount(source), 0);
+  if (plans > MAX_QUERY_PLANS) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['sources'],
+      message: `${inventory.sources.length} sources expand to ${plans} queries (one per distinct metric filter); at most ${MAX_QUERY_PLANS} are allowed`,
+    });
+  }
+};
+
+/**
  * The inventory extension of an authored definition. Identity is not part of it: the definition's
  * `identityField` is the single identity declaration, validated against what the query generator
  * can serve in `entity_schema.ts`.
  */
 export const inventoryExtensionSchema = z
   .strictObject(inventoryExtensionShape)
-  .superRefine(assertOutputColumnsUnambiguous);
+  .superRefine(assertOutputColumnsUnambiguous)
+  .superRefine(assertQueryPlanBudget);
 
 export type InventoryExtension = z.infer<typeof inventoryExtensionSchema>;
 

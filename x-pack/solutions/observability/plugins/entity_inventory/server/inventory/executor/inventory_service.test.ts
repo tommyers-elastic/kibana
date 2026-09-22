@@ -12,6 +12,7 @@ import type { ESQLSearchResponse } from '@kbn/es-types';
 import {
   RANGE,
   hostDefinition,
+  hostFilteredMetricsDefinition,
   podDefinition,
   deploymentDefinition,
 } from '../__fixtures__/definitions';
@@ -108,6 +109,67 @@ describe('InventoryService', () => {
     'metrics-kubernetes.state_pod-*': 'time_series',
     'metrics-k8sclusterreceiver.otel-default': 'time_series',
   };
+
+  it('runs one query per filtered metric and merges the plans of a source into one row', async () => {
+    const queries: string[] = [];
+    const respond = (query: string) => {
+      queries.push(query);
+      if (query.startsWith('SET unmapped_fields="nullify";\nFROM')) {
+        return table([{ count: 1 }]);
+      }
+      const host = {
+        'entity.id': 'host:node-a',
+        'host.id': 'node-a',
+        last_seen: '2026-09-16T08:44:00.000Z',
+      };
+      if (query.includes('state == "idle"')) {
+        return table([{ ...host, cpu_pct: 0.25 }]);
+      }
+      if (query.includes('metrics-hostmetricsreceiver.otel-default')) {
+        return table([{ ...host, load_1m: 1.5 }]);
+      }
+      return table([]);
+    };
+    const { es } = fakeEs(
+      respond,
+      {
+        'metrics-hostmetricsreceiver.otel-default': 'time_series',
+        'metrics-system.*': 'time_series',
+      },
+      ['host.id', 'system.cpu.utilization', 'system.cpu.load_average.1m']
+    );
+    const response = await service(es, [hostFilteredMetricsDefinition]).list('host', RANGE);
+
+    // Three list queries (the idle plan, the unfiltered plan, the ECS source) plus the count.
+    const listQueries = queries.filter((query) => !query.includes('| STATS BY '));
+    expect(listQueries).toHaveLength(3);
+    expect(listQueries.filter((query) => query.includes('state == "idle"'))).toHaveLength(1);
+    // The filtered plan asks only for its own metric, so the presence prefilter stays narrow.
+    const [idle] = listQueries.filter((query) => query.includes('state == "idle"'));
+    expect(idle).toContain('AND (`system.cpu.utilization` IS NOT NULL)');
+    expect(idle).not.toContain('system.cpu.load_average.1m');
+
+    expect(response.rows).toStrictEqual([
+      {
+        'entity.id': 'host:node-a',
+        'host.id': 'node-a',
+        'host.name': null,
+        'host.hostname': null,
+        'host.os.name': null,
+        'host.os.platform': null,
+        'host.architecture': null,
+        cpu_pct: 0.25,
+        load_1m: 1.5,
+        last_seen: '2026-09-16T08:44:00.000Z',
+      },
+    ]);
+    // Plans of one source share its index pattern, so provenance names the pattern for both.
+    expect(response.provenance['host:node-a']).toEqual({
+      cpu_pct: 'metrics-hostmetricsreceiver.otel-default',
+      load_1m: 'metrics-hostmetricsreceiver.otel-default',
+    });
+    expect(response.errors).toEqual([]);
+  });
 
   it('rejects a source missing part of every identity composition without warning about its filter', async () => {
     const { es, esql } = fakeEs(() => table([]), podModes, ['kubernetes.namespace']);

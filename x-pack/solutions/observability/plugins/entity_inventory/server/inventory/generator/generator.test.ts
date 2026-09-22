@@ -11,6 +11,7 @@ import {
   claimDefinition,
   deploymentDefinition,
   hostDefinition,
+  hostFilteredMetricsDefinition,
   podDefinition,
 } from '../__fixtures__/definitions';
 import {
@@ -20,6 +21,7 @@ import {
   getInventory,
   metricExpression,
   metricPresenceFilter,
+  planSources,
   resolveIdentityPlan,
   validateSourceFilter,
   quoteIdentifier,
@@ -106,6 +108,35 @@ describe('generator', () => {
       { range: RANGE, limit: 25, pushDownSort: true, sort: { column: 'phase', direction: 'asc' } }
     );
     expect(other.esql).toContain('| SORT `last_seen` DESC NULLS LAST\n| LIMIT 25');
+  });
+
+  it('plans filtered metrics into exactly the queries the duplicated-source spelling generates', () => {
+    const identity = resolveIdentityPlan(hostFilteredMetricsDefinition);
+    const planned = planSources(getInventory(hostFilteredMetricsDefinition).sources);
+    const handSplit = getInventory(hostDefinition).sources;
+    expect(planned).toHaveLength(handSplit.length);
+
+    for (const engine of ['TS', 'FROM'] as const) {
+      planned.forEach((source, index) => {
+        expect(
+          buildSourceQuery(hostFilteredMetricsDefinition, identity, { source, engine }, listOptions)
+        ).toEqual(
+          buildSourceQuery(
+            hostDefinition,
+            identity,
+            { source: handSplit[index], engine },
+            listOptions
+          )
+        );
+      });
+    }
+    // The same output columns, in the same order, and the same exact count.
+    expect(buildColumns(hostFilteredMetricsDefinition, identity)).toEqual(
+      buildColumns(hostDefinition, identity)
+    );
+    expect(buildCountQuery(hostFilteredMetricsDefinition, identity, planned, RANGE)).toEqual(
+      buildCountQuery(hostDefinition, identity, handSplit, RANGE)
+    );
   });
 
   it('detail queries bind identity values as named parameters', () => {

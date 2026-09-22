@@ -40,6 +40,7 @@ import {
   buildCountQuery,
   buildSourceQuery,
   getInventory,
+  planSources,
   resolveIdentityPlan,
   type GeneratedQuery,
   type IdentityPlan,
@@ -381,10 +382,12 @@ export class InventoryService {
     const identity = resolveIdentityPlan(definition);
     const columns = buildColumns(definition, identity);
     const inventory = getInventory(definition);
+    // One query per plan: sources as authored, except that filtered metrics expand into a plan each.
+    const planned = planSources(inventory.sources);
     const filterAnalysis = analyzeDocumentFilter(documentFilter);
     const metadataResults = await this.deps.metadata.resolveMany(
       this.deps.esClient,
-      inventory.sources.map((source) => ({
+      planned.map((source) => ({
         index: source.index,
         fields: [
           ...new Set([...declaredFields(definition, identity, source), ...filterAnalysis.fields]),
@@ -393,7 +396,7 @@ export class InventoryService {
     );
 
     const settled = await Promise.allSettled(
-      inventory.sources.map(async (source, index): Promise<ResolvedSource> => {
+      planned.map(async (source, index): Promise<ResolvedSource> => {
         const result = metadataResults[index];
         if (result.status === 'rejected') throw result.reason;
         const metadata = result.value;
@@ -439,7 +442,7 @@ export class InventoryService {
     const sources: ResolvedSource[] = [];
     const errors: InventorySourceError[] = [];
     settled.forEach((result, index) => {
-      const { index: pattern } = inventory.sources[index];
+      const { index: pattern } = planned[index];
       if (result.status === 'fulfilled') {
         sources.push(result.value);
         return;

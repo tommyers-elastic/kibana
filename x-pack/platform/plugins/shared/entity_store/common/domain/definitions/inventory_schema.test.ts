@@ -172,6 +172,48 @@ describe('inventoryExtensionSchema', () => {
     expect(differentUnit.error?.issues[0].path).toEqual(['sources', 1, 'metrics', 0, 'unit']);
   });
 
+  it('bounds the queries a list runs, counting one per distinct metric filter', () => {
+    const metrics = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        name: `cpu_${index}`,
+        field: 'system.cpu.utilization',
+        agg: 'avg' as const,
+        filter: `state == "s${index}"`,
+      }));
+    // 16 sources are fine while each is one query, but 2 sources of 17 filters are 34.
+    expect(
+      inventoryExtensionSchema.safeParse({
+        sources: Array.from({ length: 16 }, () => ({
+          index: 'metrics-*',
+          metrics: [{ name: 'cpu', field: 'system.cpu.utilization', agg: 'avg' }],
+        })),
+      }).success
+    ).toBe(true);
+    const result = inventoryExtensionSchema.safeParse({
+      sources: [
+        { index: 'metrics-*', metrics: metrics(17) },
+        { index: 'metrics-other-*', metrics: metrics(17) },
+      ],
+    });
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toContain('expand to 34 queries');
+    // Metrics sharing a filter share a query, so the same 34 metrics fit in 2.
+    expect(
+      inventoryExtensionSchema.safeParse({
+        sources: [
+          {
+            index: 'metrics-*',
+            metrics: metrics(17).map((metric) => ({ ...metric, filter: 'state == "idle"' })),
+          },
+          {
+            index: 'metrics-other-*',
+            metrics: metrics(17).map((metric) => ({ ...metric, filter: 'state == "idle"' })),
+          },
+        ],
+      }).success
+    ).toBe(true);
+  });
+
   it('rejects a name used as a metric in one source and as an attribute in another', () => {
     const result = inventoryExtensionSchema.safeParse({
       ...minimalInventory,
@@ -299,6 +341,42 @@ describe('inventorySourceSchema', () => {
         metrics: [{ name: 'phase', field: 'k8s.pod.phase', agg: 'last' }],
       }).success
     ).toBe(true);
+  });
+
+  it('accepts a per-metric filter, so one source can carry several dimension values of a field', () => {
+    const result = inventorySourceSchema.safeParse({
+      index: 'metrics-hostmetricsreceiver.otel-default',
+      metrics: [
+        {
+          name: 'cpu_busy_pct',
+          field: 'system.cpu.utilization',
+          agg: 'avg',
+          filter: 'state == "idle"',
+          scale: -1,
+          offset: 1,
+          unit: 'ratio',
+        },
+        { name: 'load_1m', field: 'system.cpu.load_average.1m', agg: 'avg', unit: 'load' },
+      ],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('bounds a metric filter like a source filter', () => {
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        metrics: [{ name: 'cpu', field: 'system.cpu.utilization', agg: 'avg', filter: '' }],
+      }).success
+    ).toBe(false);
+    expect(
+      inventorySourceSchema.safeParse({
+        index: 'metrics-*',
+        metrics: [
+          { name: 'cpu', field: 'system.cpu.utilization', agg: 'avg', filter: 'x'.repeat(2001) },
+        ],
+      }).success
+    ).toBe(false);
   });
 
   it('rejects a metric and an attribute sharing a name within a source', () => {

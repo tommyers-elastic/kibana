@@ -206,6 +206,19 @@ TS metrics-kubernetes.pod-*
   full scan.
 - **Metrics**: `avg`/`min`/`max`/`sum` are window aggregates (`AGG(AGG_OVER_TIME(f))` under `TS`,
   `AGG(f)` under `FROM`, identical results); `count_distinct`; `last` is the newest sample.
+- **Query plans**: a metric may declare its own `filter`, for pipelines that carry a dimension as
+  an attribute of one field (OTel `system.cpu.utilization` by `state`) where others encode it in
+  the field name (ECS `system.cpu.idle.pct`). The generator expands each source into one plan per
+  distinct metric filter, conjoined with the source's own filter and carrying only that filter's
+  metrics, so the queries are exactly those of the same definition written with one source per
+  filter, in the same order. `planSources` is where this happens; below it nothing knows the
+  difference, and `queries[]`, `errors[]` and `provenance` are per plan (plans of one source share
+  its index pattern, as duplicated sources already did). It is authoring sugar, not an
+  optimisation: one query with per-aggregate `WHERE` filters was measured slower than the split
+  above a few hundred thousand scanned documents, and never faster on latency because plans run
+  concurrently (`entity_inventory_filtered_aggregation_findings.md`). Attributes belong to every
+  plan of their source, which costs nothing for disjoint filters because the plans partition the
+  documents. A definition may expand to at most 32 plans.
 - **Attributes** are always `LAST(f, @timestamp) WHERE f IS NOT NULL`: never split an entity,
   cost about 3 ms per million scanned documents per attribute.
 - **Count** is one `FROM` query over every source with `METADATA _index` so each source's

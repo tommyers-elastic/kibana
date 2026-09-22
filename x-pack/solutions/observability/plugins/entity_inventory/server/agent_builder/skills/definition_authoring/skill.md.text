@@ -68,9 +68,10 @@ What to establish with these:
   `system.cpu.utilization` has `state` = idle, user, system, softirq, ... and
   `system.memory.utilization` has used, cached, free, ... Aggregating across all series averages
   unrelated things (cpu came out as exactly 1/8). Group by the suspected dimension to see it
-  (`STATS AVG(f) BY state`), then filter the source to one state (`"filter": "state == \"used\""`)
-  and, where the semantics need it, normalise with `scale`/`offset` (busy cpu = `1 - idle`:
-  `"scale": -1, "offset": 1`). Compare the result with the other pipeline per entity (query 5).
+  (`STATS AVG(f) BY state`), then filter the metric to one value of it
+  (`"filter": "state == \"used\""` on the metric, §4) and, where the semantics need it, normalise
+  with `scale`/`offset` (busy cpu = `1 - idle`: `"scale": -1, "offset": 1`). Compare the result
+  with the other pipeline per entity (query 5).
 - Whether a numeric field is a gauge, a counter or a histogram (counters and histograms are not
   usable; see §4). `SAMPLE` plus the field names (`*.time`, `*.io`, `*.count` are typically
   counters) and the values (monotonically increasing) tell you.
@@ -302,6 +303,25 @@ Consequences when authoring:
   - `count_distinct`: distinct values of the field per entity (`kubernetes.pod.name` per
     deployment or service).
   - `last`: the newest sample in the window ("current value").
+- `filter`: an ES|QL boolean expression narrowing **this metric** to part of its source, for the
+  common case of one field carrying a dimension as an attribute where another pipeline puts it in
+  the field name. OTel `system.cpu.utilization` has a `state` dimension (idle, user, system, ...)
+  and network metrics a `direction`, while the ECS integrations ship `system.cpu.idle.pct` and
+  `system.network.in.bytes`. Declare one metric per value you want, each with its own filter:
+
+  ```json
+  { "name": "cpu_busy_pct", "field": "system.cpu.utilization", "agg": "avg",
+    "filter": "state == \"idle\"", "scale": -1, "offset": 1, "unit": "ratio" }
+  { "name": "mem_used_pct", "field": "system.memory.utilization", "agg": "avg",
+    "filter": "state == \"used\"", "unit": "ratio" }
+  ```
+
+  The generator plans one query per distinct filter, conjoining it with the source's own `filter`,
+  so this costs exactly what one source per filter costs and each query keeps a narrow, pushed-down
+  presence prefilter. Prefer it to duplicating the source: the filter sits next to the metric it
+  qualifies, and the source budget (16) stays for genuinely different streams. A definition may
+  expand to at most 32 queries in total. Do not filter on another metric's field; it widens the
+  `TS` scan for no benefit.
 - **Same name = same measurement in the same unit.** When two sources report the same thing from
   different pipelines, give the metric the **same `name`** so it merges into one column, the same
   `agg`, and the same `unit`. Use `scale` (a multiplier applied after aggregation) to normalise:
