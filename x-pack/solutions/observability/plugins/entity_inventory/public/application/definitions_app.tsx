@@ -19,6 +19,7 @@ import type { AgentBuilderPluginStart } from '@kbn/agent-builder-browser';
 import type { EntityDefinitionRecord } from '@kbn/entity-store/common';
 import { i18n } from '@kbn/i18n';
 import { KbnDangerCallout } from '@kbn/ui-callout';
+import type { InventoryTypeDescriptor } from '../../common';
 import { buildAskAiMessage } from '../lib/ask_ai_message';
 import { createDefinitionsApi } from '../lib/definitions_api';
 import {
@@ -55,7 +56,8 @@ export const DefinitionsApp = ({ core, agentBuilder }: DefinitionsAppProps) => {
   const inventoryApi = useMemo(() => createInventoryApi(http), [http]);
 
   const [records, setRecords] = useState<EntityDefinitionRecord[]>([]);
-  const [previewTypes, setPreviewTypes] = useState<string[]>([]);
+  const [previewDescriptors, setPreviewDescriptors] = useState<InventoryTypeDescriptor[]>([]);
+  const previewTypes = previewDescriptors.map(({ type }) => type);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<DescribedError | undefined>();
   const [view, setView] = useState<View>(LIST_VIEW);
@@ -75,10 +77,10 @@ export const DefinitionsApp = ({ core, agentBuilder }: DefinitionsAppProps) => {
     }
     try {
       const { types } = await inventoryApi.types();
-      setPreviewTypes(types.map(({ type }) => type));
+      setPreviewDescriptors(types);
     } catch {
       // The preview is optional: a failing types route only disables it.
-      setPreviewTypes([]);
+      setPreviewDescriptors([]);
     }
     setIsLoading(false);
   }, [definitionsApi, inventoryApi]);
@@ -204,6 +206,9 @@ export const DefinitionsApp = ({ core, agentBuilder }: DefinitionsAppProps) => {
           tab={view.name === 'detail' ? view.tab : 'definition'}
           isPreviewAvailable={
             detailRecord !== undefined && previewTypes.includes(detailRecord.definition.type)
+          }
+          inventoryIdentity={
+            previewDescriptors.find(({ type }) => type === detailRecord?.definition.type)?.identity
           }
           inventoryApi={inventoryApi}
           onTabChange={(tab) =>

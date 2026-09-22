@@ -9,6 +9,7 @@ import React from 'react';
 import { EuiButtonEmpty, EuiPageTemplate } from '@elastic/eui';
 import { i18n } from '@kbn/i18n';
 import type { EntityDefinitionRecord } from '@kbn/entity-store/common';
+import type { InventoryIdentityDescriptor } from '../../common';
 import type { DefinitionDocument } from '../lib/editable_document';
 import type { InventoryApi } from '../lib/inventory_api';
 import { getRecordKind } from '../lib/record_summary';
@@ -22,6 +23,7 @@ interface DefinitionDetailProps {
   mode: EditorMode;
   tab: DetailTab;
   isPreviewAvailable: boolean;
+  inventoryIdentity?: InventoryIdentityDescriptor;
   inventoryApi: InventoryApi;
   onTabChange: (tab: DetailTab) => void;
   onBack: () => void;
@@ -51,6 +53,7 @@ export const DefinitionDetail = ({
   mode,
   tab,
   isPreviewAvailable,
+  inventoryIdentity,
   inventoryApi,
   onTabChange,
   onBack,
@@ -118,6 +121,7 @@ export const DefinitionDetail = ({
             key={record.definition.type}
             type={record.definition.type}
             isAvailable={isPreviewAvailable}
+            identity={inventoryIdentity}
             api={inventoryApi}
           />
         ) : (

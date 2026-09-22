@@ -11,6 +11,7 @@ import {
   ENTITY_INVENTORY_ROUTES,
   type InventoryDocumentCountsResponse,
   type InventoryListResponse,
+  type InventoryDetailResponse,
   type InventoryTypesResponse,
 } from '../../common';
 
@@ -24,9 +25,14 @@ export interface InventoryListRequest extends InventoryRangeRequest {
   documentFilter?: QueryDslQueryContainer;
 }
 
+export interface InventoryDetailRequest extends InventoryRangeRequest {
+  identity: Record<string, string>;
+}
+
 export interface InventoryApi {
   types(): Promise<InventoryTypesResponse>;
   list(type: string, body: InventoryListRequest): Promise<InventoryListResponse>;
+  detail(type: string, body: InventoryDetailRequest): Promise<InventoryDetailResponse>;
   /** Every document of the sources' indices in the window, before any predicate; separate from `_list`. */
   documentCounts(
     type: string,
@@ -42,6 +48,10 @@ export const createInventoryApi = (http: HttpStart): InventoryApi => ({
   types: () => http.get<InventoryTypesResponse>(ENTITY_INVENTORY_ROUTES.TYPES),
   list: (type, body) =>
     http.post<InventoryListResponse>(typeRoute(ENTITY_INVENTORY_ROUTES.LIST, type), {
+      body: JSON.stringify(body),
+    }),
+  detail: (type, body) =>
+    http.post<InventoryDetailResponse>(typeRoute(ENTITY_INVENTORY_ROUTES.DETAIL, type), {
       body: JSON.stringify(body),
     }),
   documentCounts: (type, body) =>

@@ -439,6 +439,7 @@ describe('InventoryService', () => {
             'host.name': 'kind-worker',
             'host.hostname': null,
             cpu_pct: 0.1,
+            __entity_inventory_bucket: '2026-09-16T08:43:00.000Z',
             last_seen: '2026-09-16T08:44:00.000Z',
           },
         ]),
@@ -450,6 +451,18 @@ describe('InventoryService', () => {
       identity: { 'host.name': 'kind-worker' },
     });
     expect(response.rows).toHaveLength(1);
+    expect(response.rows[0].cpu_pct).toBeNull();
+    expect(response.timeSeries).toEqual({
+      ...RANGE,
+      targetBuckets: 250,
+      points: [
+        {
+          entityId: 'host:kind-worker',
+          timestamp: '2026-09-16T08:43:00.000Z',
+          metrics: { cpu_pct: 0.1, load_1m: null },
+        },
+      ],
+    });
     expect(response.queries.map((q) => q.engine)).toEqual(['TS', 'TS', 'FROM']);
     const requests = esql.query.mock.calls.map(
       ([request]) => request as { query: string; params: unknown[] }
@@ -461,6 +474,84 @@ describe('InventoryService', () => {
       { id_0: 'kind-worker' },
     ]);
     expect(requests[2].query).not.toContain('_OVER_TIME');
+  });
+
+  it('retains successful detail series and metricless attributes when another source fails', async () => {
+    const { es, esql } = fakeEs(
+      (query) => {
+        if (query.includes('TS metrics-kubernetes.pod-*')) {
+          return new Error('source unavailable');
+        }
+        if (query.includes('TS metrics-kubeletstatsreceiver')) {
+          return table([
+            {
+              'entity.id': 'k8s.pod:p1',
+              'kubernetes.pod.uid': 'p1',
+              __entity_inventory_bucket: RANGE.from,
+              cpu_cores: 1,
+              mem_bytes: 123,
+              last_seen: RANGE.from,
+            },
+          ]);
+        }
+        return table([
+          {
+            'entity.id': 'k8s.pod:p1',
+            'kubernetes.pod.uid': 'p1',
+            phase: 'Running',
+            last_seen: RANGE.from,
+          },
+        ]);
+      },
+      podModes,
+      POD_FIELDS
+    );
+    const response = await service(es).detail('k8s.pod', {
+      ...RANGE,
+      identity: { 'kubernetes.pod.uid': 'p1' },
+    });
+    expect(response.timeSeries.points).toEqual([
+      { entityId: 'k8s.pod:p1', timestamp: RANGE.from, metrics: { cpu_cores: 1, mem_bytes: 123 } },
+    ]);
+    expect(response.rows[0]).toMatchObject({ phase: 'running', cpu_cores: null, mem_bytes: null });
+    expect(response.errors).toEqual([expect.objectContaining({ message: 'source unavailable' })]);
+    expect(esql.query).toHaveBeenCalledTimes(4);
+    expect(response.queries.map(({ esql: query }) => query.includes('BUCKET('))).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(response.truncated).toBe(false);
+  });
+
+  it('flags capped detail sources and retains only series for the returned entities', async () => {
+    const { es } = fakeEs(
+      () =>
+        table(
+          Array.from({ length: 10000 }, (_, position) => ({
+            'entity.id': `host:${position % 51}`,
+            'host.id': String(position % 51),
+            __entity_inventory_bucket: RANGE.from,
+            cpu_pct: position,
+            last_seen: RANGE.from,
+          }))
+        ),
+      { 'metrics-hostmetricsreceiver.otel-default': 'time_series', 'metrics-system.*': 'standard' },
+      ['host.id', 'system.cpu.utilization']
+    );
+    const response = await service(es).detail('host', {
+      ...RANGE,
+      identity: { 'host.name': 'shared' },
+    });
+    const returnedIds = new Set(response.rows.map((row) => row['entity.id']));
+    expect(response.truncated).toBe(true);
+    expect(response.rows).toHaveLength(50);
+    expect(response.timeSeries.points).toHaveLength(50);
+    expect(response.timeSeries.points.every(({ entityId }) => returnedIds.has(entityId))).toBe(
+      true
+    );
+    expect(response.queries.every(({ capped }) => capped)).toBe(true);
   });
 
   it('counts documents in the window per distinct source pattern, isolating failures', async () => {

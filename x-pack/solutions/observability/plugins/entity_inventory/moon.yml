@@ -22,6 +22,7 @@ dependsOn:
   - '@kbn/agent-builder-common'
   - '@kbn/agent-builder-server'
   - '@kbn/code-editor'
+  - '@kbn/charts-theme'
   - '@kbn/config-schema'
   - '@kbn/entity-store'
   - '@kbn/es-query'

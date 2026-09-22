@@ -20,6 +20,7 @@ import {
   EuiFlexItem,
   EuiFormRow,
   EuiInMemoryTable,
+  EuiLink,
   EuiSpacer,
   EuiStat,
   EuiText,
@@ -38,6 +39,8 @@ import type {
   InventoryDocumentCount,
   InventoryDocumentCountsResponse,
   InventoryListResponse,
+  InventoryIdentityDescriptor,
+  InventoryRow,
   InventoryQueryInfo,
 } from '../../common';
 import { ENTITY_INVENTORY_ROUTES, ESQL_MAX_ROWS } from '../../common';
@@ -48,7 +51,8 @@ import {
   sumProcessedDocuments,
 } from '../lib/document_stats';
 import { formatCellValue } from '../lib/format_cell_value';
-import type { InventoryApi } from '../lib/inventory_api';
+import type { InventoryApi, InventoryRangeRequest } from '../lib/inventory_api';
+import { EntityDetailFlyout, type EntityDetailSelection } from './entity_detail_flyout';
 import { describeHttpError, type DescribedError } from '../lib/http_error';
 import { RELATIVE_RANGES, relativeRangeToAbsolute, type RelativeRange } from '../lib/time_range';
 
@@ -56,6 +60,7 @@ interface InventoryPreviewProps {
   type: string;
   isAvailable: boolean;
   api: InventoryApi;
+  identity?: InventoryIdentityDescriptor;
 }
 
 const DEFAULT_PREVIEW_LIMIT = 50;
@@ -115,15 +120,40 @@ const kindHint: Record<InventoryColumnKind, string> = {
  */
 interface PreviewRow {
   id: string;
+  entityId: string;
+  identity?: Record<string, string>;
   values: unknown[];
   searchText: string;
 }
 
-const toPreviewRows = ({ columns, rows }: InventoryListResponse): PreviewRow[] =>
+const detailIdentity = (
+  row: InventoryRow,
+  identity?: InventoryIdentityDescriptor
+): Record<string, string> | undefined => {
+  const composition = identity?.compositions.find((fields) =>
+    fields.every((field) => row[field] !== null && row[field] !== undefined && row[field] !== '')
+  );
+  if (!composition) return;
+  const values: Record<string, string> = {};
+  for (const field of composition) {
+    const value = row[field];
+    if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean')
+      return;
+    values[field] = String(value);
+  }
+  return values;
+};
+
+const toPreviewRows = (
+  { columns, rows }: InventoryListResponse,
+  identity?: InventoryIdentityDescriptor
+): PreviewRow[] =>
   rows.map((row, index) => {
     const values = columns.map(({ name }) => row[name]);
     return {
       id: String(index),
+      entityId: String(row['entity.id']),
+      identity: detailIdentity(row, identity),
       values,
       searchText: values
         .map((value) => formatCellValue(value))
@@ -181,14 +211,29 @@ const renderCell = (value: unknown, column: InventoryColumn) => {
   return <span title={text}>{text}</span>;
 };
 
-const toTableColumns = (columns: InventoryColumn[]): Array<EuiBasicTableColumn<PreviewRow>> =>
+const toTableColumns = (
+  columns: InventoryColumn[],
+  onOpen: (row: PreviewRow) => void,
+  isRunning: boolean
+): Array<EuiBasicTableColumn<PreviewRow>> =>
   columns.map((column, index) => ({
     field: `values.${index}`,
     name: columnHeader(column),
     truncateText: true,
     align: isNumericColumn(column) ? 'right' : 'left',
     sortable: (row: PreviewRow) => sortKey(row.values[index], column),
-    render: (_value: unknown, row: PreviewRow) => renderCell(row.values[index], column),
+    render: (_value: unknown, row: PreviewRow) =>
+      column.kind === 'entity_id' && row.identity ? (
+        <EuiLink
+          data-test-subj="entityInventoryEntityDetailLink"
+          disabled={isRunning}
+          onClick={() => onOpen(row)}
+        >
+          {row.entityId}
+        </EuiLink>
+      ) : (
+        renderCell(row.values[index], column)
+      ),
   }));
 
 /** The longest single ES `took`: the Elasticsearch share of the wall time, since queries run concurrently. */
@@ -238,7 +283,7 @@ const queryItems = (query: InventoryQueryInfo, count?: InventoryDocumentCount) =
 };
 
 /** Runs the type's `_list` route over a relative window and shows rows, timings and the ES|QL. */
-export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewProps) => {
+export const InventoryPreview = ({ type, isAvailable, api, identity }: InventoryPreviewProps) => {
   const [range, setRange] = useState<RelativeRange>('15m');
   const [limit, setLimit] = useState<number>(DEFAULT_PREVIEW_LIMIT);
   const [documentFilterText, setDocumentFilterText] = useState('');
@@ -259,6 +304,10 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
   }, [documentFilterText]);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<InventoryListResponse | undefined>();
+  const [resultContext, setResultContext] = useState<
+    { range: InventoryRangeRequest; hasDocumentFilter: boolean } | undefined
+  >();
+  const [selection, setSelection] = useState<EntityDetailSelection>();
   const [error, setError] = useState<DescribedError | undefined>();
   const [documentCounts, setDocumentCounts] = useState<
     InventoryDocumentCountsResponse | undefined
@@ -271,10 +320,27 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
 
   // Columns arrive ordered by the route (entity.id first, last_seen last) and are kept as-is.
   const tableColumns = useMemo(
-    () => (result === undefined ? [] : toTableColumns(result.columns)),
-    [result]
+    () =>
+      result === undefined
+        ? []
+        : toTableColumns(
+            result.columns,
+            (row) => {
+              if (!row.identity || !resultContext) return;
+              setSelection({
+                entityId: row.entityId,
+                request: { ...resultContext.range, identity: row.identity },
+                hasDocumentFilter: resultContext.hasDocumentFilter,
+              });
+            },
+            isRunning
+          ),
+    [result, resultContext, isRunning]
   );
-  const tableRows = useMemo(() => (result === undefined ? [] : toPreviewRows(result)), [result]);
+  const tableRows = useMemo(
+    () => (result === undefined ? [] : toPreviewRows(result, identity)),
+    [result, identity]
+  );
 
   const run = async () => {
     if (documentFilterInput.error) return;
@@ -283,6 +349,7 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
     const { from, to } = relativeRangeToAbsolute(range);
 
     setIsRunning(true);
+    setSelection(undefined);
     setError(undefined);
     setDocumentCounts(undefined);
     setDocumentCountsError(undefined);
@@ -316,6 +383,10 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
       });
       if (isCurrent()) {
         setResult(listResult);
+        setResultContext({
+          range: { from, to },
+          hasDocumentFilter: Boolean(documentFilterInput.filter),
+        });
       }
     } catch (caught) {
       if (isCurrent()) {
@@ -364,6 +435,14 @@ export const InventoryPreview = ({ type, isAvailable, api }: InventoryPreviewPro
 
   return (
     <>
+      {selection && (
+        <EntityDetailFlyout
+          type={type}
+          selection={selection}
+          api={api}
+          onClose={() => setSelection(undefined)}
+        />
+      )}
       <EuiFlexGroup alignItems="flexEnd" gutterSize="m" responsive={false}>
         <EuiFlexItem grow={false}>
           <EuiFormRow

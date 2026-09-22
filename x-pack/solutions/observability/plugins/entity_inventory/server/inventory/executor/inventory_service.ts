@@ -21,6 +21,7 @@ import {
   LAST_SEEN_COLUMN,
   type InventoryColumn,
   type InventoryCountResponse,
+  type InventoryDetailResponse,
   type InventoryDocumentCountsResponse,
   type InventoryListResponse,
   type InventoryProvenance,
@@ -47,6 +48,7 @@ import {
 } from '../generator';
 import { executeEsql, rowsToObjects, toSourceError } from './esql_client';
 import { applyValueLabels, mergeRows, sortRows } from './merge';
+import { mergeDetailRows } from './detail_rows';
 import { InventoryRequestError, InventoryTypeNotFoundError, SourceNotFoundError } from './errors';
 import type { SourceMetadataResolver } from './source_metadata';
 import {
@@ -92,6 +94,7 @@ interface Resolution {
 
 const DEFAULT_SORT: InventorySort = { column: LAST_SEEN_COLUMN, direction: 'desc' };
 const DETAIL_LIMIT = 50;
+const DETAIL_TARGET_BUCKETS = 250;
 
 /** Fields a source needs mapped: identity, top-level attributes, its own attributes and metrics. */
 const declaredFields = (
@@ -205,7 +208,7 @@ export class InventoryService {
     };
   }
 
-  async detail(type: string, request: DetailRequest): Promise<InventoryListResponse> {
+  async detail(type: string, request: DetailRequest): Promise<InventoryDetailResponse> {
     const started = performance.now();
     const resolution = await this.resolve(type);
     const unknown = Object.keys(request.identity).filter(
@@ -219,6 +222,10 @@ export class InventoryService {
       );
     }
     const range = { from: request.from, to: request.to };
+    let bucketColumn = '__entity_inventory_bucket';
+    while (resolution.columns.some(({ name }) => name === bucketColumn)) {
+      bucketColumn += '_';
+    }
     const queries = resolution.sources.map((plan) => ({
       plan,
       query: buildSourceQuery(resolution.definition, resolution.identity, plan, {
@@ -226,19 +233,24 @@ export class InventoryService {
         limit: DETAIL_LIMIT,
         pushDownSort: false,
         identityValues: request.identity,
+        ...((plan.source.metrics?.length ?? 0) > 0
+          ? { timeBucket: { column: bucketColumn, targetBuckets: DETAIL_TARGET_BUCKETS } }
+          : {}),
       }),
     }));
     const sourceResults = await this.runSourceQueries(queries);
-    const merged = mergeRows(
+    const merged = mergeDetailRows(
       sourceResults.flatMap(({ plan, rows: r }) =>
         r ? [{ index: plan.source.index, rows: applyValueLabels(r, plan.source) }] : []
       ),
-      resolution.columns
+      resolution.columns,
+      bucketColumn
     );
     const rows = sortRows(merged.rows, DEFAULT_SORT)
       .slice(0, DETAIL_LIMIT)
       .map((row) => withEveryColumn(row, resolution.columns));
     const provenance = provenanceFor(rows, merged.provenance);
+    const returnedIds = new Set(rows.map((row) => row[ENTITY_ID_COLUMN]));
     const queriesInfo = sourceResults.map(({ info }) => info);
     return {
       type,
@@ -246,11 +258,16 @@ export class InventoryService {
       rows,
       provenance,
       total: rows.length,
-      truncated: false,
+      truncated: merged.rows.length > rows.length || sourceResults.some(({ info }) => info.capped),
       tookMs: Math.round(performance.now() - started),
       esTookMs: sumTook(queriesInfo),
       queries: queriesInfo,
       unavailableColumns: resolution.unavailableColumns,
+      timeSeries: {
+        ...range,
+        targetBuckets: DETAIL_TARGET_BUCKETS,
+        points: merged.points.filter(({ entityId }) => returnedIds.has(entityId)),
+      },
       errors: [
         ...resolution.errors,
         ...sourceResults.flatMap(({ error }) => (error ? [error] : [])),

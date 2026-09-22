@@ -147,6 +147,22 @@ export interface InventoryListResponse {
   errors: InventorySourceError[];
 }
 
+export interface InventoryTimeSeriesPoint {
+  entityId: string;
+  timestamp: string;
+  metrics: Record<string, number | null>;
+}
+
+export interface InventoryDetailResponse extends InventoryListResponse {
+  /** Metrics are bucket aggregates here; summary rows contain null for metric columns. */
+  timeSeries: {
+    from: string;
+    to: string;
+    targetBuckets: number;
+    points: InventoryTimeSeriesPoint[];
+  };
+}
+
 /**
  * Documents in the window per source pattern, before any of the source's predicates: the
  * denominator for the `documentsFound` a list query reports. Diagnostic; served by its own route

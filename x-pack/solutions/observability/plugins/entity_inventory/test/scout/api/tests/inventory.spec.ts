@@ -9,6 +9,7 @@ import { apiTest, type ApiClientFixture } from '@kbn/scout-oblt';
 import { expect } from '@kbn/scout-oblt/api';
 import type {
   InventoryCountResponse,
+  InventoryDetailResponse,
   InventoryListResponse,
   InventoryTypesResponse,
 } from '../../../../common';
@@ -317,10 +318,19 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
         body: { ...WINDOW_6H, identity: { 'kubernetes.pod.uid': 'pod-uid-6' } },
       });
       expect(wide.statusCode).toBe(200);
-      const wideBody: InventoryListResponse = wide.body;
+      const wideBody: InventoryDetailResponse = wide.body;
       expect(wideBody.rows).toHaveLength(1);
       expect(wideBody.rows[0]['entity.id']).toBe('invtest.pod:pod-uid-6');
-      expect(wideBody.rows[0].cpu_cores as number).toBeCloseTo(0.6, 6);
+      expect(wideBody.rows[0].cpu_cores).toBeNull();
+      expect(wideBody.timeSeries).toMatchObject({ ...WINDOW_6H, targetBuckets: 250 });
+      expect(wideBody.timeSeries.points.length).toBeGreaterThan(0);
+      for (const point of wideBody.timeSeries.points) {
+        expect(point.entityId).toBe('invtest.pod:pod-uid-6');
+        expect(point.metrics.cpu_cores).toBeCloseTo(0.6, 6);
+        expect(point.metrics.mem_bytes).toBeCloseTo(600, 6);
+      }
+      const timestamps = wideBody.timeSeries.points.map(({ timestamp }) => timestamp);
+      expect(timestamps).toStrictEqual([...timestamps].sort());
       expect(
         wideBody.queries.every(({ esql }) => esql.includes('`kubernetes.pod.uid` == ?id_0'))
       ).toBe(true);
@@ -331,7 +341,8 @@ apiTest.describe('Entity inventory API', { tag: ENTITY_INVENTORY_TAGS }, () => {
         responseType: 'json',
         body: { ...WINDOW_15M, identity: { 'kubernetes.pod.uid': 'pod-uid-6' } },
       });
-      expect((narrow.body as InventoryListResponse).rows).toHaveLength(0);
+      expect((narrow.body as InventoryDetailResponse).rows).toHaveLength(0);
+      expect((narrow.body as InventoryDetailResponse).timeSeries.points).toHaveLength(0);
     }
   );
 

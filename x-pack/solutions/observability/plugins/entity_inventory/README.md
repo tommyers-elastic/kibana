@@ -21,6 +21,38 @@ document kind, and "Delete" removes the definition or the built-in's extension. 
 an API extension and code-registered records are read-only. A preview section runs
 `POST /internal/entity_inventory/entities/{type}/_list` over a 15m / 1h / 6h window for any type
 returned by `GET /internal/entity_inventory/types` and shows the rows, timings and generated ES|QL.
+Click an entity ID in the preview to open a detail flyout. It runs the existing `_detail` route
+using the preview's last successful time window and the entity's first complete identity
+composition. It shows attributes and a small chart for each metric, plus source errors, timings
+and generated queries with their parameters. The detail route does not accept the preview's
+document filter.
+
+Detail queries target 250 time buckets per metric-bearing source, with all that source's metrics
+and attributes in one query. Metricless sources remain unbucketed. The response's `timeSeries`
+contains the range, `targetBuckets`, and timestamped metric points keyed by entity ID. Summary
+rows retain identity, latest non-null attributes and `last_seen`; metric columns describe the
+charts, while their scalar summary values are null. Whole-window averages and distinct counts
+are not reconstructed from buckets. Metrics take the first non-null source value per bucket;
+there is no per-bucket provenance.
+
+The charts follow Lens XY defaults: linear fitting between available samples, solid connecting
+lines and automatic point visibility, without extrapolating endpoints or filling values with
+zero. The returned samples retain their nulls; interpolation is a rendering choice, and missing
+buckets are not interpreted as outages. Declared units control axis formatting (bytes, ratios,
+percentages and durations). `BUCKET` chooses a rounded interval, so 250 is a resolution target
+and the number of points can be smaller, especially when the scrape interval exceeds the bucket
+interval. Attributes use a compact responsive label/value layout with localized timestamps.
+
+Lens embedding is a possible future direction: `lens.EmbeddableComponent` accepts an inline
+visualization configuration without requiring a saved dashboard. However, its current public
+props do not expose a direct input for the already-merged points returned by `_detail`; Lens
+normally executes its own configured queries. Reusing our results would require investigating
+a datasource or adapter, while moving query execution into Lens would need to preserve source
+priority and entity merging without duplicating query work. Neither approach has been validated.
+For now, the detail UI uses Elastic Charts directly with Lens-style rendering defaults.
+See `src/platform/packages/shared/kbn-lens-common/embeddable/types.ts` (`LensRendererProps`) and
+`x-pack/platform/packages/shared/agent_builder_visualizations/agent-builder-visualizations/shared/base_visualization.tsx`
+for the dashboard generation feature's embedding example.
 
 ## AI-assisted authoring
 
@@ -83,7 +115,7 @@ dedicated authoring assistant into Agent Builder. Everything lives under `server
 | --- | --- |
 | `GET /internal/entity_inventory/types` | types with an inventory extension: label, identity, output columns, sources |
 | `POST /internal/entity_inventory/entities/{type}/_list` | `{ from, to, limit?, sort?, documentFilter? }` → rows, exact `total`, `truncated`, timings, generated queries |
-| `POST /internal/entity_inventory/entities/{type}/_detail` | `{ from, to, identity: { field: value } }` → the same shape for one entity |
+| `POST /internal/entity_inventory/entities/{type}/_detail` | `{ from, to, identity: { field: value } }` → entity attributes and diagnostics plus `timeSeries` metric points targeting 250 buckets |
 | `POST /internal/entity_inventory/entities/{type}/_count` | `{ from, to, documentFilter? }` → exact distinct count |
 | `POST /internal/entity_inventory/entities/{type}/_document_counts` | `{ from, to }` → documents in the window per source pattern, before any predicate (the denominator for a list query's `documentsFound`; kept out of the list's timings) |
 

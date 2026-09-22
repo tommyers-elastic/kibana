@@ -142,6 +142,43 @@ describe('generator', () => {
     ).toThrow(InventoryDefinitionError);
   });
 
+  it.each(['TS', 'FROM'] as const)(
+    'buckets detail metrics under %s after identity filtering',
+    (engine) => {
+      const identity = resolveIdentityPlan(hostDefinition);
+      const source = getInventory(hostDefinition).sources[0];
+      const { esql, params } = buildSourceQuery(
+        hostDefinition,
+        identity,
+        { source, engine },
+        {
+          ...listOptions,
+          identityValues: { 'host.id': 'host-a' },
+          timeBucket: { column: 'bucket', targetBuckets: 250 },
+        }
+      );
+      expect(esql).toContain(
+        'BY `host.id`, `host.name`, `host.hostname`, `bucket` = BUCKET(@timestamp, 250, ?from, ?to)'
+      );
+      expect(esql).toContain('`host.id` == ?id_0');
+      expect(esql).toContain('state == "idle"');
+      expect(esql).toContain('`system.cpu.utilization` IS NOT NULL');
+      expect(esql).toContain(
+        '`host.os.name` = LAST(`host.os.name`, @timestamp) WHERE `host.os.name` IS NOT NULL'
+      );
+      expect(esql).toContain('| EVAL `cpu_pct` = `cpu_pct` * -1.0 + 1.0');
+      expect(esql).toContain(
+        engine === 'TS'
+          ? 'AVG(AVG_OVER_TIME(`system.cpu.utilization`))'
+          : 'AVG(`system.cpu.utilization`)'
+      );
+      expect(esql.indexOf('| EVAL')).toBeGreaterThan(esql.indexOf('| STATS'));
+      expect(esql).toContain('`last_seen`, `bucket`\n| SORT');
+      expect(esql).toContain('| LIMIT 10000');
+      expect(params).toEqual([{ from: RANGE.from }, { to: RANGE.to }, { id_0: 'host-a' }]);
+    }
+  );
+
   it('ranked identities group by every ranking field and compute the id afterwards', () => {
     const identity = resolveIdentityPlan(hostDefinition);
     expect(identity.kind).toBe('ranking');

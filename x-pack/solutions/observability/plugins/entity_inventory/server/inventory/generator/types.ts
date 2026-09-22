@@ -41,4 +41,6 @@ export interface SourceQueryOptions {
   pushDownSort: boolean;
   /** Detail queries: equality on these identity fields (values become named parameters). */
   identityValues?: Record<string, string>;
+  /** Detail metric queries group by time as well as raw identity fields. */
+  timeBucket?: { column: string; targetBuckets: number };
 }

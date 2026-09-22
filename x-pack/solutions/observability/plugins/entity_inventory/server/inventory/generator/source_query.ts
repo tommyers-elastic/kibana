@@ -190,14 +190,21 @@ export const buildSourceQuery = (
   aggregates.push(`${quoteIdentifier(LAST_SEEN_COLUMN)} = MAX(@timestamp)`);
 
   const columns = sourceColumnNames(definition, identity, source);
+  const groupings = identity.fields.map(quoteIdentifier);
+  if (options.timeBucket) {
+    const { column, targetBuckets } = options.timeBucket;
+    if (!Number.isInteger(targetBuckets) || targetBuckets < 1 || targetBuckets > ESQL_MAX_ROWS) {
+      throw new InventoryDefinitionError('time bucket target must be between 1 and 10000');
+    }
+    columns.push(column);
+    groupings.push(`${quoteIdentifier(column)} = BUCKET(@timestamp, ${targetBuckets}, ?from, ?to)`);
+  }
   const scaled = scaleAssignments(source);
   const lines = [
     UNMAPPED_FIELDS_DIRECTIVE,
     `${engine} ${source.index}`,
     `| WHERE ${predicates.join('\n    AND ')}`,
-    `| STATS ${aggregates.join(',\n    ')}\n    BY ${identity.fields
-      .map(quoteIdentifier)
-      .join(', ')}`,
+    `| STATS ${aggregates.join(',\n    ')}\n    BY ${groupings.join(', ')}`,
     ...(scaled.length > 0 ? [`| EVAL ${scaled.join(', ')}`] : []),
     `| EVAL ${identity.entityIdEvaluation}`,
     `| KEEP ${columns.map(quoteIdentifier).join(', ')}`,
