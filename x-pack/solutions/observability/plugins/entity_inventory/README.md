@@ -23,7 +23,8 @@ an API extension and code-registered records are read-only. A preview section ru
 returned by `GET /internal/entity_inventory/types` and shows the rows, timings and generated ES|QL.
 Click an entity ID in the preview to open a detail flyout. It runs the existing `_detail` route
 using the preview's last successful time window and the entity's first complete identity
-composition. It shows attributes and a small chart for each metric, plus source errors, timings
+composition. It shows attributes and a small chart for each metric subtitled with the source that
+supplied its series, plus source errors, timings
 and generated queries with their parameters. The detail route does not accept the preview's
 document filter.
 
@@ -32,8 +33,13 @@ and attributes in one query. Metricless sources remain unbucketed. The response'
 contains the range, `targetBuckets`, and timestamped metric points keyed by entity ID. Summary
 rows retain identity, latest non-null attributes and `last_seen`; metric columns describe the
 charts, while their scalar summary values are null. Whole-window averages and distinct counts
-are not reconstructed from buckets. Metrics take the first non-null source value per bucket;
-there is no per-bucket provenance.
+are not reconstructed from buckets. For each entity and metric, the first source in definition
+order with any valid numeric value in the requested window supplies the entire series. Missing
+values within that series are not filled from another source. Different metrics can choose
+different sources; sparse preferred sources can therefore produce sparse charts even when a
+secondary source has more samples. `provenance` names the chosen source per entity and metric
+alongside the attribute sources, and each chart shows it as a subtitle. Within a series there is
+no per-bucket provenance, because one source supplies all of its points.
 
 The charts follow Lens XY defaults: linear fitting between available samples, solid connecting
 lines and automatic point visibility, without extrapolating endpoints or filling values with

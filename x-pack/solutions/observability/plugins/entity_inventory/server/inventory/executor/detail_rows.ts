@@ -9,11 +9,15 @@ import {
   ENTITY_ID_COLUMN,
   LAST_SEEN_COLUMN,
   type InventoryColumn,
+  type InventoryProvenance,
   type InventoryTimeSeriesPoint,
 } from '../../../common';
 import { mergeRows, sortRows, type MergeInput, type MergeResult } from './merge';
 
-/** Separates detail summaries from metric buckets, preserving source priority within each bucket. */
+/**
+ * Separates detail summaries from buckets, choosing one source per entity and metric for the
+ * window. `provenance` names that source alongside the summary attributes.
+ */
 export const mergeDetailRows = (
   inputs: MergeInput[],
   columns: InventoryColumn[],
@@ -36,21 +40,41 @@ export const mergeDetailRows = (
       summaryColumns
     ).rows,
   }));
+  // Select across the whole window before merging: a missing bucket never switches sources.
+  const selectedSources = new Map<string, Map<string, number>>();
+  for (const [sourceIndex, { rows }] of inputs.entries()) {
+    for (const row of rows) {
+      const entityId = row[ENTITY_ID_COLUMN];
+      if (typeof entityId !== 'string' || typeof row[bucketColumn] !== 'string') continue;
+      const selected = selectedSources.get(entityId) ?? new Map<string, number>();
+      for (const { name } of metricColumns) {
+        const value = row[name];
+        if (!selected.has(name) && typeof value === 'number' && Number.isFinite(value)) {
+          selected.set(name, sourceIndex);
+        }
+      }
+      selectedSources.set(entityId, selected);
+    }
+  }
   const points = new Map<string, InventoryTimeSeriesPoint>();
-  for (const { rows } of inputs) {
+  for (const [sourceIndex, { rows }] of inputs.entries()) {
     for (const row of rows) {
       const entityId = row[ENTITY_ID_COLUMN];
       const timestamp = row[bucketColumn];
       if (typeof entityId !== 'string' || typeof timestamp !== 'string') {
         continue;
       }
+      const sourceMetrics = metricColumns.filter(
+        ({ name }) => selectedSources.get(entityId)?.get(name) === sourceIndex
+      );
+      if (sourceMetrics.length === 0) continue;
       const key = JSON.stringify([entityId, timestamp]);
       const point = points.get(key) ?? {
         entityId,
         timestamp,
         metrics: Object.fromEntries(metricColumns.map(({ name }) => [name, null])),
       };
-      for (const { name } of metricColumns) {
+      for (const { name } of sourceMetrics) {
         const value = row[name];
         if (point.metrics[name] === null && typeof value === 'number' && Number.isFinite(value)) {
           point.metrics[name] = value;
@@ -59,8 +83,20 @@ export const mergeDetailRows = (
       points.set(key, point);
     }
   }
+  const summary = mergeRows(summaryInputs, summaryColumns);
+  const provenance: InventoryProvenance = { ...summary.provenance };
+  for (const [entityId, selected] of selectedSources) {
+    if (selected.size === 0) continue;
+    provenance[entityId] = {
+      ...provenance[entityId],
+      ...Object.fromEntries(
+        [...selected].map(([name, sourceIndex]) => [name, inputs[sourceIndex].index])
+      ),
+    };
+  }
   return {
-    ...mergeRows(summaryInputs, summaryColumns),
+    rows: summary.rows,
+    provenance,
     points: [...points.values()].sort(
       (left, right) =>
         left.timestamp.localeCompare(right.timestamp) || left.entityId.localeCompare(right.entityId)

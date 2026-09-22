@@ -18,7 +18,7 @@ const columns: InventoryColumn[] = [
 ];
 
 describe('mergeDetailRows', () => {
-  it('merges metrics per entity and bucket with source priority, preserves nulls and omits metric summaries', () => {
+  it('keeps one source per metric across the window, names it in provenance, preserves nulls and omits metric summaries', () => {
     const merged = mergeDetailRows(
       [
         {
@@ -77,7 +77,7 @@ describe('mergeDetailRows', () => {
       'bucket'
     );
     expect(merged.points).toEqual([
-      { entityId: 'a', timestamp: '2026-09-22T00:00:00.000Z', metrics: { cpu: 1, memory: 0 } },
+      { entityId: 'a', timestamp: '2026-09-22T00:00:00.000Z', metrics: { cpu: null, memory: 0 } },
       { entityId: 'a', timestamp: '2026-09-22T00:01:00.000Z', metrics: { cpu: 2, memory: null } },
       { entityId: 'b', timestamp: '2026-09-22T00:01:00.000Z', metrics: { cpu: 3, memory: null } },
     ]);
@@ -87,6 +87,43 @@ describe('mergeDetailRows', () => {
       phase: 'running',
       last_seen: '2026-09-22T00:02:00.000Z',
     });
-    expect(merged.provenance.a).toEqual({ name: 'attributes', phase: 'preferred' });
+    expect(merged.provenance).toEqual({
+      a: { name: 'attributes', phase: 'preferred', cpu: 'preferred', memory: 'preferred' },
+      b: { cpu: 'fallback' },
+    });
+  });
+
+  it('chooses sources independently per entity and metric in definition order, even for repeated index patterns', () => {
+    const points = mergeDetailRows(
+      [
+        {
+          index: 'same-pattern',
+          rows: [
+            { 'entity.id': 'a', bucket: '2026-09-22T00:00:00.000Z', cpu: null, memory: NaN },
+            { 'entity.id': 'a', bucket: '2026-09-22T00:01:00.000Z', cpu: 0, memory: null },
+            { 'entity.id': 'b', bucket: '2026-09-22T00:00:00.000Z', cpu: null, memory: 10 },
+          ],
+        },
+        {
+          index: 'same-pattern',
+          rows: [
+            { 'entity.id': 'a', bucket: '2026-09-22T00:00:00.000Z', cpu: 99, memory: 20 },
+            { 'entity.id': 'a', bucket: '2026-09-22T00:01:00.000Z', cpu: 99, memory: null },
+            { 'entity.id': 'b', bucket: '2026-09-22T00:00:00.000Z', cpu: 5, memory: 99 },
+          ],
+        },
+        {
+          index: 'unused',
+          rows: [{ 'entity.id': 'a', bucket: '2026-09-22T00:02:00.000Z', cpu: 99, memory: 99 }],
+        },
+      ],
+      columns,
+      'bucket'
+    ).points;
+    expect(points).toEqual([
+      { entityId: 'a', timestamp: '2026-09-22T00:00:00.000Z', metrics: { cpu: null, memory: 20 } },
+      { entityId: 'b', timestamp: '2026-09-22T00:00:00.000Z', metrics: { cpu: 5, memory: 10 } },
+      { entityId: 'a', timestamp: '2026-09-22T00:01:00.000Z', metrics: { cpu: 0, memory: null } },
+    ]);
   });
 });

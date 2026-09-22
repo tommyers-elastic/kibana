@@ -32,7 +32,7 @@ interface EntityMetricChartsProps {
 export const EntityMetricCharts = ({ entityId, result }: EntityMetricChartsProps) => {
   const baseTheme = useElasticChartsTheme();
   const { euiTheme } = useEuiTheme();
-  const { columns, timeSeries } = result;
+  const { columns, provenance, timeSeries } = result;
   const metrics = columns.filter(({ kind }) => kind === 'metric');
   const points = timeSeries.points.filter((point) => point.entityId === entityId);
   const from = Date.parse(timeSeries.from);
@@ -59,6 +59,7 @@ export const EntityMetricCharts = ({ entityId, result }: EntityMetricChartsProps
         }));
         const hasValues = data.some(({ value }) => value !== null);
         const title = name;
+        const source = provenance[entityId]?.[name];
         const formatValue = (value: number) => formatMetricValue(value, unit);
         return (
           <React.Fragment key={name}>
@@ -71,6 +72,20 @@ export const EntityMetricCharts = ({ entityId, result }: EntityMetricChartsProps
               <EuiTitle size="xxs">
                 <h4>{title}</h4>
               </EuiTitle>
+              {source ? (
+                <EuiText
+                  size="xs"
+                  color="subdued"
+                  data-test-subj="entityInventoryMetricChartSource"
+                >
+                  <p>
+                    {i18n.translate('xpack.entityInventory.entityDetail.metricSourceSubtitle', {
+                      defaultMessage: 'Source: {source}',
+                      values: { source },
+                    })}
+                  </p>
+                </EuiText>
+              ) : null}
               {hasValues ? (
                 <Chart size={{ height: 210 }}>
                   <Settings

@@ -29,7 +29,10 @@ const result: InventoryDetailResponse = {
     { name: 'memory', kind: 'metric', unit: 'bytes' },
   ],
   rows: [],
-  provenance: {},
+  provenance: {
+    a: { cpu: 'metrics-kubeletstatsreceiver.otel-default' },
+    b: { cpu: 'metrics-kubernetes.pod-*' },
+  },
   total: 1,
   truncated: false,
   tookMs: 1,
@@ -80,6 +83,17 @@ describe('entity metric charts', () => {
     );
     expect(screen.getByText('memory')).toBeInTheDocument();
     expect(screen.getByText('No samples in this time window.')).toBeInTheDocument();
+  });
+
+  it('subtitles each chart with the source that supplied its series and omits it when there is none', () => {
+    render(
+      <EuiProvider>
+        <EntityMetricCharts entityId="a" result={result} />
+      </EuiProvider>
+    );
+    const subtitles = screen.getAllByTestId('entityInventoryMetricChartSource');
+    expect(subtitles).toHaveLength(1);
+    expect(subtitles[0]).toHaveTextContent('Source: metrics-kubeletstatsreceiver.otel-default');
   });
 
   it('formats metric axes using the declared units', () => {
