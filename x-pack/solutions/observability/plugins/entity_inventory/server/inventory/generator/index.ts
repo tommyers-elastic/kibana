@@ -15,7 +15,7 @@ export {
 } from './source_query';
 export { buildCountQuery, COUNT_COLUMN } from './count_query';
 export { planSources } from './source_plans';
-export { validateSourceFilter } from './filters';
+export { validateEsqlFilter } from './filters';
 export { quoteIdentifier, isSafeIndexPattern } from './esql_syntax';
 export type {
   GeneratedQuery,

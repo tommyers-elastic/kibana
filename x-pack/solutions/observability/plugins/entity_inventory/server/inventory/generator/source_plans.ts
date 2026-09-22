@@ -8,7 +8,7 @@
 import { BasicPrettyPrinter, Parser } from '@elastic/esql';
 import type { InventoryMetric, InventorySource } from '@kbn/entity-store/common';
 import { InventoryDefinitionError } from './columns';
-import { validateSourceFilter } from './filters';
+import { validateEsqlFilter } from './filters';
 
 /**
  * Canonical form of a filter expression, so `state=="idle"` and `state == "idle"` plan as one query
@@ -62,7 +62,7 @@ export const planSources = (sources: InventorySource[]): InventorySource[] =>
     for (const metric of metrics) {
       const { filter, ...planned } = metric;
       if (filter !== undefined) {
-        const problem = validateSourceFilter(filter, `filter of metric "${metric.name}"`);
+        const problem = validateEsqlFilter(filter, `filter of metric "${metric.name}"`);
         if (problem) {
           throw new InventoryDefinitionError(problem);
         }

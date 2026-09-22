@@ -20,6 +20,7 @@ import {
   claimDefinition,
   deploymentDefinition,
   hostDefinition,
+  hostFilteredMetricsDefinition,
   podDefinition,
 } from '../../inventory/__fixtures__/definitions';
 import {
@@ -96,6 +97,21 @@ describe('summarizeEntityType', () => {
     );
     expect(summary.metrics).toEqual(expect.arrayContaining(['cpu_cores', 'mem_bytes']));
     expect(new Set(summary.metrics).size).toBe(summary.metrics.length);
+    expect(summary.sources.every(({ metricFilters }) => metricFilters === undefined)).toBe(true);
+  });
+
+  it('surfaces the filter of each filtered metric on its source', () => {
+    const summary = summarizeEntityType({
+      definition: hostFilteredMetricsDefinition,
+      source: 'api',
+    });
+    expect(summary.sources[0]).toEqual({
+      index: 'metrics-hostmetricsreceiver.otel-default',
+      metrics: ['cpu_pct', 'load_1m'],
+      metricFilters: { cpu_pct: 'state == "idle"' },
+      attributes: [],
+    });
+    expect(summary.sources[1].metricFilters).toBeUndefined();
   });
 
   it('marks a built-in with an API extension as editable through an extension document', () => {
@@ -228,6 +244,37 @@ describe('summarizeDocument', () => {
         'Sources (2):',
         '- `metrics-kubernetes.pod-*` where `metricset.name == "pod"`; metrics: cpu_cores (avg of kubernetes.pod.cpu.usage.nanocores); attributes: phase',
         '- `metrics-kubernetes.state_pod-*`; no metrics',
+      ].join('\n')
+    );
+  });
+
+  it('shows a metric filter next to the metric it qualifies', () => {
+    const summary = summarizeDocument({
+      extends: 'host',
+      inventory: {
+        sources: [
+          {
+            index: 'metrics-hostmetricsreceiver.otel-default',
+            metrics: [
+              {
+                name: 'cpu_busy_pct',
+                field: 'system.cpu.utilization',
+                agg: 'avg',
+                filter: 'state == "idle"',
+                scale: -1,
+                offset: 1,
+              },
+              { name: 'load_1m', field: 'system.cpu.load_average.1m', agg: 'avg' },
+            ],
+          },
+        ],
+      },
+    });
+    expect(summary).toBe(
+      [
+        '**Extension** of the built-in type `host`',
+        'Sources (1):',
+        '- `metrics-hostmetricsreceiver.otel-default`; metrics: cpu_busy_pct (avg of system.cpu.utilization where `state == "idle"`), load_1m (avg of system.cpu.load_average.1m)',
       ].join('\n')
     );
   });

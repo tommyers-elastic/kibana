@@ -10,7 +10,7 @@ import { Parser } from '@elastic/esql';
 import { ESQL_MAX_ROWS, LAST_SEEN_COLUMN, type InventoryEngine } from '../../../common';
 import { InventoryDefinitionError, getInventory, sourceColumnNames } from './columns';
 import { isSafeIndexPattern, quoteIdentifier } from './esql_syntax';
-import { validateSourceFilter } from './filters';
+import { validateEsqlFilter } from './filters';
 import type { IdentityPlan } from './identity';
 import type {
   GeneratedQuery,
@@ -108,11 +108,22 @@ export const metricPresenceFilter = (source: InventorySource): string | undefine
   return `(${fields.map((field) => `${quoteIdentifier(field)} IS NOT NULL`).join(' OR ')})`;
 };
 
-/** The pre-aggregation predicates of a source, in order, excluding the time range. */
+/**
+ * The pre-aggregation predicates of a source, in order, excluding the time range. Metric filters
+ * are not placed here: `planSources` lifts each into the `filter` of its own plan, so a metric
+ * that still carries one has bypassed planning and would silently aggregate over every document
+ * of the source under the narrowed metric's name. Refuse rather than generate a wrong query.
+ */
 export const sourcePredicates = (source: InventorySource, identity: IdentityPlan): string[] => {
+  const unplanned = (source.metrics ?? []).find(({ filter }) => filter !== undefined);
+  if (unplanned) {
+    throw new InventoryDefinitionError(
+      `metric "${unplanned.name}" carries a filter; expand the sources with planSources before generating queries`
+    );
+  }
   const predicates: string[] = [];
   if (source.filter !== undefined) {
-    const problem = validateSourceFilter(source.filter);
+    const problem = validateEsqlFilter(source.filter);
     if (problem) {
       throw new InventoryDefinitionError(problem);
     }

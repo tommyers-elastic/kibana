@@ -32,7 +32,12 @@ describe('planSources', () => {
             { ...cpu, filter: 'state == "idle"' },
             load,
             { ...mem, filter: 'state == "used"' },
-            { name: 'cpu_user', field: 'system.cpu.utilization', agg: 'avg', filter: 'state == "idle"' },
+            {
+              name: 'cpu_user',
+              field: 'system.cpu.utilization',
+              agg: 'avg',
+              filter: 'state == "idle"',
+            },
           ],
         },
       ])

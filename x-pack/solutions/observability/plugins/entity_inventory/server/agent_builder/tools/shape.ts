@@ -44,7 +44,14 @@ export interface EntityTypeSummary {
   identity: InventoryIdentityDescriptor;
   attributes: string[];
   metrics: string[];
-  sources: Array<{ index: string; filter?: string; metrics: string[]; attributes: string[] }>;
+  sources: Array<{
+    index: string;
+    filter?: string;
+    metrics: string[];
+    /** Metric name to its own ES|QL `filter`, for the metrics of this source that declare one. */
+    metricFilters?: Record<string, string>;
+    attributes: string[];
+  }>;
 }
 
 export interface DefinitionDocumentResult {
@@ -89,12 +96,20 @@ const editability = (
 export const summarizeEntityType = (record: EntityDefinitionRecord): EntityTypeSummary => {
   const { definition, source, inventorySource } = record;
   const inventory = definition.inventory;
-  const sources = (inventory?.sources ?? []).map(({ index, filter, metrics, attributes }) => ({
-    index,
-    ...(filter !== undefined ? { filter } : {}),
-    metrics: (metrics ?? []).map(({ name }) => name),
-    attributes: (attributes ?? []).map(({ name }) => name),
-  }));
+  const sources = (inventory?.sources ?? []).map(({ index, filter, metrics, attributes }) => {
+    const metricFilters = Object.fromEntries(
+      (metrics ?? []).flatMap((metric) =>
+        metric.filter !== undefined ? [[metric.name, metric.filter]] : []
+      )
+    );
+    return {
+      index,
+      ...(filter !== undefined ? { filter } : {}),
+      metrics: (metrics ?? []).map(({ name }) => name),
+      ...(Object.keys(metricFilters).length > 0 ? { metricFilters } : {}),
+      attributes: (attributes ?? []).map(({ name }) => name),
+    };
+  });
   return {
     type: definition.type,
     label: inventory?.label ?? definition.type,
@@ -221,15 +236,21 @@ export const summarizeDocument = (document: Record<string, unknown>): string => 
     const filter = typeof source.filter === 'string' ? ` where \`${source.filter}\`` : '';
     const metrics = (Array.isArray(source.metrics) ? source.metrics : [])
       .map(asRecord)
-      .flatMap((metric) =>
-        metric && typeof metric.name === 'string'
-          ? [
-              `${metric.name}${typeof metric.agg === 'string' ? ` (${metric.agg}` : ''}${
-                typeof metric.field === 'string' ? ` of ${metric.field})` : ')'
-              }`,
-            ]
-          : []
-      );
+      .flatMap((metric) => {
+        if (!metric || typeof metric.name !== 'string') {
+          return [];
+        }
+        // `name (agg of field where filter)`: the filter is the one line of ES|QL on a metric and
+        // the thing the user most needs to see before confirming.
+        const detail = [
+          typeof metric.agg === 'string' ? metric.agg : '',
+          typeof metric.field === 'string' ? `of ${metric.field}` : '',
+          typeof metric.filter === 'string' ? `where \`${metric.filter}\`` : '',
+        ]
+          .filter((part) => part !== '')
+          .join(' ');
+        return [detail === '' ? metric.name : `${metric.name} (${detail})`];
+      });
     const sourceAttributes = (Array.isArray(source.attributes) ? source.attributes : [])
       .map(asRecord)
       .flatMap((attribute) =>

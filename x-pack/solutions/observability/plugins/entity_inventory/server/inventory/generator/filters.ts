@@ -20,10 +20,7 @@ const FORBIDDEN = [
  * must parse as exactly the `WHERE` of `FROM x | WHERE <filter>`. Returns the problem, or
  * `undefined` when the filter is safe to place in a `WHERE`.
  */
-export const validateSourceFilter = (
-  filter: string,
-  label = 'source filter'
-): string | undefined => {
+export const validateEsqlFilter = (filter: string, label = 'source filter'): string | undefined => {
   for (const { pattern, reason } of FORBIDDEN) {
     if (pattern.test(filter)) {
       return `${label} contains ${reason}: ${filter}`;

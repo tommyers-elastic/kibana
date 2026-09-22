@@ -23,7 +23,7 @@ import {
   metricPresenceFilter,
   planSources,
   resolveIdentityPlan,
-  validateSourceFilter,
+  validateEsqlFilter,
   quoteIdentifier,
   isSafeIndexPattern,
   InventoryDefinitionError,
@@ -347,18 +347,35 @@ describe('generator', () => {
   });
 
   it('validates source filters as single boolean expressions', () => {
-    expect(validateSourceFilter('metricset.name IN ("pod", "state_pod")')).toBeUndefined();
-    expect(validateSourceFilter('k8s.pod.phase IS NOT NULL')).toBeUndefined();
-    expect(validateSourceFilter('a == 1 | DROP b')).toContain('pipe');
-    expect(validateSourceFilter('a == 1 // c')).toContain('comment');
-    expect(validateSourceFilter('a == 1 /* c */')).toContain('comment');
-    expect(validateSourceFilter('a == 1 ; SET x=1')).toContain('semicolon');
-    expect(validateSourceFilter('a == 1, b')).toContain('does not parse');
+    expect(validateEsqlFilter('metricset.name IN ("pod", "state_pod")')).toBeUndefined();
+    expect(validateEsqlFilter('k8s.pod.phase IS NOT NULL')).toBeUndefined();
+    expect(validateEsqlFilter('a == 1 | DROP b')).toContain('pipe');
+    expect(validateEsqlFilter('a == 1 // c')).toContain('comment');
+    expect(validateEsqlFilter('a == 1 /* c */')).toContain('comment');
+    expect(validateEsqlFilter('a == 1 ; SET x=1')).toContain('semicolon');
+    expect(validateEsqlFilter('a == 1, b')).toContain('does not parse');
     const identity = resolveIdentityPlan(podDefinition);
     const source = { ...getInventory(podDefinition).sources[0], filter: 'x == 1 | DROP y' };
     expect(() =>
       buildSourceQuery(podDefinition, identity, { source, engine: 'TS' }, listOptions)
     ).toThrow(InventoryDefinitionError);
+  });
+
+  it('refuses to generate from a source whose metrics still carry a filter', () => {
+    // Unplanned, the filter would be dropped and `cpu_pct` aggregated over every state.
+    const identity = resolveIdentityPlan(hostFilteredMetricsDefinition);
+    const [source] = getInventory(hostFilteredMetricsDefinition).sources;
+    expect(() =>
+      buildSourceQuery(
+        hostFilteredMetricsDefinition,
+        identity,
+        { source, engine: 'TS' },
+        listOptions
+      )
+    ).toThrow('metric "cpu_pct" carries a filter');
+    expect(() => buildCountQuery(hostFilteredMetricsDefinition, identity, [source], RANGE)).toThrow(
+      InventoryDefinitionError
+    );
   });
 
   it('quotes identifiers and rejects unsafe index patterns', () => {
