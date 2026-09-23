@@ -814,11 +814,12 @@ export const InventoryPreview = ({ type, isAvailable, api, identity }: Inventory
                 },
               }}
               executeQueryOptions={{ defaultFields: ['searchText'] }}
-              pagination={
-                tableRows.length > DEFAULT_PAGE_SIZE
-                  ? { initialPageSize: DEFAULT_PAGE_SIZE, pageSizeOptions: PAGE_SIZE_OPTIONS }
-                  : false
-              }
+              // Always on: EuiInMemoryTable reads initialPageSize only when it mounts, so switching
+              // from `false` to a config after a small result leaves the page size unset.
+              pagination={{
+                initialPageSize: DEFAULT_PAGE_SIZE,
+                pageSizeOptions: PAGE_SIZE_OPTIONS,
+              }}
               noItemsMessage={i18n.translate('xpack.entityInventory.preview.noRows', {
                 defaultMessage: 'No entities in the window',
               })}

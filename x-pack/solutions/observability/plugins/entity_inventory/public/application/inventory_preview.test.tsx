@@ -259,6 +259,27 @@ describe('entity detail preview', () => {
     expect(flyout.getByText('Detail queries')).toBeInTheDocument();
   });
 
+  it('pages by the default page size after a smaller result set was shown first', async () => {
+    const rowsOf = (count: number): InventoryListResponse => ({
+      ...entityResponse,
+      rows: Array.from({ length: count }, (_, index) => ({
+        ...entityResponse.rows[0],
+        'entity.id': `service:${index}`,
+        'service.id': String(index),
+      })),
+      total: count,
+    });
+    const api = setup(rowsOf(20));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await screen.findByText('service:19');
+    api.list.mockResolvedValue(rowsOf(32));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await screen.findByText('service:24');
+    expect(screen.queryByText('service:25')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Page 2 of 2')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/of 32/)).not.toBeInTheDocument();
+  });
+
   it('does not coerce multivalued identity fields into detail filters', async () => {
     const api = setup({
       ...entityResponse,
