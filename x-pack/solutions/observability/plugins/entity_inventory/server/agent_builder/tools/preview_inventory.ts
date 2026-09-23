@@ -63,9 +63,9 @@ export const createPreviewInventoryTool = ({
   type: ToolType.builtin,
   description: `Runs the entity inventory list for one type over the last N minutes, exactly as the inventory UI does, and returns what the definition produces. Always call it right after creating or replacing a definition, and whenever the user asks why entities or columns are missing.
 
-Returns: total (exact distinct entity count across sources), truncated, the returned rows (each carries every output column, null when no source produced it), the columns (name, kind, unit, ES type), one entry per source query in queries[] with its index, engine ("TS" or "FROM", plus one "COUNT" query), ES took, documentsFound, row count and the generated ES|QL, errors[] (sources that failed or matched no index), unavailableColumns[] (declared fields mapped nowhere in a source) and provenance (which source supplied each merged value per entity id).
+Returns: total (exact distinct entity count across sources), truncated, the returned rows (each carries every output column, null when no source produced it), the columns (name, kind, unit, ES type), one entry per source query in queries[] with its index, engine ("TS" or "FROM", plus one "COUNT" query), ES took, documentsFound, row count and the generated ES|QL, errors[] (sources that failed or matched no index), unavailableColumns[] (declared fields mapped nowhere in a source), unsupportedMetrics[] (warnings: counter-rate metrics left out of a source because its engine is FROM, not TS; the column is null there) and provenance (which source supplied each merged value per entity id).
 
-Read back: rows from every intended source in queries[], no errors[], unavailableColumns[] only where a pipeline genuinely lacks a field. Returns a clear error when the inventory is disabled or the type has no inventory extension.`,
+Read back: rows from every intended source in queries[], no errors[], unavailableColumns[] only where a pipeline genuinely lacks a field, unsupportedMetrics[] empty (a rate on a FROM source means the index pattern is not entirely time_series: narrow the pattern or move the counter to a TS source). Returns a clear error when the inventory is disabled or the type has no inventory extension.`,
   tags: ['observability', 'entity-inventory'],
   annotations: {
     title: 'Preview entity inventory',

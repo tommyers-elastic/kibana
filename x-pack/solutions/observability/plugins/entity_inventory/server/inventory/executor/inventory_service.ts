@@ -32,6 +32,7 @@ import {
   type InventoryTypeDescriptor,
   type InventoryTypesResponse,
   type InventoryUnavailableColumn,
+  type InventoryUnsupportedMetric,
 } from '../../../common';
 import {
   COUNT_COLUMN,
@@ -40,6 +41,7 @@ import {
   buildCountQuery,
   buildSourceQuery,
   getInventory,
+  metricsUnsupportedByEngine,
   planSources,
   resolveIdentityPlan,
   type GeneratedQuery,
@@ -81,6 +83,7 @@ interface InventoryServiceDeps {
 
 interface ResolvedSource extends SourcePlan {
   unavailable: InventoryUnavailableColumn[];
+  unsupported: InventoryUnsupportedMetric[];
   documentFilterWarnings: SourceDocumentFilterWarning[];
 }
 
@@ -91,6 +94,7 @@ interface Resolution {
   sources: ResolvedSource[];
   errors: InventorySourceError[];
   unavailableColumns: InventoryUnavailableColumn[];
+  unsupportedMetrics: InventoryUnsupportedMetric[];
 }
 
 const DEFAULT_SORT: InventorySort = { column: LAST_SEEN_COLUMN, direction: 'desc' };
@@ -198,6 +202,7 @@ export class InventoryService {
       esTookMs: sumTook(queriesInfo),
       queries: queriesInfo,
       unavailableColumns: resolution.unavailableColumns,
+      unsupportedMetrics: resolution.unsupportedMetrics,
       documentFilterWarnings: groupDocumentFilterWarnings(
         resolution.sources.flatMap((source) => source.documentFilterWarnings)
       ),
@@ -264,6 +269,7 @@ export class InventoryService {
       esTookMs: sumTook(queriesInfo),
       queries: queriesInfo,
       unavailableColumns: resolution.unavailableColumns,
+      unsupportedMetrics: resolution.unsupportedMetrics,
       timeSeries: {
         ...range,
         targetBuckets: DETAIL_TARGET_BUCKETS,
@@ -430,12 +436,30 @@ export class InventoryService {
             unavailable.push({ index: source.index, column: name, field });
           }
         }
+        // The engine is known only now, per source. A metric it cannot compute (a counter rate
+        // outside TS) is dropped from the source's list and detail queries and reported as a
+        // warning rather than failing the source: the entity still lists, with that column null.
+        const unsupported = metricsUnsupportedByEngine(source, metadata.engine).map(
+          ({ name, field, agg }): InventoryUnsupportedMetric => ({
+            index: source.index,
+            engine: metadata.engine,
+            column: name,
+            field,
+            agg,
+          })
+        );
         const documentFilterWarnings = filterAnalysis.warningFor(source.index, eligibleIndices, [
           ...(inventory.attributes ?? []),
           ...(source.attributes ?? []).map(({ name }) => name),
           ...(source.metrics ?? []).map(({ name }) => name),
         ]);
-        return { source, engine: metadata.engine, unavailable, documentFilterWarnings };
+        return {
+          source,
+          engine: metadata.engine,
+          unavailable,
+          unsupported,
+          documentFilterWarnings,
+        };
       })
     );
 
@@ -460,7 +484,8 @@ export class InventoryService {
       columns,
       sources,
       errors,
-      unavailableColumns: dedupeUnavailable(sources.flatMap(({ unavailable }) => unavailable)),
+      unavailableColumns: dedupeByColumn(sources.flatMap(({ unavailable }) => unavailable)),
+      unsupportedMetrics: dedupeByColumn(sources.flatMap(({ unsupported }) => unsupported)),
     };
   }
 
@@ -564,8 +589,10 @@ export class InventoryService {
   }
 }
 
-/** The same index pattern may back several sources; report each unmapped column once per pattern. */
-const dedupeUnavailable = (items: InventoryUnavailableColumn[]): InventoryUnavailableColumn[] => {
+/** The same index pattern may back several sources (or plans); report each column once per pattern. */
+const dedupeByColumn = <T extends { index: string; column: string; field: string }>(
+  items: T[]
+): T[] => {
   const seen = new Set<string>();
   return items.filter((item) => {
     const key = `${item.index}|${item.column}|${item.field}`;

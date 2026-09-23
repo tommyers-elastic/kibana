@@ -24,6 +24,11 @@ describe('formatMetricValue', () => {
     expect(formatMetricValue(2500, 'micros')).toBe('2.5 ms');
   });
 
+  it('formats a per-second unit as its quantity with the suffix kept', () => {
+    expect(formatMetricValue(265_000, 'bytes/s')).toBe('258.8KB/s');
+    expect(formatMetricValue(1_500, 'ms/s')).toBe('1.5 s/s');
+  });
+
   it('keeps zero and small values and abbreviates large counts', () => {
     expect(formatMetricValue(0)).toBe('0');
     expect(formatMetricValue(0.00012)).toBe('0.00012');

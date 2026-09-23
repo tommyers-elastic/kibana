@@ -11,6 +11,8 @@ export {
   buildSourceQuery,
   metricExpression,
   metricPresenceFilter,
+  engineSupportsAggregation,
+  metricsUnsupportedByEngine,
   assertSafeIndexPattern,
 } from './source_query';
 export { buildCountQuery, COUNT_COLUMN } from './count_query';

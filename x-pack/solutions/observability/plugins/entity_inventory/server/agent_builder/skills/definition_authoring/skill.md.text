@@ -72,9 +72,11 @@ What to establish with these:
   (`"filter": "state == \"used\""` on the metric, §4) and, where the semantics need it, normalise
   with `scale`/`offset` (busy cpu = `1 - idle`: `"scale": -1, "offset": 1`). Compare the result
   with the other pipeline per entity (query 5).
-- Whether a numeric field is a gauge, a counter or a histogram (counters and histograms are not
-  usable; see §4). `SAMPLE` plus the field names (`*.time`, `*.io`, `*.count` are typically
-  counters) and the values (monotonically increasing) tell you.
+- **Whether a numeric field is a gauge, a counter or a histogram.** Gauges take `avg`/`min`/`max`/
+  `sum`/`last`, counters take a `*_rate` and nothing else, histograms are not usable (§4). Field
+  capabilities say which it is (`time_series_metric: gauge | counter`); failing that, the names
+  (`*.time`, `*.io`, `*.bytes`, `*.count` are typically counters) and monotonically increasing
+  values tell you. A counter also needs a `TS` source, so check the index modes of the pattern.
 
 Whether a pattern is served by the `TS` or the `FROM` engine is decided by Kibana from the index
 modes; the inventory preview (`_list`) reports the engine per source in `queries[]`, so run it once
@@ -248,7 +250,11 @@ or any other stream whose documents carry the identity fields.
 - Engine is chosen per source from the indices behind the pattern: all `time_series` gives `TS`
   (cheap: it only reads documents carrying the declared value metrics); anything else, including
   `logsdb` log streams, gives `FROM` (cost proportional to every matching document in the window).
-  Keep TSDB and non-TSDB data in separate sources.
+  Keep TSDB and non-TSDB data in separate sources. A `*_rate` metric (§4) exists only under `TS`:
+  on a `FROM` source it is dropped from the list and detail queries and reported as a warning in
+  `unsupportedMetrics[]` (with the source's `index`, `engine`, `column`, `field` and `agg`), so the
+  entity still lists with that column null. One non-TSDB index inside a wide pattern is enough to
+  do that to every rate of the source, so name the pattern narrowly when you declare one.
 - The same pattern may appear in several sources with different filters (`logs-*` once for
   volume, once with `stream == "stderr"` for stderr volume); each source contributes its own
   columns and they merge by name.
@@ -293,8 +299,9 @@ Consequences when authoring:
   attribute or an attribute name of another source.
 - `field`: a literal, mapped field. Value aggregations need a numeric or `aggregate_metric_double`
   field (APM `transaction.duration.summary`, `event.success_count` work with `avg`/`sum`).
-  Counters (`*.cpu.time`, `network.io`) are **not supported** (they need rate functions); use
-  gauges. Histogram fields are not supported.
+  Monotonic counters (`system.network.io`, `system.network.in.bytes`, `*.cpu.time`) are read with
+  a `*_rate` aggregation and with nothing else: an `avg` or `last` of a counter is its accumulated
+  total, which says nothing about the entity. Histogram fields are not supported.
 - `agg`:
   - `avg`, `min`, `max`, `sum`: window aggregates, identical under both engines.
   - `count`: documents carrying the field per entity in the window. Use `@timestamp` for "all
@@ -303,6 +310,42 @@ Consequences when authoring:
   - `count_distinct`: distinct values of the field per entity (`kubernetes.pod.name` per
     deployment or service).
   - `last`: the newest sample in the window ("current value").
+  - `sum_rate`, `max_rate`, `avg_rate`, `min_rate`: the per-second rate of increase of a counter
+    over the window, per time series, combined across the entity's series by the prefix.
+    **`TS` sources only.**
+- **Counters and `*_rate`.** A counter only ever answers "how fast", so it takes a rate
+  aggregation, which generates `OUTER(RATE(f))`: `RATE` is the per-second rate of each of the
+  counter's own time series (one per dimension tuple, so one per network interface or device) and
+  the outer aggregate combines them into the entity's value. `sum_rate` is the usual choice (total
+  throughput across interfaces, total cpu time across cores); `max_rate` answers "busiest
+  interface"; `avg_rate` and `min_rate` are the mean and quietest series. `RATE` handles counter
+  resets itself, so a restarted interface neither spikes nor goes negative (verified: a series
+  that resets mid-window contributes the sum of its increases). Two rules come with it: the source
+  must resolve to `TS` (§3), and `offset` is rejected because a rate has a true zero, while
+  `scale` is allowed and is how bytes per second become bits per second (`"scale": 8`).
+
+  Network throughput, as one pair of columns from both pipelines: OTel ships one counter with a
+  `direction` dimension, the ECS integration splits the same thing across two field names.
+
+  ```json
+  { "index": "metrics-hostmetricsreceiver.otel-default", "metrics": [
+    { "name": "net_rx_bps", "field": "system.network.io", "agg": "sum_rate",
+      "filter": "direction == \"receive\"", "unit": "bytes/s" },
+    { "name": "net_tx_bps", "field": "system.network.io", "agg": "sum_rate",
+      "filter": "direction == \"transmit\"", "unit": "bytes/s" } ] }
+
+  { "index": "metrics-system.*", "metrics": [
+    { "name": "net_rx_bps", "field": "system.network.in.bytes", "agg": "sum_rate",
+      "filter": "metricset.name == \"network\"", "unit": "bytes/s" },
+    { "name": "net_tx_bps", "field": "system.network.out.bytes", "agg": "sum_rate",
+      "filter": "metricset.name == \"network\"", "unit": "bytes/s" } ] }
+  ```
+
+  Measured on the same hosts over 15 minutes, the two pipelines agree to within a few percent.
+  In the **detail** view each time bucket computes its own rate, so on Elasticsearch before 9.6 a
+  bucket holding a single sample of a series is null and a short window over a one-minute scrape
+  leaves the rate chart empty while the list value is correct (fixed upstream by interpolating
+  across sparse buckets; nothing to change in the definition).
 - `filter`: an ES|QL boolean expression narrowing **this metric** to part of its source, for the
   common case of one field carrying a dimension as an attribute where another pipeline puts it in
   the field name. OTel `system.cpu.utilization` has a `state` dimension (idle, user, system, ...)
@@ -332,9 +375,10 @@ Consequences when authoring:
 - `scale` multiplies and `offset` then shifts the aggregated value (`value * scale + offset`), on
   the entity rows, never per document: unit conversion (`1e-9`), and convention changes such as
   idle fraction to busy fraction (`scale: -1, offset: 1`).
-- Always declare `unit` (`cores`, `bytes`, `ratio` for 0..1 fractions, `count`, `ms`, `us`); it is
-  shown in the UI and enables the consistency check. `scale` and `offset` do not apply to `count`
-  or `count_distinct`.
+- Always declare `unit` (`cores`, `bytes`, `ratio` for 0..1 fractions, `count`, `ms`, `us`, and
+  `<unit>/s` for rates, which renders as the quantity with the suffix kept: `bytes/s` reads
+  `259KB/s`); it is shown in the UI and enables the consistency check. `scale` and `offset` do not
+  apply to `count` or `count_distinct`, and `offset` does not apply to the `*_rate` aggregations.
 - When several sources supply the same metric for one entity, the **first source in definition
   order** wins. Order sources by trust (the primary pipeline first). A null never masks a value
   from a later source, and the response's `provenance` says which source each value came from.
@@ -420,13 +464,15 @@ which source supplied each value.
    with the evidence from §0; filters are single boolean expressions.
 4. Every family that should make an entity exist without metrics (state, logs, events) has its own
    source without value metrics.
-5. Metrics: value fields are gauges or APM summaries, `agg` and `unit` set; document volumes use
-   `count` on `@timestamp`; shared names across sources share `agg` and `unit` and use `scale`
-   where units differ; sources are ordered by trust.
+5. Metrics: value fields are gauges or APM summaries and counters use a `*_rate` on a `TS` source,
+   `agg` and `unit` set; document volumes use `count` on `@timestamp`; shared names across sources
+   share `agg` and `unit` and use `scale` where units differ; sources are ordered by trust.
 6. Attributes: canonical ECS names at top level; per-source variants share a `name` and use
    `valueLabels` to unify value spaces.
 7. No name collisions between identity, attributes and metrics.
 8. Register with `POST /internal/entity_store/definitions`, then check
    `POST /internal/entity_inventory/entities/{type}/_list` over the last 15 minutes: expect rows
    from every source in `queries[]`, no `errors[]`, `unavailableColumns[]` only where a pipeline
-   genuinely lacks a field, and `provenance` showing values coming from the intended sources.
+   genuinely lacks a field, an empty `unsupportedMetrics[]` (otherwise a rate sits on a `FROM`
+   source: narrow the pattern or move the counter), and `provenance` showing values coming from
+   the intended sources.

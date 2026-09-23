@@ -27,6 +27,7 @@ import { describeHttpError, type DescribedError } from '../lib/http_error';
 import type { InventoryApi, InventoryDetailRequest } from '../lib/inventory_api';
 import { EntityAttributes } from './entity_attributes';
 import { EntityMetricCharts } from './entity_metric_charts';
+import { UnsupportedMetricsCallout } from './unsupported_metrics_callout';
 
 export interface EntityDetailSelection {
   entityId: string;
@@ -149,6 +150,12 @@ export const EntityDetailFlyout = ({ type, selection, api, onClose }: EntityDeta
                     ))}
                   </ul>
                 </KbnWarningCallout>
+                <EuiSpacer size="m" />
+              </>
+            )}
+            {result.unsupportedMetrics.length > 0 && (
+              <>
+                <UnsupportedMetricsCallout metrics={result.unsupportedMetrics} />
                 <EuiSpacer size="m" />
               </>
             )}

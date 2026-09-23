@@ -5,7 +5,13 @@
  * 2.0.
  */
 
-import type { EntityDefinition, InventoryMetric, InventorySource } from '@kbn/entity-store/common';
+import type {
+  EntityDefinition,
+  InventoryMetric,
+  InventoryMetricAggregation,
+  InventorySource,
+} from '@kbn/entity-store/common';
+import { isInventoryRateAggregation } from '@kbn/entity-store/common';
 import { Parser } from '@elastic/esql';
 import { ESQL_MAX_ROWS, LAST_SEEN_COLUMN, type InventoryEngine } from '../../../common';
 import { InventoryDefinitionError, getInventory, sourceColumnNames } from './columns';
@@ -27,12 +33,49 @@ const TIME_PREDICATE = '@timestamp >= ?from AND @timestamp < ?to';
 export const timeParams = ({ from, to }: TimeRange): NamedParams => [{ from }, { to }];
 
 /**
+ * Whether an engine has an expression for an aggregation. Counter rates need `RATE`, which reads
+ * each time series of the counter separately and so exists only under `TS`; `FROM` rejects it and
+ * has no substitute that yields a rate. Everything else is available under both engines.
+ */
+export const engineSupportsAggregation = (
+  agg: InventoryMetricAggregation,
+  engine: InventoryEngine
+): boolean => engine === 'TS' || !isInventoryRateAggregation(agg);
+
+/**
+ * Metrics this source cannot produce under this engine ({@link engineSupportsAggregation}). They
+ * are dropped from the query rather than failing it, so the source still lists its entities with
+ * its other metrics and the column falls through to another source in the merge; the executor
+ * reports each one as a warning in `unsupportedMetrics`. Their field stays in the metric-presence
+ * predicate, so which entities the source lists does not depend on the engine.
+ */
+export const metricsUnsupportedByEngine = (
+  source: InventorySource,
+  engine: InventoryEngine
+): InventoryMetric[] =>
+  (source.metrics ?? []).filter(({ agg }) => !engineSupportsAggregation(agg, engine));
+
+/**
  * Metric aggregate per engine. `avg`/`min`/`max`/`sum` are window aggregates and return identical
  * values under both engines (`AGG(AGG_OVER_TIME(f))` is `TS`'s two-stage form of `AGG(f)`);
- * `count_distinct` and `last` are engine-neutral.
+ * `count_distinct` and `last` are engine-neutral. A `<outer>_rate` is `OUTER(RATE(f))`: `RATE` is
+ * the per-second rate of increase of the counter within each of its time series (one per
+ * dimension tuple, e.g. per network interface) and `OUTER` combines those series into the
+ * entity's value (`sum_rate` totals them, `max_rate` picks the busiest). Rates exist only under
+ * `TS`; callers must drop them from a `FROM` source ({@link metricsUnsupportedByEngine}) rather
+ * than reach that branch.
  */
 export const metricExpression = (metric: InventoryMetric, engine: InventoryEngine): string => {
   const field = quoteIdentifier(metric.field);
+  if (isInventoryRateAggregation(metric.agg)) {
+    if (!engineSupportsAggregation(metric.agg, engine)) {
+      throw new InventoryDefinitionError(
+        `metric "${metric.name}" is a counter rate (${metric.agg}), which only the TS engine can compute; a ${engine} source cannot supply it`
+      );
+    }
+    const outer = metric.agg.slice(0, -'_rate'.length).toUpperCase();
+    return `${outer}(RATE(${field}))`;
+  }
   switch (metric.agg) {
     case 'count':
       return engine === 'TS' ? `SUM(COUNT_OVER_TIME(${field}))` : `COUNT(${field})`;
@@ -61,8 +104,8 @@ const numberLiteral = (value: number): string => {
 };
 
 /** `scale` multiplies and `offset` shifts the aggregated value (on the entity rows, not per document). */
-const scaleAssignments = (source: InventorySource): string[] =>
-  (source.metrics ?? [])
+const scaleAssignments = (metrics: InventoryMetric[]): string[] =>
+  metrics
     .filter(
       (metric) =>
         (metric.scale !== undefined && metric.scale !== 1) ||
@@ -95,6 +138,10 @@ const attributeExpression = (field: string): string => {
  * which would make the predicate true everywhere and turn the `FROM` count into a full scan
  * (measured: 43M documents instead of 5.9M at 6 h). Sources with only counting metrics fall back
  * to those fields so presence is still required.
+ *
+ * A counter rate is a value metric here: its field is a counter carried by the documents, as
+ * selective as any gauge. It stays in the predicate even where the engine cannot compute the rate,
+ * so a source lists the same entities whichever engine it resolves to, and the `FROM` count agrees.
  */
 export const metricPresenceFilter = (source: InventorySource): string | undefined => {
   const metrics = source.metrics ?? [];
@@ -188,8 +235,14 @@ export const buildSourceQuery = (
     });
   }
 
+  // A metric the engine cannot express is left out of the query entirely (aggregate, scaling and
+  // KEEP alike, for list and detail); the row simply lacks that column and the merge fills it with
+  // null or a value from another source.
+  const unsupported = new Set(metricsUnsupportedByEngine(source, engine).map(({ name }) => name));
+  const metrics = (source.metrics ?? []).filter(({ name }) => !unsupported.has(name));
+
   const aggregates: string[] = [];
-  for (const metric of source.metrics ?? []) {
+  for (const metric of metrics) {
     aggregates.push(`${quoteIdentifier(metric.name)} = ${metricExpression(metric, engine)}`);
   }
   for (const field of inventory.attributes ?? []) {
@@ -200,7 +253,9 @@ export const buildSourceQuery = (
   }
   aggregates.push(`${quoteIdentifier(LAST_SEEN_COLUMN)} = MAX(@timestamp)`);
 
-  const columns = sourceColumnNames(definition, identity, source);
+  const columns = sourceColumnNames(definition, identity, source).filter(
+    (name) => !unsupported.has(name)
+  );
   const groupings = identity.fields.map(quoteIdentifier);
   if (options.timeBucket) {
     const { column, targetBuckets } = options.timeBucket;
@@ -210,7 +265,7 @@ export const buildSourceQuery = (
     columns.push(column);
     groupings.push(`${quoteIdentifier(column)} = BUCKET(@timestamp, ${targetBuckets}, ?from, ?to)`);
   }
-  const scaled = scaleAssignments(source);
+  const scaled = scaleAssignments(metrics);
   const lines = [
     UNMAPPED_FIELDS_DIRECTIVE,
     `${engine} ${source.index}`,

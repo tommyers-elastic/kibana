@@ -249,12 +249,33 @@ const hostOtelLoad = {
   agg: 'avg' as const,
   unit: 'load',
 };
+/** One OTel counter carrying the direction as a dimension; the rate is TS-only. */
+const hostOtelNetworkIn = {
+  name: 'net_rx_bps',
+  field: 'system.network.io',
+  agg: 'sum_rate' as const,
+  unit: 'bytes/s',
+};
+const hostOtelNetworkOut = { ...hostOtelNetworkIn, name: 'net_tx_bps' };
 const hostEcsSource = {
   index: 'metrics-system.*',
-  filter: 'metricset.name IN ("cpu", "load")',
+  filter: 'metricset.name IN ("cpu", "load", "network")',
   metrics: [
     { name: 'cpu_pct', field: 'system.cpu.total.norm.pct', agg: 'avg' as const, unit: 'ratio' },
     { name: 'load_1m', field: 'system.load.1', agg: 'avg' as const, unit: 'load' },
+    // The same two rates, from the counters the ECS integration splits by field name.
+    {
+      name: 'net_rx_bps',
+      field: 'system.network.in.bytes',
+      agg: 'sum_rate' as const,
+      unit: 'bytes/s',
+    },
+    {
+      name: 'net_tx_bps',
+      field: 'system.network.out.bytes',
+      agg: 'sum_rate' as const,
+      unit: 'bytes/s',
+    },
   ],
 };
 const hostAttributes = ['host.os.name', 'host.os.platform', 'host.architecture'];
@@ -280,15 +301,26 @@ export const hostDefinition: EntityDefinition = {
         index: 'metrics-hostmetricsreceiver.otel-default',
         metrics: [hostOtelLoad],
       },
+      {
+        index: 'metrics-hostmetricsreceiver.otel-default',
+        filter: 'direction == "receive"',
+        metrics: [hostOtelNetworkIn],
+      },
+      {
+        index: 'metrics-hostmetricsreceiver.otel-default',
+        filter: 'direction == "transmit"',
+        metrics: [hostOtelNetworkOut],
+      },
       hostEcsSource,
     ],
   },
 };
 
 /**
- * The same type with the OTel dimension declared on the metric instead of duplicating the source:
- * one source whose `cpu_pct` is filtered to the idle state and whose `load_1m` is not. The
- * generator must plan this into exactly `hostDefinition`'s three queries, in the same order.
+ * The same type with the OTel dimensions declared on the metrics instead of duplicating the
+ * source: one source whose `cpu_pct` is filtered to the idle state, whose network rates are
+ * filtered to one `direction` each and whose `load_1m` is not filtered at all. The generator must
+ * plan this into exactly `hostDefinition`'s queries, in the same order.
  */
 export const hostFilteredMetricsDefinition: EntityDefinition = {
   id: 'security_host_default',
@@ -302,7 +334,12 @@ export const hostFilteredMetricsDefinition: EntityDefinition = {
     sources: [
       {
         index: 'metrics-hostmetricsreceiver.otel-default',
-        metrics: [{ ...hostOtelCpu, filter: 'state == "idle"' }, hostOtelLoad],
+        metrics: [
+          { ...hostOtelCpu, filter: 'state == "idle"' },
+          hostOtelLoad,
+          { ...hostOtelNetworkIn, filter: 'direction == "receive"' },
+          { ...hostOtelNetworkOut, filter: 'direction == "transmit"' },
+        ],
       },
       hostEcsSource,
     ],

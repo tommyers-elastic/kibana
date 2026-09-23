@@ -97,7 +97,17 @@ const uniqueStrings = (values: readonly string[]): boolean =>
  * `count_distinct` counts distinct values of the field. `last` is the newest sample in the window
  * (`LAST(f, @timestamp)` with a null filter, identical under both engines), for "current value"
  * columns. `count` and `count_distinct` do not define an entity's existence in a source (only value
- * metrics do). Counter-rate aggregations are not modelled yet.
+ * metrics do).
+ *
+ * The `*_rate` aggregations read a monotonic counter (`system.network.io`,
+ * `system.network.in.bytes`). `RATE` gives the per-second rate of increase of each of the
+ * counter's own time series over the window (one per dimension tuple, such as a network
+ * interface), and the prefix says how those series combine into the entity's value: `sum_rate` is
+ * the entity's total throughput, `max_rate` its busiest series, `avg_rate` and `min_rate` the mean
+ * and the quietest. Counter rates exist only under the `TS` engine: a source whose concrete
+ * indices are not all `index.mode: time_series` cannot express one, so the executor leaves the
+ * metric out of that source's query and reports it in the response's `unsupportedMetrics`
+ * instead of returning a number that is not a rate.
  */
 export const inventoryMetricAggregationSchema = z.enum([
   'avg',
@@ -107,16 +117,29 @@ export const inventoryMetricAggregationSchema = z.enum([
   'count',
   'count_distinct',
   'last',
+  'avg_rate',
+  'min_rate',
+  'max_rate',
+  'sum_rate',
 ]);
 export type InventoryMetricAggregation = z.infer<typeof inventoryMetricAggregationSchema>;
+
+export type InventoryRateAggregation = Extract<InventoryMetricAggregation, `${string}_rate`>;
+
+/** Whether `agg` is a counter rate (`OUTER(RATE(field))`), which only the `TS` engine can compute. */
+export const isInventoryRateAggregation = (
+  agg: InventoryMetricAggregation
+): agg is InventoryRateAggregation => agg.endsWith('_rate');
 
 /**
  * A named metric: one field aggregated one way per entity. Across sources the same `name` is the
  * same measurement in the same unit; `scale` multiplies the aggregated value and `offset` is then
  * added, so pipelines that report in different units or conventions line up (ECS nanocores to
  * cores: `scale: 1e-9`; OTel idle-cpu fraction to busy fraction: `scale: -1, offset: 1`), and
- * `unit` documents the resulting unit (`cores`, `bytes`, `ratio`) for display and for the
- * consistency check.
+ * `unit` documents the resulting unit (`cores`, `bytes`, `ratio`, `bytes/s`) for display and for
+ * the consistency check. A rate aggregation takes `scale` (bytes per second to bits per second:
+ * `scale: 8`) but not `offset`: a counter rate has a true zero, and shifting it yields something
+ * that is no longer a rate.
  *
  * `filter` narrows the metric to a subset of its source's documents, for pipelines that carry a
  * dimension as an attribute of one field where others encode it in the field name (OTel
@@ -151,7 +174,12 @@ export const inventoryMetricSchema = z
         (metric.scale !== undefined || metric.offset !== undefined)
       ),
     { message: 'scale and offset do not apply to count or count_distinct', path: ['scale'] }
-  );
+  )
+  .refine((metric) => !(isInventoryRateAggregation(metric.agg) && metric.offset !== undefined), {
+    message:
+      'offset does not apply to rate aggregations; a counter rate has a true zero (scale does)',
+    path: ['offset'],
+  });
 export type InventoryMetric = z.infer<typeof inventoryMetricSchema>;
 
 /**

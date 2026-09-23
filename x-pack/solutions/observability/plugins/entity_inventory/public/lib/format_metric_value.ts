@@ -22,6 +22,10 @@ const secondsPerUnit: Record<string, number> = {
 
 /** Formats chart values using the declared unit, without inferring units from metric names. */
 export const formatMetricValue = (value: number, unit?: string): string => {
+  // A rate's unit is its quantity per second: format the quantity, keep the suffix (`259KB/s`).
+  if (unit !== undefined && unit.length > 2 && unit.endsWith('/s')) {
+    return `${formatMetricValue(value, unit.slice(0, -2))}/s`;
+  }
   if (unit === 'bytes') return numeral(value).format('0.[0]b');
   const number = new Intl.NumberFormat(i18n.getLocale(), {
     maximumSignificantDigits: 3,

@@ -107,8 +107,12 @@ describe('summarizeEntityType', () => {
     });
     expect(summary.sources[0]).toEqual({
       index: 'metrics-hostmetricsreceiver.otel-default',
-      metrics: ['cpu_pct', 'load_1m'],
-      metricFilters: { cpu_pct: 'state == "idle"' },
+      metrics: ['cpu_pct', 'load_1m', 'net_rx_bps', 'net_tx_bps'],
+      metricFilters: {
+        cpu_pct: 'state == "idle"',
+        net_rx_bps: 'direction == "receive"',
+        net_tx_bps: 'direction == "transmit"',
+      },
       attributes: [],
     });
     expect(summary.sources[1].metricFilters).toBeUndefined();
@@ -360,6 +364,15 @@ describe('shapePreview', () => {
         { index: '*', engine: 'COUNT', esql: 'FROM *', params: {}, tookMs: 4 },
       ],
       unavailableColumns: [{ index: 'metrics-*', column: 'phase', field: 'phase' }],
+      unsupportedMetrics: [
+        {
+          index: 'metrics-*',
+          engine: 'FROM',
+          column: 'net_rx_bps',
+          field: 'system.network.in.bytes',
+          agg: 'sum_rate',
+        },
+      ],
       errors: [{ index: 'logs-*', message: 'no such index' }],
     };
 
@@ -388,6 +401,7 @@ describe('shapePreview', () => {
       ],
       errors: response.errors,
       unavailableColumns: response.unavailableColumns,
+      unsupportedMetrics: response.unsupportedMetrics,
       esTookMs: 9,
     });
   });

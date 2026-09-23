@@ -380,6 +380,7 @@ export {
   builtInInventoryExtensionSchema,
   builtInInventoryExtensionDocumentSchema,
   isBuiltInInventoryExtensionDocument,
+  isInventoryRateAggregation,
 } from './inventory_schema';
 export type {
   InventoryExtension,
@@ -388,6 +389,7 @@ export type {
   InventorySource,
   InventoryMetric,
   InventoryMetricAggregation,
+  InventoryRateAggregation,
   InventorySourceAttribute,
   InventoryValueLabels,
 } from './inventory_schema';

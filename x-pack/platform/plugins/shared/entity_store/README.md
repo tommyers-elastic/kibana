@@ -73,12 +73,14 @@ out the block for a tuple; they are not part of the schema.
 
 Authors declare what they need, not how it is fetched: `attributes` is a list of literal field paths
 resolved to the newest value per entity, and each source's `metrics` are `{ name, field, agg }` with
-`agg` one of `avg | min | max | sum | count | count_distinct | last` (`avg`/`min`/`max`/`sum` are
-window aggregates with identical results under both engines; `count` counts documents carrying the
-field, e.g. log lines; `last` is the newest sample), plus optional
-`scale` (a multiplier applied after aggregation, e.g. `1e-9` from nanocores to cores), `offset`
-(added after scaling, e.g. `scale: -1, offset: 1` turns an idle fraction into a busy fraction) and
-`unit`.
+`agg` one of `avg | min | max | sum | count | count_distinct | last | avg_rate | min_rate | max_rate | sum_rate`
+(`avg`/`min`/`max`/`sum` are window aggregates with identical results under both engines; `count`
+counts documents carrying the field, e.g. log lines; `last` is the newest sample; the `*_rate`
+family is the per-second rate of increase of a monotonic counter, per time series, combined across
+the entity's series by the prefix, and is computable only where the source resolves to the `TS`
+engine), plus optional `scale` (a multiplier applied after aggregation, e.g. `1e-9` from nanocores
+to cores), `offset` (added after scaling, e.g. `scale: -1, offset: 1` turns an idle fraction into
+a busy fraction; not allowed on rates) and `unit`.
 Across sources the same metric `name` is the same measurement in the same unit: shared names must
 share `agg` and `unit`, and `scale` is how a pipeline's field is brought into that unit. Fields that do
 not alias across pipelines are declared per source as `attributes: [{ name, field, valueLabels? }]`

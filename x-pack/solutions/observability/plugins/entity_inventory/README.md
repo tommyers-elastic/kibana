@@ -201,11 +201,25 @@ TS metrics-kubernetes.pod-*
 - **Existence per source**: a source with metrics lists the entities that reported at least one
   of them in the window (explicit in `WHERE`, which is also what `TS` does implicitly); a source
   without metrics lists every identity occurrence. Type-level existence is the union. Only value
-  metrics (`avg`, `min`, `max`, `sum`, `last`) define "reported": a `count_distinct` over a
-  dimension present on every document would make the predicate vacuous and the `FROM` count a
-  full scan.
+  metrics (`avg`, `min`, `max`, `sum`, `last` and the `*_rate` family) define "reported": a
+  `count_distinct` over a dimension present on every document would make the predicate vacuous and
+  the `FROM` count a full scan. A rate's counter field counts here even where the engine cannot
+  compute the rate, so a source lists the same entities under either engine and the `FROM` count
+  agrees.
 - **Metrics**: `avg`/`min`/`max`/`sum` are window aggregates (`AGG(AGG_OVER_TIME(f))` under `TS`,
   `AGG(f)` under `FROM`, identical results); `count_distinct`; `last` is the newest sample.
+- **Counter rates** (`agg: sum_rate | max_rate | avg_rate | min_rate`) are `OUTER(RATE(f))` and
+  exist **only under `TS`**: `RATE` is the per-second rate of increase of each of the counter's own
+  time series (one per dimension tuple, such as a network interface) and the outer aggregate
+  combines them into the entity's value (`sum_rate` is total throughput, `max_rate` the busiest
+  series). `RATE` absorbs counter resets, and ES|QL requires the wrapping aggregate as soon as the
+  query groups by anything but a time bucket. `FROM` rejects `RATE` outright and has no substitute,
+  so the executor checks each source's resolved engine: a rate on a source whose indices are not
+  all `time_series` is left out of that source's `STATS`, `EVAL` and `KEEP` (list and detail
+  queries alike) and reported as a warning in `unsupportedMetrics[]` (`index`, `engine`, `column`,
+  `field`, `agg`). The source still lists its entities with its other metrics, and the column falls
+  through to another source or stays null: a wrong number is never produced, and one non-TSDB
+  source does not fail the request.
 - **Query plans**: a metric may declare its own `filter`, for pipelines that carry a dimension as
   an attribute of one field (OTel `system.cpu.utilization` by `state`) where others encode it in
   the field name (ECS `system.cpu.idle.pct`). The generator expands each source into one plan per
@@ -270,12 +284,22 @@ attributes are merged by `name` and their `valueLabels` applied before the merge
 values pass through as strings). A failed source is reported in `errors[]` and does not fail the
 request; a source whose pattern matches no index, or whose identity fields are all unmapped, is
 excluded and reported; attributes or metrics whose field is unmapped in a source are still queried
-(they nullify) and reported in `unavailableColumns`.
+(they nullify) and reported in `unavailableColumns`; counter rates a `FROM` source cannot compute
+are left out of its query and reported in `unsupportedMetrics`.
 
 ## Known quirks
 
 - A source with more than 10,000 entities in the window returns 10,000 (`capped: true` on its
   query); the exact `total` says how many the response lacks. Short windows keep live sets small.
+- Detail charts of a `*_rate` are null in every bucket holding fewer than two samples of a
+  series, because each bucket computes its own rate; at 250 target buckets that is any window
+  shorter than a few hours over a one-minute scrape, while the list value over the same window
+  is correct. This is a known Elasticsearch limitation
+  ([elastic/elasticsearch#144495](https://github.com/elastic/elasticsearch/issues/144495)) fixed
+  by [elastic/elasticsearch#159234](https://github.com/elastic/elasticsearch/pull/159234) (9.6):
+  `RATE` then interpolates across sparse buckets from the nearest samples within a five-minute
+  lookback. The inventory deliberately does not work around it (measuring the sample spacing
+  and sizing buckets to it doubled the detail's queries and coarsened every chart).
 - Ranked (built-in) identities split an entity when its documents differ in which ranking fields
   they carry, exactly as Security's per-document ranking does; the fix is upstream (emit the
   top-ranked field on every pipeline).

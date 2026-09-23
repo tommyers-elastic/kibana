@@ -125,6 +125,12 @@ describe('InventoryService', () => {
       if (query.includes('state == "idle"')) {
         return table([{ ...host, cpu_pct: 0.25 }]);
       }
+      if (query.includes('direction == "receive"')) {
+        return table([{ ...host, net_rx_bps: 265_000 }]);
+      }
+      if (query.includes('direction == "transmit"')) {
+        return table([{ ...host, net_tx_bps: 240_000 }]);
+      }
       if (query.includes('metrics-hostmetricsreceiver.otel-default')) {
         return table([{ ...host, load_1m: 1.5 }]);
       }
@@ -136,18 +142,27 @@ describe('InventoryService', () => {
         'metrics-hostmetricsreceiver.otel-default': 'time_series',
         'metrics-system.*': 'time_series',
       },
-      ['host.id', 'system.cpu.utilization', 'system.cpu.load_average.1m']
+      [
+        'host.id',
+        'system.cpu.utilization',
+        'system.cpu.load_average.1m',
+        'system.network.io',
+        'system.network.in.bytes',
+        'system.network.out.bytes',
+      ]
     );
     const response = await service(es, [hostFilteredMetricsDefinition]).list('host', RANGE);
 
-    // Three list queries (the idle plan, the unfiltered plan, the ECS source) plus the count.
+    // Five list queries (idle, unfiltered, each direction, the ECS source) plus the count.
     const listQueries = queries.filter((query) => !query.includes('| STATS BY '));
-    expect(listQueries).toHaveLength(3);
+    expect(listQueries).toHaveLength(5);
     expect(listQueries.filter((query) => query.includes('state == "idle"'))).toHaveLength(1);
     // The filtered plan asks only for its own metric, so the presence prefilter stays narrow.
     const [idle] = listQueries.filter((query) => query.includes('state == "idle"'));
     expect(idle).toContain('AND (`system.cpu.utilization` IS NOT NULL)');
     expect(idle).not.toContain('system.cpu.load_average.1m');
+    const [receive] = listQueries.filter((query) => query.includes('direction == "receive"'));
+    expect(receive).toContain('`net_rx_bps` = SUM(RATE(`system.network.io`))');
 
     expect(response.rows).toStrictEqual([
       {
@@ -160,15 +175,131 @@ describe('InventoryService', () => {
         'host.architecture': null,
         cpu_pct: 0.25,
         load_1m: 1.5,
+        net_rx_bps: 265_000,
+        net_tx_bps: 240_000,
         last_seen: '2026-09-16T08:44:00.000Z',
       },
     ]);
-    // Plans of one source share its index pattern, so provenance names the pattern for both.
+    // Plans of one source share its index pattern, so provenance names the pattern for all of them.
     expect(response.provenance['host:node-a']).toEqual({
       cpu_pct: 'metrics-hostmetricsreceiver.otel-default',
       load_1m: 'metrics-hostmetricsreceiver.otel-default',
+      net_rx_bps: 'metrics-hostmetricsreceiver.otel-default',
+      net_tx_bps: 'metrics-hostmetricsreceiver.otel-default',
     });
     expect(response.errors).toEqual([]);
+  });
+
+  describe('a counter rate on a source that is not time_series', () => {
+    const HOST_FIELDS = [
+      'host.id',
+      'system.cpu.utilization',
+      'system.cpu.load_average.1m',
+      'system.network.io',
+      'system.load.1',
+      'system.cpu.total.norm.pct',
+      'system.network.in.bytes',
+      'system.network.out.bytes',
+    ];
+    const modes = {
+      'metrics-hostmetricsreceiver.otel-default': 'time_series',
+      // A mixed or standard pattern resolves to FROM, which has no counter support.
+      'metrics-system.*': 'standard',
+    };
+    const expectedWarnings = [
+      {
+        index: 'metrics-system.*',
+        engine: 'FROM',
+        column: 'net_rx_bps',
+        field: 'system.network.in.bytes',
+        agg: 'sum_rate',
+      },
+      {
+        index: 'metrics-system.*',
+        engine: 'FROM',
+        column: 'net_tx_bps',
+        field: 'system.network.out.bytes',
+        agg: 'sum_rate',
+      },
+    ];
+
+    it('is dropped from the list query and reported as a warning, not an error', async () => {
+      const queries: string[] = [];
+      const { es } = fakeEs(
+        (query: string) => {
+          queries.push(query);
+          return query.startsWith('SET unmapped_fields="nullify";\nFROM')
+            ? table([{ count: 1 }])
+            : table([
+                {
+                  'entity.id': 'host:node-a',
+                  'host.id': 'node-a',
+                  load_1m: 1.5,
+                  last_seen: '2026-09-16T08:44:00.000Z',
+                },
+              ]);
+        },
+        modes,
+        HOST_FIELDS
+      );
+      const response = await service(es, [hostFilteredMetricsDefinition]).list('host', RANGE);
+
+      const [ecs] = queries.filter((query) => query.includes('FROM metrics-system.*'));
+      // The counters still decide which entities the source lists, so both engines agree on them.
+      expect(ecs).toContain('`system.network.in.bytes` IS NOT NULL');
+      expect(ecs).not.toContain('net_rx_bps');
+      expect(ecs).not.toContain('RATE(');
+      expect(response.unsupportedMetrics).toEqual(expectedWarnings);
+      // Mapped fields are not "unavailable": that list is for unmapped fields only.
+      expect(response.unavailableColumns.map(({ column }) => column)).not.toEqual(
+        expect.arrayContaining(['net_rx_bps', 'net_tx_bps'])
+      );
+      // The request succeeds and the entity lists; only the rate columns are missing there.
+      expect(response.errors).toEqual([]);
+      expect(response.rows[0]).toMatchObject({ load_1m: 1.5, net_rx_bps: null, net_tx_bps: null });
+    });
+
+    it('is dropped from the detail query and reported on the detail response too', async () => {
+      const queries: string[] = [];
+      const { es } = fakeEs(
+        (query: string) => {
+          queries.push(query);
+          return query.includes('FROM metrics-system.*')
+            ? table([
+                {
+                  'entity.id': 'host:node-a',
+                  'host.id': 'node-a',
+                  load_1m: 1.5,
+                  __entity_inventory_bucket: '2026-09-16T08:43:00.000Z',
+                  last_seen: '2026-09-16T08:44:00.000Z',
+                },
+              ])
+            : table([]);
+        },
+        modes,
+        HOST_FIELDS
+      );
+      const response = await service(es, [hostFilteredMetricsDefinition]).detail('host', {
+        ...RANGE,
+        identity: { 'host.id': 'node-a' },
+      });
+
+      const [ecs] = queries.filter(
+        (query) => query.includes('FROM metrics-system.*') && query.includes('BUCKET(')
+      );
+      expect(ecs).toContain('BUCKET(@timestamp, 250, ?from, ?to)');
+      expect(ecs).not.toContain('RATE(');
+      expect(ecs).not.toContain('net_rx_bps');
+      expect(response.unsupportedMetrics).toEqual(expectedWarnings);
+      expect(response.errors).toEqual([]);
+      expect(response.timeSeries.points).toEqual([
+        {
+          entityId: 'host:node-a',
+          timestamp: '2026-09-16T08:43:00.000Z',
+          metrics: { cpu_pct: null, load_1m: 1.5, net_rx_bps: null, net_tx_bps: null },
+        },
+      ]);
+    });
   });
 
   it('rejects a source missing part of every identity composition without warning about its filter', async () => {
@@ -521,11 +652,12 @@ describe('InventoryService', () => {
         {
           entityId: 'host:kind-worker',
           timestamp: '2026-09-16T08:43:00.000Z',
-          metrics: { cpu_pct: 0.1, load_1m: null },
+          metrics: { cpu_pct: 0.1, load_1m: null, net_rx_bps: null, net_tx_bps: null },
         },
       ],
     });
-    expect(response.queries.map((q) => q.engine)).toEqual(['TS', 'TS', 'FROM']);
+    // One query per source plan: the four filtered OTel metric plans and the ECS source.
+    expect(response.queries.map((q) => q.engine)).toEqual(['TS', 'TS', 'TS', 'TS', 'FROM']);
     const requests = esql.query.mock.calls.map(
       ([request]) => request as { query: string; params: unknown[] }
     );
@@ -535,7 +667,7 @@ describe('InventoryService', () => {
       { to: RANGE.to },
       { id_0: 'kind-worker' },
     ]);
-    expect(requests[2].query).not.toContain('_OVER_TIME');
+    expect(requests[4].query).not.toContain('_OVER_TIME');
   });
 
   it('retains successful detail series and metricless attributes when another source fails', async () => {

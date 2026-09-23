@@ -141,11 +141,13 @@ export type {
   InventorySource,
   InventoryMetric,
   InventoryMetricAggregation,
+  InventoryRateAggregation,
   InventorySourceAttribute,
   InventoryValueLabels,
 } from './domain/definitions/entity_schema';
 export {
   getInventoryIdentityPlan,
+  isInventoryRateAggregation,
   MAX_INVENTORY_IDENTITY_FIELDS,
   type InventoryIdentityPlan,
 } from './domain/definitions/entity_schema';

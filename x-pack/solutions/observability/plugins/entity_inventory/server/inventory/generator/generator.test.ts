@@ -19,8 +19,10 @@ import {
   buildCountQuery,
   buildSourceQuery,
   getInventory,
+  engineSupportsAggregation,
   metricExpression,
   metricPresenceFilter,
+  metricsUnsupportedByEngine,
   planSources,
   resolveIdentityPlan,
   validateEsqlFilter,
@@ -217,7 +219,8 @@ describe('generator', () => {
     expect(identity.presenceFilter).toBe(
       '(`host.id` IS NOT NULL OR `host.name` IS NOT NULL OR `host.hostname` IS NOT NULL)'
     );
-    const source = getInventory(hostDefinition).sources[2];
+    const sources = getInventory(hostDefinition).sources;
+    const source = sources[sources.length - 1];
     const { esql } = buildSourceQuery(
       hostDefinition,
       identity,
@@ -344,6 +347,97 @@ describe('generator', () => {
     expect(metricExpression({ ...metric, agg: 'last' }, 'FROM')).toBe(
       metricExpression({ ...metric, agg: 'last' }, 'TS')
     );
+  });
+
+  it('maps counter rates to OUTER(RATE(f)) under TS only', () => {
+    const metric = { name: 'm', field: 'f.x', agg: 'sum_rate' } as const;
+    expect(metricExpression(metric, 'TS')).toBe('SUM(RATE(`f.x`))');
+    expect(metricExpression({ ...metric, agg: 'max_rate' }, 'TS')).toBe('MAX(RATE(`f.x`))');
+    expect(metricExpression({ ...metric, agg: 'min_rate' }, 'TS')).toBe('MIN(RATE(`f.x`))');
+    expect(metricExpression({ ...metric, agg: 'avg_rate' }, 'TS')).toBe('AVG(RATE(`f.x`))');
+    for (const agg of ['avg_rate', 'min_rate', 'max_rate', 'sum_rate'] as const) {
+      expect(engineSupportsAggregation(agg, 'TS')).toBe(true);
+      expect(engineSupportsAggregation(agg, 'FROM')).toBe(false);
+      // Never a number that is not a rate: FROM has no counter support at all.
+      expect(() => metricExpression({ ...metric, agg }, 'FROM')).toThrow(InventoryDefinitionError);
+    }
+    for (const agg of ['avg', 'min', 'max', 'sum', 'count', 'count_distinct', 'last'] as const) {
+      expect(engineSupportsAggregation(agg, 'FROM')).toBe(true);
+    }
+  });
+
+  it('drops a rate from a FROM source and keeps it in the presence filter', () => {
+    const identity = resolveIdentityPlan(hostDefinition);
+    const source = {
+      index: 'metrics-system.*',
+      metrics: [
+        { name: 'load_1m', field: 'system.load.1', agg: 'avg' as const },
+        {
+          name: 'net_rx_bps',
+          field: 'system.network.in.bytes',
+          agg: 'sum_rate' as const,
+          scale: 8,
+        },
+        { name: 'net_rx_peak', field: 'system.network.in.bytes', agg: 'max_rate' as const },
+      ],
+    };
+    expect(metricsUnsupportedByEngine(source, 'FROM').map(({ name }) => name)).toEqual([
+      'net_rx_bps',
+      'net_rx_peak',
+    ]);
+    expect(metricsUnsupportedByEngine(source, 'TS')).toEqual([]);
+    // The counter is a value metric, so both engines list the same entities for this source.
+    expect(metricPresenceFilter(source)).toBe(
+      '(`system.load.1` IS NOT NULL OR `system.network.in.bytes` IS NOT NULL)'
+    );
+
+    const ts = buildSourceQuery(
+      hostDefinition,
+      identity,
+      { source, engine: 'TS' },
+      listOptions
+    ).esql;
+    expect(ts).toContain('`net_rx_bps` = SUM(RATE(`system.network.in.bytes`))');
+    expect(ts).toContain('`net_rx_peak` = MAX(RATE(`system.network.in.bytes`))');
+    expect(ts).toContain('| EVAL `net_rx_bps` = `net_rx_bps` * 8.0');
+    expect(ts).toContain('`load_1m`, `net_rx_bps`, `net_rx_peak`, `last_seen`');
+
+    const from = buildSourceQuery(
+      hostDefinition,
+      identity,
+      { source, engine: 'FROM' },
+      listOptions
+    ).esql;
+    expect(from).toContain('`system.network.in.bytes` IS NOT NULL');
+    expect(from).toContain('`load_1m` = AVG(`system.load.1`)');
+    // Neither aggregated, nor scaled, nor kept: the column is absent and the merge nulls it.
+    expect(from).not.toContain('net_rx_bps');
+    expect(from).not.toContain('net_rx_peak');
+
+    // The detail query applies the same gate: the rate is bucketed under TS and absent under FROM.
+    const detailOptions = {
+      ...listOptions,
+      pushDownSort: false,
+      identityValues: { 'host.id': 'node-a' },
+      timeBucket: { column: 'bucket', targetBuckets: 250 },
+    };
+    const tsDetail = buildSourceQuery(
+      hostDefinition,
+      identity,
+      { source, engine: 'TS' },
+      detailOptions
+    ).esql;
+    expect(tsDetail).toContain('`net_rx_bps` = SUM(RATE(`system.network.in.bytes`))');
+    expect(tsDetail).toContain('`bucket` = BUCKET(@timestamp, 250, ?from, ?to)');
+    const fromDetail = buildSourceQuery(
+      hostDefinition,
+      identity,
+      { source, engine: 'FROM' },
+      detailOptions
+    ).esql;
+    expect(fromDetail).toContain('`load_1m` = AVG(`system.load.1`)');
+    expect(fromDetail).toContain('`bucket` = BUCKET(@timestamp, 250, ?from, ?to)');
+    expect(fromDetail).not.toContain('net_rx_bps');
   });
 
   it('validates source filters as single boolean expressions', () => {

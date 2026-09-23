@@ -142,6 +142,7 @@ describe('preview_inventory tool', () => {
     esTookMs: 2,
     queries: [{ index: 'metrics-*', engine: 'TS', esql: 'TS metrics-*', params: {}, tookMs: 2 }],
     unavailableColumns: [],
+    unsupportedMetrics: [],
     errors: [],
   };
 

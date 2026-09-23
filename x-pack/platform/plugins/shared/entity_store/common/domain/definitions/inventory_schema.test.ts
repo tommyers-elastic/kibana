@@ -12,6 +12,7 @@ import {
   inventoryExtensionSchema,
   isBuiltInInventoryExtensionDocument,
   inventorySourceSchema,
+  isInventoryRateAggregation,
   isLiteralFieldPath,
 } from './inventory_schema';
 
@@ -486,13 +487,50 @@ describe('inventorySourceSchema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('rejects an unknown aggregation and a non-literal metric field', () => {
+  it('accepts every rate aggregation with a scale, and rejects an offset on them', () => {
+    const rateAggregations = ['avg_rate', 'min_rate', 'max_rate', 'sum_rate'] as const;
     expect(
       inventorySourceSchema.safeParse({
-        index: 'metrics-*',
-        metrics: [{ name: 'cpu', field: 'k8s.pod.cpu.usage', agg: 'rate' }],
+        index: 'metrics-system.*',
+        metrics: [
+          {
+            name: 'net_rx_bps',
+            field: 'system.network.in.bytes',
+            agg: 'sum_rate',
+            filter: 'metricset.name == "network"',
+            unit: 'bytes/s',
+          },
+          // bytes/s read as bits/s.
+          { name: 'net_rx_bits', field: 'system.network.in.bytes', agg: 'sum_rate', scale: 8 },
+          ...rateAggregations.map((agg) => ({
+            name: `net_rx_${agg}`,
+            field: 'system.network.in.bytes',
+            agg,
+          })),
+        ],
       }).success
-    ).toBe(false);
+    ).toBe(true);
+    for (const agg of rateAggregations) {
+      expect(isInventoryRateAggregation(agg)).toBe(true);
+      const shifted = inventorySourceSchema.safeParse({
+        index: 'metrics-system.*',
+        metrics: [{ name: 'net_rx_bps', field: 'system.network.in.bytes', agg, offset: 1 }],
+      });
+      expect(shifted.success).toBe(false);
+      expect(shifted.error?.issues[0].message).toContain('offset does not apply to rate');
+    }
+    expect(isInventoryRateAggregation('sum')).toBe(false);
+  });
+
+  it('rejects an unknown aggregation and a non-literal metric field', () => {
+    for (const agg of ['median', 'rate', 'rate_sum']) {
+      expect(
+        inventorySourceSchema.safeParse({
+          index: 'metrics-*',
+          metrics: [{ name: 'cpu', field: 'k8s.pod.cpu.usage', agg }],
+        }).success
+      ).toBe(false);
+    }
     expect(
       inventorySourceSchema.safeParse({
         index: 'metrics-*',

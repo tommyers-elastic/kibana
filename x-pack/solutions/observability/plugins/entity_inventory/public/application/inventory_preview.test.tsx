@@ -44,6 +44,7 @@ const response: InventoryListResponse = {
     },
   ],
   unavailableColumns: [],
+  unsupportedMetrics: [],
   errors: [],
   documentFilterWarnings: [
     {
@@ -111,6 +112,31 @@ describe('inventory document filtering', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run' }));
     await waitFor(() => expect(api.list).toHaveBeenCalledTimes(2));
     expect(api.list.mock.calls[1][1].documentFilter).toBeUndefined();
+  });
+
+  it('warns about metrics a source engine could not compute', async () => {
+    setup({
+      ...response,
+      unsupportedMetrics: [
+        {
+          index: 'metrics-system.*',
+          engine: 'FROM',
+          column: 'net_rx_bps',
+          field: 'system.network.in.bytes',
+          agg: 'sum_rate',
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    const callout = within(await screen.findByTestId('entityInventoryUnsupportedMetrics'));
+    expect(
+      callout.getByText('One metric cannot be computed by its source engine')
+    ).toBeInTheDocument();
+    expect(
+      callout.getByText(
+        'net_rx_bps (sum_rate of system.network.in.bytes) in metrics-system.* [FROM]'
+      )
+    ).toBeInTheDocument();
   });
 
   it('does not send invalid KQL', () => {

@@ -5,6 +5,8 @@
  * 2.0.
  */
 
+import type { InventoryMetricAggregation } from '@kbn/entity-store/common';
+
 /** UI setting (API-only, hidden from the advanced settings UI) gating every inventory route. */
 export const ENTITY_INVENTORY_ENABLED_SETTING = 'entityInventory:enabled';
 
@@ -112,6 +114,19 @@ export interface InventoryUnavailableColumn {
   field: string;
 }
 
+/**
+ * Warning: a metric whose aggregation the engine resolved for its source cannot compute (a
+ * counter rate outside `TS`). The metric is left out of that source's query, so the column is
+ * null in the source's rows and in its detail series; the request itself succeeds.
+ */
+export interface InventoryUnsupportedMetric {
+  index: string;
+  engine: InventoryEngine;
+  column: string;
+  field: string;
+  agg: InventoryMetricAggregation;
+}
+
 export type InventoryRow = Record<string, unknown>;
 
 export interface InventoryDocumentFilterWarning {
@@ -143,6 +158,7 @@ export interface InventoryListResponse {
   esTookMs: number;
   queries: InventoryQueryInfo[];
   unavailableColumns: InventoryUnavailableColumn[];
+  unsupportedMetrics: InventoryUnsupportedMetric[];
   documentFilterWarnings?: InventoryDocumentFilterWarning[];
   errors: InventorySourceError[];
 }

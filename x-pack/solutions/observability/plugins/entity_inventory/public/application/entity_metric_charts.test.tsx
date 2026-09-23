@@ -39,6 +39,7 @@ const result: InventoryDetailResponse = {
   esTookMs: 1,
   queries: [],
   unavailableColumns: [],
+  unsupportedMetrics: [],
   errors: [],
   timeSeries: {
     from: '2026-09-21T13:20:16Z',

@@ -53,6 +53,7 @@ import {
 import { formatCellValue } from '../lib/format_cell_value';
 import type { InventoryApi, InventoryRangeRequest } from '../lib/inventory_api';
 import { EntityDetailFlyout, type EntityDetailSelection } from './entity_detail_flyout';
+import { UnsupportedMetricsCallout } from './unsupported_metrics_callout';
 import { describeHttpError, type DescribedError } from '../lib/http_error';
 import { RELATIVE_RANGES, relativeRangeToAbsolute, type RelativeRange } from '../lib/time_range';
 
@@ -776,6 +777,13 @@ export const InventoryPreview = ({ type, isAvailable, api, identity }: Inventory
                   ))}
                 </ul>
               </KbnWarningCallout>
+              <EuiSpacer size="m" />
+            </>
+          )}
+
+          {result.unsupportedMetrics.length > 0 && (
+            <>
+              <UnsupportedMetricsCallout metrics={result.unsupportedMetrics} />
               <EuiSpacer size="m" />
             </>
           )}

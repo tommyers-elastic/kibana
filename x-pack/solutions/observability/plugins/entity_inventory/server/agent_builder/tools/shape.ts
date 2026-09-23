@@ -373,6 +373,7 @@ export const shapePreview = (
   ),
   errors: response.errors,
   unavailableColumns: response.unavailableColumns,
+  unsupportedMetrics: response.unsupportedMetrics,
   esTookMs: response.esTookMs,
 });
 
